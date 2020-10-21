@@ -42,6 +42,7 @@
 // flags for stream_open_ext (this includes STREAM_READ and STREAM_WRITE)
 #define STREAM_SAFE_ONLY 4
 #define STREAM_NETWORK_ONLY 8
+#define STREAM_SILENT 16
 
 #define STREAM_UNSAFE -3
 #define STREAM_NO_MATCH -2
@@ -141,6 +142,8 @@ typedef struct stream_info_st {
     const char *name;
     // opts is set from ->opts
     int (*open)(struct stream *st);
+    // Alternative to open(). Only either open() or open2() can be set.
+    int (*open2)(struct stream *st, void *arg);
     const char *const *protocols;
     bool can_write;     // correctly checks for READ/WRITE modes
     bool is_safe;       // opening is no security issue, even with remote provided URLs
@@ -245,6 +248,9 @@ struct bstr stream_read_file(const char *filename, void *talloc_ctx,
                              struct mpv_global *global, int max_size);
 int stream_control(stream_t *s, int cmd, void *arg);
 void free_stream(stream_t *s);
+int stream_create_instance(const stream_info_t *sinfo, const char *url, int flags,
+                           struct mp_cancel *c, struct mpv_global *global,
+                           void *arg, struct stream **ret);
 struct stream *stream_create(const char *url, int flags,
                              struct mp_cancel *c, struct mpv_global *global);
 struct stream *stream_open(const char *filename, struct mpv_global *global);
@@ -261,6 +267,10 @@ bool mp_cancel_wait(struct mp_cancel *c, double timeout);
 void mp_cancel_reset(struct mp_cancel *c);
 void *mp_cancel_get_event(struct mp_cancel *c); // win32 HANDLE
 int mp_cancel_get_fd(struct mp_cancel *c);
+
+// stream_concat.c
+struct stream *stream_concat_open(struct mpv_global *global, struct mp_cancel *c,
+                                  struct stream **streams, int num_streams);
 
 // stream_file.c
 char *mp_file_url_to_filename(void *talloc_ctx, bstr url);

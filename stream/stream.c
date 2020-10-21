@@ -212,10 +212,11 @@ static const char *match_proto(const char *url, const char *proto)
     return NULL;
 }
 
-static int open_internal(const stream_info_t *sinfo, const char *url, int flags,
-                         struct mp_cancel *c, struct mpv_global *global,
-                         struct stream **ret)
+int stream_create_instance(const stream_info_t *sinfo, const char *url, int flags,
+                           struct mp_cancel *c, struct mpv_global *global,
+                           void *arg, struct stream **ret)
 {
+     *ret = NULL;
     if (!sinfo->is_safe && (flags & STREAM_SAFE_ONLY))
         return STREAM_UNSAFE;
     if (!sinfo->is_network && (flags & STREAM_NETWORK_ONLY))
@@ -232,7 +233,11 @@ static int open_internal(const stream_info_t *sinfo, const char *url, int flags,
         return STREAM_NO_MATCH;
 
     stream_t *s = new_stream();
-    s->log = mp_log_new(s, global->log, sinfo->name);
+    if (flags & STREAM_SILENT) {
+        s->log = mp_null_log;
+    } else {
+        s->log = mp_log_new(s, global->log, sinfo->name);
+    }
     s->info = sinfo;
     s->cancel = c;
     s->global = global;
@@ -250,13 +255,24 @@ static int open_internal(const stream_info_t *sinfo, const char *url, int flags,
 
     MP_VERBOSE(s, "Opening %s\n", url);
 
+    if (strlen(url) > INT_MAX / 8) {
+        MP_ERR(s, "URL too large.\n");
+        talloc_free(s);
+        return STREAM_ERROR;
+    }
+
     if ((s->mode & STREAM_WRITE) && !sinfo->can_write) {
         MP_DBG(s, "No write access implemented.\n");
         talloc_free(s);
         return STREAM_NO_MATCH;
     }
 
-    int r = (sinfo->open)(s);
+    int r = STREAM_UNSUPPORTED;
+    if (sinfo->open2) {
+        r = sinfo->open2(s, arg);
+    } else if (!arg) {
+        r = (sinfo->open)(s);
+    }
     if (r != STREAM_OK) {
         talloc_free(s);
         return r;
@@ -286,13 +302,12 @@ struct stream *stream_create(const char *url, int flags,
     struct stream *s = NULL;
     assert(url);
 
-    if (strlen(url) > INT_MAX / 8)
-        goto done;
 
     // Open stream proper
     bool unsafe = false;
     for (int i = 0; stream_list[i]; i++) {
-        int r = open_internal(stream_list[i], url, flags, c, global, &s);
+        int r = stream_create_instance(stream_list[i], url, flags, c, global,
+                                       NULL, &s);
         if (r == STREAM_OK)
             break;
         if (r == STREAM_NO_MATCH || r == STREAM_UNSUPPORTED)

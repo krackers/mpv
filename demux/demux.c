@@ -2341,6 +2341,7 @@ done:
     return demuxer;
 }
 
+
 // Convenience function: open the stream, enable the cache (according to params
 // and global opts.), open the demuxer.
 // (use free_demuxer_and_stream() to free the underlying stream too)
@@ -2350,11 +2351,62 @@ struct demuxer *demux_open_url(const char *url,
                                 struct mp_cancel *cancel,
                                 struct mpv_global *global)
 {
+    struct mp_log *log = mp_log_new(NULL, global->log, "!demux_open_url");
+    mp_verbose(log, "Opening url %s\n", url);
+
     struct demuxer_params dummy = {0};
     if (!params)
         params = &dummy;
-    struct stream *s = stream_create(url, STREAM_READ | params->stream_flags,
+    struct stream *s;
+
+     if (bstr_startswith0(bstr0(url), "concat://")) {
+        mp_verbose(log, "Found concat stream\n");
+        size_t len = 1;
+        char * urlToSplit = talloc_strdup(NULL, url);
+
+        for (size_t i = 0; url[i]; i++) {
+            if (url[i] == '|') {
+                ++len;
+            }
+        }
+        mp_verbose(log, "Number of streams to concat %d\n", (int) len);
+        struct stream** streams = talloc_array(NULL, struct stream *, len);
+        char * tokenizedUrl = urlToSplit + 9;
+
+        int curVal = 0;
+        char *token;
+        while ((token = strsep(&tokenizedUrl, "|"))) {
+            mp_verbose(log, "Parsing url: %s\n", token);
+            streams[curVal] = stream_create(token, STREAM_READ | params->stream_flags, cancel, global);
+            if (!streams[curVal]) {
+                mp_verbose(log, "Failed to init url %s, cleaning up\n", token);
+                for (int i = 0; i < len; i++) {
+                    free_stream(streams[i]);
+                }
+                talloc_free(log);
+                return NULL;
+            }
+            curVal++;
+        }
+        talloc_free(urlToSplit);
+        struct stream *concat = stream_concat_open(global, cancel, streams, len);
+        if (!concat) {
+            mp_verbose(log, "Failed to concat streams, cleaning up\n");
+            for (int i = 0; i < len; i++) {
+                free_stream(streams[i]);
+            }
+            talloc_free(log);
+            return NULL;
+        }
+        s = concat;
+    }
+    else {
+    
+        s = stream_create(url, STREAM_READ | params->stream_flags,
                                      cancel, global);
+    }
+    
+    talloc_free(log);
     if (!s)
         return NULL;
     if (!params->disable_cache)
