@@ -567,6 +567,8 @@ extern const char m_option_path_separator;
 #define OPTDEF_FLOAT(f)   .defval = (void *)&(const float){f}
 #define OPTDEF_DOUBLE(d)  .defval = (void *)&(const double){d}
 
+#define M_RANGE(a, b) M_OPT_RANGE, .min = (a), .max = (b)
+
 #define OPT_GENERAL(ctype, optname, varname, flagv, ...)                \
     {.name = optname, .flags = flagv,                                   \
     .offset = MP_CHECKED_OFFSETOF(OPT_BASE_STRUCT, varname, ctype),     \
