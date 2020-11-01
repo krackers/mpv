@@ -126,6 +126,9 @@ static int open2(struct stream *stream, void *arg)
         if (!sub->seekable)
             stream->seekable = false;
 
+        if (sub->is_network)
+            stream->is_network = true;
+
         MP_TARRAY_APPEND(p, p->streams, p->num_streams, sub);
     }
 
