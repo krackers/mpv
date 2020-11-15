@@ -275,9 +275,17 @@ local function valid_manifest(json)
 end
 
 local function add_single_video(json)
+    msg.verbose('Called into add_single_video')
     local streamurl = ""
     local max_bitrate = 0
     local reqfmts = json["requested_formats"]
+
+    if json.proxy and json.proxy ~= "" then
+        stream_opts = append_libav_opt(stream_opts,
+            "http_proxy", json.proxy)
+    end
+
+    mp.set_property_native("file-local-options/stream-lavf-o", stream_opts)
 
     -- prefer manifest_url if present
     if o.use_manifests and valid_manifest(json) then
@@ -419,11 +427,6 @@ local function add_single_video(json)
             "rtmp_swfurl", json.player_url)
         stream_opts = append_libav_opt(stream_opts,
             "rtmp_app", json.app)
-    end
-
-    if json.proxy and json.proxy ~= "" then
-        stream_opts = append_libav_opt(stream_opts,
-            "http_proxy", json.proxy)
     end
 
     mp.set_property_native("file-local-options/stream-lavf-o", stream_opts)
