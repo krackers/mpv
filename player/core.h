@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <pthread.h>
+#include <IOKit/pwr_mgt/IOPMLib.h>
 
 #include "osdep/atomic.h"
 
@@ -452,6 +453,7 @@ typedef struct MPContext {
     //     to true.
     struct demuxer *open_res_demuxer;
     int open_res_error;
+    IOPMAssertionID power_mgmt_assertion;
 } MPContext;
 
 // audio.c

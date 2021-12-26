@@ -61,6 +61,7 @@
 #include "client.h"
 #include "command.h"
 #include "screenshot.h"
+#include <IOKit/pwr_mgt/IOPMLib.h>
 
 static const char def_config[] =
 #include "player/builtin_conf.inc"
@@ -156,6 +157,12 @@ void mp_print_version(struct mp_log *log, int always)
 
 void mp_destroy(struct MPContext *mpctx)
 {
+    if (mpctx->power_mgmt_assertion) {
+      MP_VERBOSE(mpctx, "Releasing wakelock in destroy\n");
+      IOPMAssertionRelease(mpctx->power_mgmt_assertion);
+      mpctx->power_mgmt_assertion = kIOPMNullAssertionID;
+    }
+
     mp_shutdown_clients(mpctx);
 
     mp_uninit_ipc(mpctx->ipc_ctx);
@@ -278,6 +285,7 @@ struct MPContext *mp_create(void)
         .osd_progbar = { .type = -1 },
         .playlist = talloc_struct(mpctx, struct playlist, {0}),
         .dispatch = mp_dispatch_create(mpctx),
+        .power_mgmt_assertion = kIOPMNullAssertionID,
         .playback_abort = mp_cancel_new(mpctx),
     };
 
