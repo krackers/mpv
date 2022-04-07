@@ -169,6 +169,9 @@ static int open2(struct stream *stream, struct stream_open_args *args)
         if (sub->is_network)
             stream->is_network = true;
 
+        if (sub->streaming)
+            stream->streaming = true;
+
         MP_TARRAY_APPEND(p, p->streams, p->num_streams, sub);
     }
 

@@ -2206,9 +2206,9 @@ static bool read_packet(struct demux_internal *in)
     bool eof = true;
     if (demux->desc->read_packet && !demux_cancel_test(demux))
         eof = !demux->desc->read_packet(demux, &pkt);
-    update_cache(in);
 
     pthread_mutex_lock(&in->lock);
+    update_cache(in);
 
     if (pkt) {
         assert(pkt->stream >= 0 && pkt->stream < in->num_streams);
@@ -2484,9 +2484,7 @@ static bool thread_work(struct demux_internal *in)
             return true; // read_packet unlocked, so recheck conditions
     }
     if (mp_time_us() >= in->next_cache_update) {
-        pthread_mutex_unlock(&in->lock);
         update_cache(in);
-        pthread_mutex_lock(&in->lock);
         return true;
     }
     return false;
@@ -3050,10 +3048,10 @@ void demux_update(demuxer_t *demuxer, double pts)
     assert(demuxer == demuxer->in->d_user);
     struct demux_internal *in = demuxer->in;
 
+    pthread_mutex_lock(&in->lock);
+
     if (!in->threading)
         update_cache(in);
-
-    pthread_mutex_lock(&in->lock);
 
     pts = MP_ADD_PTS(pts, -in->ts_offset);
 
@@ -3987,18 +3985,25 @@ static void update_bytes_read(struct demux_internal *in)
     in->hack_unbuffered_read_bytes += new;
 }
 
-// must be called not locked
+// must be called locked, temporarily unlocks
 static void update_cache(struct demux_internal *in)
 {
     struct demuxer *demuxer = in->d_thread;
     struct stream *stream = demuxer->stream;
 
-    // Don't lock while querying the stream.
     struct mp_tags *stream_metadata = NULL;
+
+    int64_t now = mp_time_us();
+    int64_t diff = now - in->last_speed_query;
+    bool do_update = diff >= MP_SECOND_US;
+
+    // Don't lock while querying the stream.
+    pthread_mutex_unlock(&in->lock);
 
     int64_t stream_size = -1;
     if (stream) {
-        stream_size = stream_get_size(stream);
+     if (do_update)
+            stream_size = stream_get_size(stream);
         stream_control(stream, STREAM_CTRL_GET_METADATA, &stream_metadata);
     }
 
@@ -4006,7 +4011,8 @@ static void update_cache(struct demux_internal *in)
 
     pthread_mutex_lock(&in->lock);
 
-    in->stream_size = stream_size;
+   if (do_update)
+        in->stream_size = stream_size;
     if (stream_metadata) {
         add_timed_metadata(in, stream_metadata, NULL, MP_NOPTS_VALUE);
         talloc_free(stream_metadata);
@@ -4014,9 +4020,7 @@ static void update_cache(struct demux_internal *in)
 
     in->next_cache_update = INT64_MAX;
 
-    int64_t now = mp_time_us();
-    int64_t diff = now - in->last_speed_query;
-    if (diff >= MP_SECOND_US) {
+    if (do_update) {
         uint64_t bytes = in->cache_unbuffered_read_bytes;
         in->cache_unbuffered_read_bytes = 0;
         in->last_speed_query = now;
@@ -4025,8 +4029,6 @@ static void update_cache(struct demux_internal *in)
     // The idea is to update as long as there is "activity".
     if (in->bytes_per_second)
         in->next_cache_update = now + MP_SECOND_US + 1;
-
-    pthread_mutex_unlock(&in->lock);
 }
 
 static void dumper_close(struct demux_internal *in)
