@@ -308,7 +308,7 @@ static void aspeed_process(struct mp_filter *f)
     } else if (!p->sub.filter) {
         MP_VERBOSE(f, "adding scaletempo\n");
         p->sub.filter =
-            mp_create_user_filter(f, MP_OUTPUT_CHAIN_AUDIO, "scaletempo", NULL);
+            mp_create_user_filter(f, MP_OUTPUT_CHAIN_AUDIO, "scaletempo2", NULL);
         if (!p->sub.filter) {
             MP_ERR(f, "could not create scaletempo filter\n");
             mp_subfilter_continue(&p->sub);
