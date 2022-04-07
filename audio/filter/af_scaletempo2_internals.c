@@ -4,9 +4,13 @@
 #include "audio/chmap.h"
 #include "audio/filter/af_scaletempo2_internals.h"
 
+#include "config.h"
+
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
+
+#define HAVE_VECTOR 1
 
 // Algorithm overview (from chromium):
 // Waveform Similarity Overlap-and-add (WSOLA).
@@ -108,6 +112,10 @@ static float multi_channel_similarity_measure(
     return similarity_measure;
 }
 
+#if HAVE_VECTOR
+
+typedef float v8sf __attribute__ ((vector_size (32), aligned (1)));
+
 // Dot-product of channels of two AudioBus. For each AudioBus an offset is
 // given. |dot_product[k]| is the dot-product of channel |k|. The caller should
 // allocate sufficient space for |dot_product|.
@@ -120,15 +128,78 @@ static void multi_channel_dot_product(
     assert(frame_offset_a >= 0);
     assert(frame_offset_b >= 0);
 
-    memset(dot_product, 0, sizeof(*dot_product) * channels);
     for (int k = 0; k < channels; ++k) {
         const float* ch_a = a[k] + frame_offset_a;
         const float* ch_b = b[k] + frame_offset_b;
-        for (int n = 0; n < num_frames; ++n) {
-            dot_product[k] += *ch_a++ * *ch_b++;
+        float sum = 0.0;
+        if (num_frames < 32)
+            goto rest;
+
+        const v8sf *va = (const v8sf *) ch_a;
+        const v8sf *vb = (const v8sf *) ch_b;
+        v8sf vsum[4] = {
+            // Initialize to product of first 32 floats
+            va[0] * vb[0],
+            va[1] * vb[1],
+            va[2] * vb[2],
+            va[3] * vb[3],
+        };
+        va += 4;
+        vb += 4;
+
+        // Process `va` and `vb` across four vertical stripes
+        for (int n = 1; n < num_frames / 32; n++) {
+            vsum[0] += va[0] * vb[0];
+            vsum[1] += va[1] * vb[1];
+            vsum[2] += va[2] * vb[2];
+            vsum[3] += va[3] * vb[3];
+            va += 4;
+            vb += 4;
         }
+
+        // Vertical sum across `vsum` entries
+        vsum[0] += vsum[1];
+        vsum[2] += vsum[3];
+        vsum[0] += vsum[2];
+
+        // Horizontal sum across `vsum[0]`, could probably be done better but
+        // this section is not super performance critical
+        float *vf = (float *) &vsum[0];
+        sum = vf[0] + vf[1] + vf[2] + vf[3] + vf[4] + vf[5] + vf[6] + vf[7];
+        ch_a = (const float *) va;
+        ch_b = (const float *) vb;
+
+rest:
+        // Process the remainder
+        for (int n = 0; n < num_frames % 32; n++)
+            sum += *ch_a++ * *ch_b++;
+
+        dot_product[k] = sum;
     }
 }
+
+#else // !HAVE_VECTOR
+
+static void multi_channel_dot_product(
+    float **a, int frame_offset_a,
+    float **b, int frame_offset_b,
+    int channels,
+    int num_frames, float *dot_product)
+{
+    assert(frame_offset_a >= 0);
+    assert(frame_offset_b >= 0);
+
+    for (int k = 0; k < channels; ++k) {
+        const float* ch_a = a[k] + frame_offset_a;
+        const float* ch_b = b[k] + frame_offset_b;
+        float sum = 0.0;
+        for (int n = 0; n < num_frames; n++)
+            sum += *ch_a++ * *ch_b++;
+        dot_product[k] = sum;
+    }
+}
+
+#endif // HAVE_VECTOR
 
 // Fit the curve f(x) = a * x^2 + b * x + c such that
 //   f(-1) = y[0]
@@ -393,10 +464,8 @@ static int write_completed_frames_to(struct mp_scaletempo2 *p,
 
 static bool can_perform_wsola(struct mp_scaletempo2 *p)
 {
-    const int search_block_size = p->num_candidate_blocks
-        + (p->ola_window_size - 1);
     return p->target_block_index + p->ola_window_size <= p->input_buffer_frames
-        && p->search_block_index + search_block_size <= p->input_buffer_frames;
+        && p->search_block_index + p->search_block_size <= p->input_buffer_frames;
 }
 
 // number of frames needed until a wsola iteration can be performed
@@ -407,6 +476,14 @@ static int frames_needed(struct mp_scaletempo2 *p)
         p->search_block_index + p->search_block_size - p->input_buffer_frames));
 }
 
+static void resize_input_buffer(struct mp_scaletempo2 *p, int size)
+{
+    if (size > p->input_buffer_size) {
+        p->input_buffer_size = size;
+        p->input_buffer = realloc_2d(p->input_buffer, p->channels, size);
+    }
+}
+
 int mp_scaletempo2_fill_input_buffer(struct mp_scaletempo2 *p,
     uint8_t **planes, int frame_size, bool final)
 {
@@ -415,7 +492,8 @@ int mp_scaletempo2_fill_input_buffer(struct mp_scaletempo2 *p,
     int total_fill = final ? needed : read;
     if (total_fill == 0) return 0;
 
-    assert(total_fill + p->input_buffer_frames <= p->input_buffer_size);
+    int required_size = total_fill + p->input_buffer_frames;
+    resize_input_buffer(p, required_size);
 
     for (int i = 0; i < p->channels; ++i) {
         memcpy(p->input_buffer[i] + p->input_buffer_frames,
@@ -431,11 +509,9 @@ int mp_scaletempo2_fill_input_buffer(struct mp_scaletempo2 *p,
 
 static bool target_is_within_search_region(struct mp_scaletempo2 *p)
 {
-    const int search_block_size = p->num_candidate_blocks + (p->ola_window_size - 1);
-
     return p->target_block_index >= p->search_block_index
         && p->target_block_index + p->ola_window_size
-            <= p->search_block_index + search_block_size;
+            <= p->search_block_index + p->search_block_size;
 }
 
 
@@ -719,8 +795,7 @@ void mp_scaletempo2_init(struct mp_scaletempo2 *p, int channels, int rate)
     p->search_block = realloc_2d(p->search_block, p->channels, p->search_block_size);
     p->target_block = realloc_2d(p->target_block, p->channels, p->ola_window_size);
 
-    p->input_buffer_size = 4 * MPMAX(p->ola_window_size, p->search_block_size);
-    p->input_buffer = realloc_2d(p->input_buffer, p->channels, p->input_buffer_size);
+    resize_input_buffer(p, 4 * MPMAX(p->ola_window_size, p->search_block_size));
     p->input_buffer_frames = 0;
 
     p->energy_candidate_blocks = realloc(p->energy_candidate_blocks,
