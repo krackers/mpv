@@ -715,7 +715,7 @@
 
     if ([panel runModal] == NSModalResponseOK){
         NSString *pl = [NSString stringWithFormat:@"loadlist \"%@\"",
-                                                  [panel URLs][0].path];
+                                                  [[panel URLs][0] path]];
         [(Application *)NSApp queueCommand:(char *)[pl UTF8String]];
     }
 }
