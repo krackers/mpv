@@ -102,21 +102,26 @@ static int open2(struct stream *stream, struct stream_open_args *args)
 
     stream->seekable = true;
 
-    struct priv list = {.num_stream = 0};
+    size_t num_streams = 0;
+    struct priv list = {.num_streams = num_streams};
+
+    // If we're given a special_arg, just use that
     if (args->special_arg) {
-        list = *args->special_arg;
+        list = *((struct priv *)(args->special_arg));
     } else {
         MP_VERBOSE(stream, "Found concat stream %s\n", stream->path);
-        size_t num_streams = 1;
+        num_streams = 1;
 
         for (size_t i = 0; (stream->path)[i]; i++) {
             if ((stream->path)[i] == '|') {
                 ++num_streams;
             }
         }
-        MP_VERBOSE(stream, "Number of streams to concat %d\n", (int) num_streams);
-        struct stream* streams[num_streams];
+    }
 
+    struct stream* streams[num_streams];
+    if (num_streams > 0) {
+        MP_VERBOSE(stream, "Number of streams to concat %d\n", (int) num_streams);
         char * tokenized_url = stream->path;
         int stream_idx = 0;
         char *token;
@@ -133,7 +138,7 @@ static int open2(struct stream *stream, struct stream_open_args *args)
             }
             stream_idx++;
         }
-        list = {
+        list = (struct priv) {
             .streams = streams,
             .num_streams = num_streams,
         };
@@ -173,7 +178,7 @@ static int open2(struct stream *stream, struct stream_open_args *args)
     return STREAM_OK;
 }
 
-static const stream_info_t stream_info_concat = {
+const stream_info_t stream_info_concat = {
     .name = "concat",
     .open2 = open2,
     .protocols = (const char*const[]){ "concat", NULL },

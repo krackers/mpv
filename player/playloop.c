@@ -50,6 +50,9 @@
 #include "client.h"
 #include "command.h"
 
+#include <IOKit/pwr_mgt/IOPMLib.h>
+
+
 // Wait until mp_wakeup_core() is called, since the last time
 // mp_wait_events() was called.
 void mp_wait_events(struct MPContext *mpctx)
@@ -192,12 +195,27 @@ void update_internal_pause_state(struct MPContext *mpctx)
 
 void update_screensaver_state(struct MPContext *mpctx)
 {
-    if (!mpctx->video_out)
-        return;
-
-    bool saver_state = !mpctx->playback_active || !mpctx->opts->stop_screensaver;
-    vo_control_async(mpctx->video_out, saver_state ? VOCTRL_RESTORE_SCREENSAVER
+    if (mpctx->video_out) {
+      bool saver_state = !mpctx->playback_active || !mpctx->opts->stop_screensaver;
+      vo_control_async(mpctx->video_out, saver_state ? VOCTRL_RESTORE_SCREENSAVER
                                                    : VOCTRL_KILL_SCREENSAVER, NULL);
+    }
+    // If video, always release audio wakelock since video has own wakelock
+    bool wakeLock = !mpctx->video_out && !mpctx->paused && mpctx->playing;
+    if (wakeLock) {
+       if (mpctx->power_mgmt_assertion) return;
+       MP_VERBOSE(mpctx, "Creating wakelock\n");
+       IOPMAssertionCreateWithName(
+                kIOPMAssertionTypePreventUserIdleSystemSleep,
+                kIOPMAssertionLevelOn,
+                CFSTR("io.mpv.audio_playing_back"),
+                &mpctx->power_mgmt_assertion);
+    } else {
+      if (!mpctx->power_mgmt_assertion) return;
+      MP_VERBOSE(mpctx, "Releasing wakelock\n");
+      IOPMAssertionRelease(mpctx->power_mgmt_assertion);
+      mpctx->power_mgmt_assertion = kIOPMNullAssertionID;
+    }
 }
 
 void add_step_frame(struct MPContext *mpctx, int dir)

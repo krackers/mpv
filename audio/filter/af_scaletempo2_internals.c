@@ -6,7 +6,7 @@
 
 #include "config.h"
 
-#define HAVE_VECTOR
+#define HAVE_VECTOR 1
 
 // Algorithm overview (from chromium):
 // Waveform Similarity Overlap-and-add (WSOLA).
