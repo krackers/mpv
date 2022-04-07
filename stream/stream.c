@@ -60,8 +60,10 @@ extern const stream_info_t stream_info_bdnav;
 extern const stream_info_t stream_info_edl;
 extern const stream_info_t stream_info_libarchive;
 extern const stream_info_t stream_info_cb;
+extern const stream_info_t stream_info_concat;
 
 static const stream_info_t *const stream_list[] = {
+    &stream_info_concat,
 #if HAVE_CDDA
     &stream_info_cdda,
 #endif

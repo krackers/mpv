@@ -102,19 +102,55 @@ static int open2(struct stream *stream, struct stream_open_args *args)
 
     stream->seekable = true;
 
-    struct priv *list = args->special_arg;
-    if (!list || !list->num_streams) {
+    struct priv list = {.num_stream = 0};
+    if (args->special_arg) {
+        list = *args->special_arg;
+    } else {
+        MP_VERBOSE(stream, "Found concat stream %s\n", stream->path);
+        size_t num_streams = 1;
+
+        for (size_t i = 0; (stream->path)[i]; i++) {
+            if ((stream->path)[i] == '|') {
+                ++num_streams;
+            }
+        }
+        MP_VERBOSE(stream, "Number of streams to concat %d\n", (int) num_streams);
+        struct stream* streams[num_streams];
+
+        char * tokenized_url = stream->path;
+        int stream_idx = 0;
+        char *token;
+
+        while ((token = strsep(&tokenized_url, "|"))) {
+            MP_VERBOSE(stream, "Parsing url: %s\n", token);
+            streams[stream_idx] = stream_create(token, STREAM_READ | stream->mode, stream->cancel, stream->global);
+            if (!streams[stream_idx]) {
+                MP_VERBOSE(stream, "Failed to init url %s, cleaning up\n", token);
+                for (int i = 0; i < stream_idx; i++) {
+                    free_stream(streams[i]);
+                }
+                return STREAM_ERROR;
+            }
+            stream_idx++;
+        }
+        list = {
+            .streams = streams,
+            .num_streams = num_streams,
+        };
+    }
+
+    if (list.num_streams == 0) {
         MP_FATAL(stream, "No sub-streams.\n");
         return STREAM_ERROR;
     }
 
-    for (int n = 0; n < list->num_streams; n++) {
-        struct stream *sub = list->streams[n];
+    for (int n = 0; n < list.num_streams; n++) {
+        struct stream *sub = list.streams[n];
 
         stream->read_chunk = MPMAX(stream->read_chunk, sub->read_chunk);
 
         int64_t size = stream_get_size(sub);
-        if (n != list->num_streams - 1 && size < 0) {
+        if (n != list.num_streams - 1 && size < 0) {
             MP_WARN(stream, "Sub stream %d has unknown size.\n", n);
             stream->seekable = false;
             p->size = -1;
@@ -124,6 +160,9 @@ static int open2(struct stream *stream, struct stream_open_args *args)
 
         if (!sub->seekable)
             stream->seekable = false;
+
+        if (sub->is_network)
+            stream->is_network = true;
 
         MP_TARRAY_APPEND(p, p->streams, p->num_streams, sub);
     }
