@@ -769,12 +769,13 @@ static void resize_event(struct vo *vo)
     s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
     // Live-resizing: make sure at least one frame will be drawn
     s->frame_w = s->frame_h = 0;
-    pthread_mutex_unlock(&s->lock);
     if ([NSThread isMainThread]) {
         [s->nsgl_ctx update];
+        pthread_mutex_unlock(&s->lock);
     } else {
         run_on_main_thread(vo, ^{
             [s->nsgl_ctx update];
+            pthread_mutex_unlock(&s->lock);
         });
     }
 
