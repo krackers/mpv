@@ -778,6 +778,7 @@ static void resize_event(struct vo *vo)
     } else {
         run_on_main_thread(vo, ^{
             [s->nsgl_ctx update];
+            pthread_mutex_unlock(&s->lock);
             pthread_mutex_unlock(&(vo->in->lock));
         });
     }
