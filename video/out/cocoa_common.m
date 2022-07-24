@@ -755,6 +755,16 @@ int vo_cocoa_config_window(struct vo *vo)
     return 0;
 }
 
+struct vo_internal {
+    pthread_t thread;
+    struct mp_dispatch_queue *dispatch;
+    struct dr_helper *dr_helper;
+
+    // --- The following fields are protected by lock
+    pthread_mutex_t lock;
+    pthread_cond_t wakeup;
+};
+
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
