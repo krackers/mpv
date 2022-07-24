@@ -781,18 +781,9 @@ static void resize_event(struct vo *vo)
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
 
-    // pthread_mutex_lock(&(vo->in->lock));
-    // if ([NSThread isMainThread]) {
-    //     [s->nsgl_ctx update];
-    //     pthread_mutex_unlock(&s->lock);
-    //     pthread_mutex_unlock(&(vo->in->lock));
-    // } else {
-    //     run_on_main_thread(vo, ^{
-    //         [s->nsgl_ctx update];
-    //         pthread_mutex_unlock(&s->lock);
-    //         pthread_mutex_unlock(&(vo->in->lock));
-    //     });
-    // }
+    pthread_mutex_lock(&(vo->in->lock));
+    [s->nsgl_ctx update];
+    pthread_mutex_unlock(&(vo->in->lock));
 
     vo_wakeup(vo);
 }
@@ -804,7 +795,6 @@ static void vo_cocoa_resize_redraw(struct vo *vo, int width, int height)
     resize_event(vo);
 
     pthread_mutex_lock(&s->lock);
-
     // Wait until a new frame with the new size was rendered. For some reason,
     // Cocoa requires this to be done before drawRect() returns.
     struct timespec e = mp_time_us_to_timespec(mp_add_timeout(mp_time_us(), 0.1));
