@@ -927,6 +927,9 @@ static int vo_cocoa_control_on_main_thread(struct vo *vo, int request, void *arg
     case VOCTRL_GET_ICC_PROFILE:
         vo_cocoa_control_get_icc_profile(vo, arg);
         return VO_TRUE;
+    case VOCTRL_GET_HIDPI_SCALE:
+        *(double *)arg = s->window ? [s->window backingScaleFactor] : [s->current_screen backingScaleFactor]; 
+        return VO_TRUE;
     case VOCTRL_GET_DISPLAY_FPS:
         *(double *)arg = vo_cocoa_update_screen_fps(vo);
         return VO_TRUE;
