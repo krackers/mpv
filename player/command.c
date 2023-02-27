@@ -97,6 +97,8 @@ struct command_ctx {
     int64_t hook_seq; // for hook_handler.seq
 
     struct ao_hotplug *hotplug;
+    
+    char **script_props;
 
     char *cur_ipc;
     char *cur_ipc_input;
@@ -3839,6 +3841,26 @@ static int mp_profile_list(void *ctx, struct m_property *prop,
     return M_PROPERTY_NOT_IMPLEMENTED;
 }
 
+static int mp_property_script_props(void *ctx, struct m_property *prop,
+                                    int action, void *arg)
+{
+    MPContext *mpctx = ctx;
+    struct command_ctx *cmd = mpctx->command_ctx;
+    switch (action) {
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = script_props_type;
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET:
+        m_option_copy(&script_props_type, arg, &cmd->script_props);
+        return M_PROPERTY_OK;
+    case M_PROPERTY_SET:
+        m_option_copy(&script_props_type, &cmd->script_props, arg);
+        mp_notify_property(mpctx, prop->name);
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
 // Redirect a property name to another
 #define M_PROPERTY_ALIAS(name, real_property) \
     {(name), mp_property_alias, .priv = (real_property)}
@@ -4043,7 +4065,9 @@ static const struct m_property mp_properties_base[] = {
     {"option-info", mp_property_option_info},
     {"property-list", mp_property_list},
     {"profile-list", mp_profile_list},
-
+    
+    {"shared-script-properties", mp_property_script_props},
+    
     M_PROPERTY_ALIAS("video", "vid"),
     M_PROPERTY_ALIAS("audio", "aid"),
     M_PROPERTY_ALIAS("sub", "sid"),
@@ -6071,6 +6095,9 @@ void command_uninit(struct MPContext *mpctx)
 {
     overlay_uninit(mpctx);
     ao_hotplug_destroy(mpctx->command_ctx->hotplug);
+    
+    m_option_free(&script_props_type, &ctx->script_props);
+
     talloc_free(mpctx->command_ctx);
     mpctx->command_ctx = NULL;
 }
