@@ -755,16 +755,6 @@ int vo_cocoa_config_window(struct vo *vo)
     return 0;
 }
 
-struct vo_internal {
-    pthread_t thread;
-    struct mp_dispatch_queue *dispatch;
-    struct dr_helper *dr_helper;
-
-    // --- The following fields are protected by lock
-    pthread_mutex_t lock;
-    pthread_cond_t wakeup;
-};
-
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
@@ -780,10 +770,6 @@ static void resize_event(struct vo *vo)
     // Live-resizing: make sure at least one frame will be drawn
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
-
-    pthread_mutex_lock(&(vo->in->lock));
-    [s->nsgl_ctx update];
-    pthread_mutex_unlock(&(vo->in->lock));
 
     vo_wakeup(vo);
 }
@@ -841,6 +827,9 @@ static int vo_cocoa_check_events(struct vo *vo)
     if (events & VO_EVENT_RESIZE) {
         vo->dwidth  = s->vo_dwidth;
         vo->dheight = s->vo_dheight;
+        run_on_main_thread(vo, ^{
+            [s->nsgl_ctx update];
+         });
     }
     pthread_mutex_unlock(&s->lock);
 
