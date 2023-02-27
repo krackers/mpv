@@ -596,4 +596,28 @@ function mp_utils.format_bytes_humanized(b)
     return string.format("%0.2f %s", b, d[i] and d[i] or "*1024^" .. (i-1))
 end
 
+function mp_utils.shared_script_property_set(name, value)
+    if value ~= nil then
+        -- no such thing as change-list with mpv_node, so build a string value
+        mp.commandv("change-list", "shared-script-properties", "append",
+                    name .. "=" .. value)
+    else
+        mp.commandv("change-list", "shared-script-properties", "remove", name)
+    end
+end
+
+function mp_utils.shared_script_property_get(name)
+    local map = mp.get_property_native("shared-script-properties")
+    return map and map[name]
+end
+
+-- cb(name, value) on change and on init
+function mp_utils.shared_script_property_observe(name, cb)
+    -- it's _very_ wasteful to observe the mpv core "super" property for every
+    -- shared sub-property, but then again you shouldn't use this
+    mp.observe_property("shared-script-properties", "native", function(_, val)
+        cb(name, val and val[name])
+    end)
+end
+
 return {}
