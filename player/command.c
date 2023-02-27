@@ -106,6 +106,10 @@ struct command_ctx {
     int silence_option_deprecations;
 };
 
+static const struct m_option script_props_type = {
+    .type = &m_option_type_keyvalue_list
+};
+
 struct overlay {
     struct mp_image *source;
     int x, y;
@@ -6096,7 +6100,7 @@ void command_uninit(struct MPContext *mpctx)
     overlay_uninit(mpctx);
     ao_hotplug_destroy(mpctx->command_ctx->hotplug);
     
-    m_option_free(&script_props_type, &ctx->script_props);
+    m_option_free(&script_props_type, &mpctx->command_ctx->script_props);
 
     talloc_free(mpctx->command_ctx);
     mpctx->command_ctx = NULL;
