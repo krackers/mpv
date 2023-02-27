@@ -355,8 +355,16 @@ static int open_f(stream_t *stream)
     stream->read_chunk = 64 * 1024;
     stream->close = s_close;
 
-    if (check_stream_network(p->fd))
+
+    if (check_stream_network(p->fd)) {
         stream->streaming = true;
+#if HAVE_COCOA
+        if (fcntl(p->fd, F_RDAHEAD, 0) < 0) {
+            MP_VERBOSE(stream, "Cannot disable read ahead on file '%s': %s\n",
+                       filename, mp_strerror(errno));
+        }
+#endif
+    }
 
     p->orig_size = get_size(stream);
 
