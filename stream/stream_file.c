@@ -73,9 +73,14 @@ struct priv {
 static int64_t get_size(stream_t *s)
 {
     struct priv *p = s->priv;
-    off_t size = lseek(p->fd, 0, SEEK_END);
-    lseek(p->fd, s->pos, SEEK_SET);
-    return size == (off_t)-1 ? -1 : size;
+    struct stat st;
+    if (fstat(p->fd, &st) == 0) {
+        if (st.st_size <= 0 && !s->seekable)
+            st.st_size = -1;
+        if (st.st_size >= 0)
+            return st.st_size;
+    }
+    return -1;
 }
 
 static int fill_buffer(stream_t *s, char *buffer, int max_len)
