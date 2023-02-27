@@ -755,16 +755,6 @@ int vo_cocoa_config_window(struct vo *vo)
     return 0;
 }
 
-struct vo_internal {
-    pthread_t thread;
-    struct mp_dispatch_queue *dispatch;
-    struct dr_helper *dr_helper;
-
-    // --- The following fields are protected by lock
-    pthread_mutex_t lock;
-    pthread_cond_t wakeup;
-};
-
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
@@ -781,9 +771,10 @@ static void resize_event(struct vo *vo)
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
 
-    pthread_mutex_lock(&(vo->in->lock));
+    CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
+    CGLLockContext(cglctx);
     [s->nsgl_ctx update];
-    pthread_mutex_unlock(&(vo->in->lock));
+    CGLUnlockContext(cglctx);
 
     vo_wakeup(vo);
 }
@@ -926,9 +917,6 @@ static int vo_cocoa_control_on_main_thread(struct vo *vo, int request, void *arg
         return VO_TRUE;
     case VOCTRL_GET_ICC_PROFILE:
         vo_cocoa_control_get_icc_profile(vo, arg);
-        return VO_TRUE;
-    case VOCTRL_GET_HIDPI_SCALE:
-        *(double *)arg = s->window ? [s->window backingScaleFactor] : [s->current_screen backingScaleFactor]; 
         return VO_TRUE;
     case VOCTRL_GET_DISPLAY_FPS:
         *(double *)arg = vo_cocoa_update_screen_fps(vo);
