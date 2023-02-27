@@ -827,11 +827,14 @@ static int vo_cocoa_check_events(struct vo *vo)
     if (events & VO_EVENT_RESIZE) {
         vo->dwidth  = s->vo_dwidth;
         vo->dheight = s->vo_dheight;
-        run_on_main_thread(vo, ^{
-            [s->nsgl_ctx update];
-         });
     }
     pthread_mutex_unlock(&s->lock);
+  
+    if (events & VO_EVENT_RESIZE) {
+        run_on_main_thread(vo, ^{
+            [s->nsgl_ctx update];
+        });
+    }
 
     return events;
 }
