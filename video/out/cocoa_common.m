@@ -832,7 +832,7 @@ static int vo_cocoa_check_events(struct vo *vo)
   
     if (events & VO_EVENT_RESIZE) {
         run_on_main_thread(vo, ^{
-            [s->nsgl_ctx update];
+            //[s->nsgl_ctx update];
         });
     }
 
