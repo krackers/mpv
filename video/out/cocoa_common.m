@@ -105,6 +105,9 @@ struct vo_cocoa_state {
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
 
+    bool ctx_needs_update;
+    double last_ctx_update;
+
     // --- The following members are protected by the lock.
     //     If the VO and main threads are both blocked, locking is optional
     //     for members accessed only by VO and main thread.
@@ -379,6 +382,8 @@ void vo_cocoa_init(struct vo *vo)
         .embedded = vo->opts->WinID >= 0,
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
+        .last_ctx_update = 0,
+        .ctx_needs_update = false,
         .fullscreen = 0,
     };
     pthread_mutex_init(&s->lock, NULL);
@@ -769,6 +774,7 @@ static void resize_event(struct vo *vo)
     s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
     // Live-resizing: make sure at least one frame will be drawn
     s->frame_w = s->frame_h = 0;
+    s->ctx_needs_update = true;
     pthread_mutex_unlock(&s->lock);
 
     vo_wakeup(vo);
@@ -824,14 +830,26 @@ static int vo_cocoa_check_events(struct vo *vo)
     pthread_mutex_lock(&s->lock);
     int events = s->pending_events;
     s->pending_events = 0;
+    bool should_update_ctx = false;
+  
     if (events & VO_EVENT_RESIZE) {
         vo->dwidth  = s->vo_dwidth;
         vo->dheight = s->vo_dheight;
     }
+    if (ctx_needs_update) {
+        double now = mp_time_sec();
+        should_update_ctx = (now - s->last_ctx_update) > 0.1;
+        if (should_update_ctx) {
+            s->last_ctx_update = now;
+            s->ctx_needs_update = false;
+        }
+    }
     pthread_mutex_unlock(&s->lock);
   
-    if (events & VO_EVENT_RESIZE) {
-        [s->nsgl_ctx update];
+    if (should_update_ctx) {
+        run_on_main_thread(vo, ^{
+            [s->nsgl_ctx update];
+        });
     }
 
     return events;
