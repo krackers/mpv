@@ -897,11 +897,13 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-draw");
 
+        pthread_mutex_lock(&in->gpu_ctx_lock);
         if (vo->driver->draw_frame) {
             vo->driver->draw_frame(vo, frame);
         } else {
             vo->driver->draw_image(vo, mp_image_new_ref(frame->current));
         }
+        pthread_mutex_unlock(&in->gpu_ctx_lock);
 
         MP_STATS(vo, "end video-draw");
 
@@ -909,7 +911,9 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-flip");
 
+        pthread_mutex_lock(&in->gpu_ctx_lock);
         vo->driver->flip_page(vo);
+        pthread_mutex_unlock(&in->gpu_ctx_lock);
 
         MP_STATS(vo, "end video-flip");
 
