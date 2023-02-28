@@ -20,7 +20,6 @@
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
-#include <OpenGL/OpenGL.h>
 #include <pthread.h>
 #include <math.h>
 
@@ -895,8 +894,6 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-draw");
 
-        CGLContextObj ctx = CGLGetCurrentContext();
-        CGLLockContext(ctx);
         if (vo->driver->draw_frame) {
             vo->driver->draw_frame(vo, frame);
         } else {
@@ -910,7 +907,6 @@ bool vo_render_frame_external(struct vo *vo)
         MP_STATS(vo, "start video-flip");
 
         vo->driver->flip_page(vo);
-        CGLUnlockContext(ctx);
 
         MP_STATS(vo, "end video-flip");
 
@@ -970,8 +966,6 @@ static void do_redraw(struct vo *vo)
     frame->duration = -1;
     pthread_mutex_unlock(&in->lock);
 
-    CGLContextObj ctx = CGLGetCurrentContext();
-    CGLLockContext(ctx);
     if (vo->driver->draw_frame) {
         vo->driver->draw_frame(vo, frame);
     } else if ((full_redraw || vo->driver->control(vo, VOCTRL_REDRAW_FRAME, NULL) < 1)
@@ -979,8 +973,8 @@ static void do_redraw(struct vo *vo)
     {
         vo->driver->draw_image(vo, mp_image_new_ref(frame->current));
     }
+
     vo->driver->flip_page(vo);
-    CGLUnlockContext(ctx);
 
     if (frame != &dummy)
         talloc_free(frame);
