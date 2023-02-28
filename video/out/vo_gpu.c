@@ -23,6 +23,8 @@
 #include <math.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <OpenGL/OpenGL.h>
+
 
 #include <libavutil/common.h>
 
@@ -52,6 +54,8 @@ struct gpu_priv {
     struct gl_video *renderer;
 
     int events;
+
+    CGLContextObj gl_ctx;
 };
 
 static void resize(struct vo *vo)
@@ -79,23 +83,30 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
 {
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
-
     struct ra_fbo fbo;
+    CGLLockContext(p->gl_ctx);
     if (!sw->fns->start_frame(sw, &fbo))
-        return;
+        goto fend;
 
     gl_video_render_frame(p->renderer, frame, fbo, RENDER_FRAME_DEF);
     if (!sw->fns->submit_frame(sw, frame)) {
         MP_ERR(vo, "Failed presenting frame!\n");
-        return;
+        goto fend;
     }
+
+fend:
+    CGLUnlockContext(p->gl_ctx);
+    return;
 }
 
 static void flip_page(struct vo *vo)
 {
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
+
+    CGLLockContext(p->gl_ctx);
     sw->fns->swap_buffers(sw);
+    CGLUnlockContext(p->gl_ctx);
 }
 
 static int query_format(struct vo *vo, int format)
@@ -293,6 +304,8 @@ static int preinit(struct vo *vo)
     hwdec_devices_set_loader(vo->hwdec_devs, call_request_hwdec_api, vo);
 
     gl_video_load_hwdecs(p->renderer, vo->hwdec_devs, false);
+
+    p->gl_ctx = CGLGetCurrentContext();
 
     return 0;
 
