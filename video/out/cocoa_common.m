@@ -120,8 +120,8 @@ struct vo_cocoa_state {
 
     char *window_title;
 
-    // Following accessed only by non-main thread
-    dispatch_source_t debounceTimer;
+    pthread_cond_t update_after_resize_wakeup;
+    pthread_mutex_t update_after_resize_lock;
 };
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
@@ -383,7 +383,6 @@ void vo_cocoa_init(struct vo *vo)
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
         .fullscreen = 0,
-        .debounceTimer = nil
     };
     pthread_mutex_init(&s->lock, NULL);
     pthread_cond_init(&s->wakeup, NULL);
@@ -391,6 +390,9 @@ void vo_cocoa_init(struct vo *vo)
     pthread_cond_init(&s->sync_wakeup, NULL);
     pthread_mutex_init(&s->anim_lock, NULL);
     pthread_cond_init(&s->anim_wakeup, NULL);
+    
+    pthread_cond_init(&s->update_after_resize_lock, NULL);
+    pthread_cond_init(&s->update_after_resize_wakeup, NULL);
     vo->cocoa = s;
     vo_cocoa_update_screen_info(vo);
     vo_cocoa_init_displaylink(vo);
@@ -472,6 +474,8 @@ void vo_cocoa_uninit(struct vo *vo)
         pthread_cond_destroy(&s->anim_wakeup);
         pthread_mutex_destroy(&s->anim_lock);
         pthread_cond_destroy(&s->sync_wakeup);
+        pthread_mutex_destroy(&s->update_after_resize_lock);
+        pthread_cond_destroy(&s->update_after_resize_wakeup);
         pthread_mutex_destroy(&s->sync_lock);
         pthread_cond_destroy(&s->wakeup);
         pthread_mutex_destroy(&s->lock);
@@ -759,18 +763,6 @@ int vo_cocoa_config_window(struct vo *vo)
     return 0;
 }
 
-dispatch_source_t CreateDebounceDispatchTimer(double debounceTime, dispatch_queue_t queue, dispatch_block_t block) {
-    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
-    
-    if (timer) {
-        dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, debounceTime * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, (1ull * NSEC_PER_SEC) / 10);
-        dispatch_source_set_event_handler(timer, block);
-        dispatch_resume(timer);
-    }
-    
-    return timer;
-}
-
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
@@ -786,6 +778,9 @@ static void resize_event(struct vo *vo)
     // Live-resizing: make sure at least one frame will be drawn
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
+
+    [s->nsgl_ctx update];
+    pthread_cond_signal(&s->update_after_resize_wakeup);
 
     vo_wakeup(vo);
 }
@@ -845,18 +840,12 @@ static int vo_cocoa_check_events(struct vo *vo)
         vo->dheight = s->vo_dheight;
     }
     pthread_mutex_unlock(&s->lock);
-  
-    if (events & VO_EVENT_RESIZE) {
-        if (s->debounceTimer != nil) {
-            printf("Nil timer\n");
-            dispatch_source_cancel(s->debounceTimer);
-            s->debounceTimer = nil;
-        }
-        s->debounceTimer = CreateDebounceDispatchTimer(0.001, dispatch_get_main_queue(), ^{
-            printf("Ctx update\n");
-            [s->nsgl_ctx update];
-        });
 
+    if (events & VO_EVENT_RESIZE) {
+        pthread_mutex_lock(&s->update_after_resize_lock);
+        struct timespec wait = mp_rel_time_to_timespec(0.1);
+        pthread_cond_timedwait(&s->update_after_resize_wakeup, &s->update_after_resize_lock, &wait);
+        pthread_mutex_unlock(&s->update_after_resize_lock);
     }
 
     return events;
