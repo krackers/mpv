@@ -20,6 +20,7 @@
 #include <string.h>
 #include <assert.h>
 #include <stdbool.h>
+#include <OpenGL/OpenGL.h>
 #include <pthread.h>
 #include <math.h>
 
