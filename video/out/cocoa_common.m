@@ -801,7 +801,7 @@ static void resize_event(struct vo *vo)
         dispatch_source_cancel(s->debounceTimer);
         s->debounceTimer = nil;
     }
-    s->debounceTimer = CreateDebounceDispatchTimer(0.05, dispatch_get_main_queue(), ^{
+    s->debounceTimer = CreateDebounceDispatchTimer(0.01, dispatch_get_main_queue(), ^{
         pthread_mutex_lock(&(vo->in->gpu_ctx_lock));
         [s->nsgl_ctx update];
         pthread_mutex_unlock(&(vo->in->gpu_ctx_lock));
