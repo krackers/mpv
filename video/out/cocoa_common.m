@@ -68,6 +68,8 @@ struct vo_cocoa_state {
     CGLContextObj cgl_ctx;
     NSOpenGLContext *nsgl_ctx;
 
+    dispatch_source_t debounceTimer;
+
     NSScreen *current_screen;
     CGDirectDisplayID display_id;
 
@@ -380,6 +382,7 @@ void vo_cocoa_init(struct vo *vo)
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
         .fullscreen = 0,
+        .debounceTimer = nil,
     };
     pthread_mutex_init(&s->lock, NULL);
     pthread_cond_init(&s->wakeup, NULL);
@@ -766,6 +769,18 @@ struct vo_internal {
     pthread_mutex_t gpu_ctx_lock;
 };
 
+dispatch_source_t CreateDebounceDispatchTimer(double debounceTime, dispatch_queue_t queue, dispatch_block_t block) {
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    
+    if (timer) {
+        dispatch_source_set_timer(timer, dispatch_time(DISPATCH_TIME_NOW, debounceTime * NSEC_PER_SEC), DISPATCH_TIME_FOREVER, (1ull * NSEC_PER_SEC) / 10);
+        dispatch_source_set_event_handler(timer, block);
+        dispatch_resume(timer);
+    }
+    
+    return timer;
+}
+
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
@@ -782,9 +797,15 @@ static void resize_event(struct vo *vo)
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
 
-    pthread_mutex_lock(&(vo->in->gpu_ctx_lock));
-    [s->nsgl_ctx update];
-    pthread_mutex_unlock(&(vo->in->gpu_ctx_lock));
+    if (s->debounceTimer != nil) {
+        dispatch_source_cancel(s->debounceTimer);
+        s->debounceTimer = nil;
+    }
+    s->debounceTimer = CreateDebounceDispatchTimer(0.05, dispatch_get_main_queue(), ^{
+        pthread_mutex_lock(&(vo->in->gpu_ctx_lock));
+        [s->nsgl_ctx update];
+        pthread_mutex_unlock(&(vo->in->gpu_ctx_lock));
+    });
 
     vo_wakeup(vo);
 }
