@@ -969,6 +969,7 @@ static void do_redraw(struct vo *vo)
     frame->duration = -1;
     pthread_mutex_unlock(&in->lock);
 
+    pthread_mutex_lock(&in->gpu_ctx_lock);
     if (vo->driver->draw_frame) {
         vo->driver->draw_frame(vo, frame);
     } else if ((full_redraw || vo->driver->control(vo, VOCTRL_REDRAW_FRAME, NULL) < 1)
@@ -976,8 +977,8 @@ static void do_redraw(struct vo *vo)
     {
         vo->driver->draw_image(vo, mp_image_new_ref(frame->current));
     }
-
     vo->driver->flip_page(vo);
+    pthread_mutex_unlock(&in->gpu_ctx_lock);
 
     if (frame != &dummy)
         talloc_free(frame);
@@ -1087,9 +1088,7 @@ static void *vo_thread(void *ptr)
         if (send_pause)
             vo->driver->control(vo, vo_paused ? VOCTRL_PAUSE : VOCTRL_RESUME, NULL);
         if (wait_until > now && redraw) {
-            pthread_mutex_lock(&in->gpu_ctx_lock);
             do_redraw(vo); // now is a good time
-            pthread_mutex_unlock(&in->gpu_ctx_lock);
             continue;
         }
         if (vo->want_redraw) // might have been set by VOCTRLs
