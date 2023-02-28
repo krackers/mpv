@@ -838,7 +838,7 @@ static int vo_cocoa_check_events(struct vo *vo)
     }
     if (s->ctx_needs_update) {
         double now = mp_time_sec();
-        should_update_ctx = (now - s->last_ctx_update) > 0.1;
+        should_update_ctx = (now - s->last_ctx_update) > 0.01;
         if (should_update_ctx) {
             s->last_ctx_update = now;
             s->ctx_needs_update = false;
