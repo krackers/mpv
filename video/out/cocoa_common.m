@@ -121,7 +121,7 @@ struct vo_cocoa_state {
     char *window_title;
 
     // Following accessed only by non-main thread
-    dispatch_source_t debounceTimer = nil;
+    dispatch_source_t debounceTimer;
 };
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
@@ -383,6 +383,7 @@ void vo_cocoa_init(struct vo *vo)
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
         .fullscreen = 0,
+        .debounceTimer = nil
     };
     pthread_mutex_init(&s->lock, NULL);
     pthread_cond_init(&s->wakeup, NULL);
