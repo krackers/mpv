@@ -847,8 +847,10 @@ static int vo_cocoa_check_events(struct vo *vo)
     pthread_mutex_unlock(&s->lock);
   
     if (should_update_ctx) {
-        run_on_main_thread(vo, ^{
-            [s->nsgl_ctx update];
+        dispatch_sync(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+            run_on_main_thread(vo, ^{
+                [s->nsgl_ctx update];
+            });
         });
     }
 
