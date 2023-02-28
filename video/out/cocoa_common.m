@@ -105,9 +105,6 @@ struct vo_cocoa_state {
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
 
-    bool ctx_needs_update;
-    double last_ctx_update;
-
     // --- The following members are protected by the lock.
     //     If the VO and main threads are both blocked, locking is optional
     //     for members accessed only by VO and main thread.
@@ -382,8 +379,6 @@ void vo_cocoa_init(struct vo *vo)
         .embedded = vo->opts->WinID >= 0,
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
-        .last_ctx_update = 0,
-        .ctx_needs_update = false,
         .fullscreen = 0,
     };
     pthread_mutex_init(&s->lock, NULL);
@@ -760,6 +755,17 @@ int vo_cocoa_config_window(struct vo *vo)
     return 0;
 }
 
+struct vo_internal {
+    pthread_t thread;
+    struct mp_dispatch_queue *dispatch;
+    struct dr_helper *dr_helper;
+
+    // --- The following fields are protected by lock
+    pthread_mutex_t lock;
+    pthread_cond_t wakeup;
+    pthread_mutex_t gpu_ctx_lock;
+};
+
 // Trigger a VO resize - called from the main thread. This is done async,
 // because the VO must resize and redraw while vo_cocoa_resize_redraw() is
 // blocking.
@@ -774,8 +780,11 @@ static void resize_event(struct vo *vo)
     s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
     // Live-resizing: make sure at least one frame will be drawn
     s->frame_w = s->frame_h = 0;
-    s->ctx_needs_update = true;
     pthread_mutex_unlock(&s->lock);
+
+    pthread_mutex_lock(&(vo->in->gpu_ctx_lock));
+    [s->nsgl_ctx update];
+    pthread_mutex_unlock(&(vo->in->gpu_ctx_lock));
 
     vo_wakeup(vo);
 }
@@ -830,27 +839,11 @@ static int vo_cocoa_check_events(struct vo *vo)
     pthread_mutex_lock(&s->lock);
     int events = s->pending_events;
     s->pending_events = 0;
-    bool should_update_ctx = false;
-  
     if (events & VO_EVENT_RESIZE) {
         vo->dwidth  = s->vo_dwidth;
         vo->dheight = s->vo_dheight;
     }
-    if (s->ctx_needs_update) {
-        double now = mp_time_sec();
-        should_update_ctx = (now - s->last_ctx_update) > 0.05;
-        if (should_update_ctx) {
-            s->last_ctx_update = now;
-            s->ctx_needs_update = false;
-        }
-    }
     pthread_mutex_unlock(&s->lock);
-  
-    if (should_update_ctx) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [s->nsgl_ctx update];
-        });
-    }
 
     return events;
 }
@@ -934,9 +927,6 @@ static int vo_cocoa_control_on_main_thread(struct vo *vo, int request, void *arg
         return VO_TRUE;
     case VOCTRL_GET_ICC_PROFILE:
         vo_cocoa_control_get_icc_profile(vo, arg);
-        return VO_TRUE;
-    case VOCTRL_GET_HIDPI_SCALE:
-        *(double *)arg = s->window ? [s->window backingScaleFactor] : [s->current_screen backingScaleFactor]; 
         return VO_TRUE;
     case VOCTRL_GET_DISPLAY_FPS:
         *(double *)arg = vo_cocoa_update_screen_fps(vo);
