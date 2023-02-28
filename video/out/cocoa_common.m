@@ -848,10 +848,12 @@ static int vo_cocoa_check_events(struct vo *vo)
   
     if (events & VO_EVENT_RESIZE) {
         if (s->debounceTimer != nil) {
+            printf("Nil timer\n");
             dispatch_source_cancel(s->debounceTimer);
             s->debounceTimer = nil;
         }
-        s->debounceTimer = CreateDebounceDispatchTimer(0.05, dispatch_get_main_queue(), ^{
+        s->debounceTimer = CreateDebounceDispatchTimer(0.01, dispatch_get_main_queue(), ^{
+            printf("Ctx update\n");
             [s->nsgl_ctx update];
         });
 
