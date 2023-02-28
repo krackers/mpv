@@ -113,7 +113,6 @@ struct vo_internal {
     // --- The following fields are protected by lock
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
-    pthread_mutex_t gpu_ctx_lock;
 
     bool need_wakeup;
     bool terminate;
@@ -256,7 +255,6 @@ static void dealloc_vo(struct vo *vo)
     talloc_free(vo->eq_opts_cache);
 
     pthread_mutex_destroy(&vo->in->lock);
-    pthread_mutex_destroy(&vo->in->gpu_ctx_lock);
     pthread_cond_destroy(&vo->in->wakeup);
     talloc_free(vo);
 }
@@ -294,7 +292,6 @@ static struct vo *vo_create(bool probing, struct mpv_global *global,
     };
     mp_dispatch_set_wakeup_fn(vo->in->dispatch, dispatch_wakeup_cb, vo);
     pthread_mutex_init(&vo->in->lock, NULL);
-    pthread_mutex_init(&vo->in->gpu_ctx_lock, NULL);
     pthread_cond_init(&vo->in->wakeup, NULL);
 
     vo->opts_cache = m_config_cache_alloc(NULL, global, &vo_sub_opts);
@@ -897,13 +894,13 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-draw");
 
-        pthread_mutex_lock(&in->gpu_ctx_lock);
+        CGLContextObj ctx = CGLGetCurrentContext();
+        CGLLockContext(ctx);
         if (vo->driver->draw_frame) {
             vo->driver->draw_frame(vo, frame);
         } else {
             vo->driver->draw_image(vo, mp_image_new_ref(frame->current));
         }
-        pthread_mutex_unlock(&in->gpu_ctx_lock);
 
         MP_STATS(vo, "end video-draw");
 
@@ -911,9 +908,8 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-flip");
 
-        pthread_mutex_lock(&in->gpu_ctx_lock);
         vo->driver->flip_page(vo);
-        pthread_mutex_unlock(&in->gpu_ctx_lock);
+        CGLUnlockContext(ctx);
 
         MP_STATS(vo, "end video-flip");
 
@@ -973,7 +969,8 @@ static void do_redraw(struct vo *vo)
     frame->duration = -1;
     pthread_mutex_unlock(&in->lock);
 
-    pthread_mutex_lock(&in->gpu_ctx_lock);
+    CGLContextObj ctx = CGLGetCurrentContext();
+    CGLLockContext(ctx);
     if (vo->driver->draw_frame) {
         vo->driver->draw_frame(vo, frame);
     } else if ((full_redraw || vo->driver->control(vo, VOCTRL_REDRAW_FRAME, NULL) < 1)
@@ -982,7 +979,7 @@ static void do_redraw(struct vo *vo)
         vo->driver->draw_image(vo, mp_image_new_ref(frame->current));
     }
     vo->driver->flip_page(vo);
-    pthread_mutex_unlock(&in->gpu_ctx_lock);
+    CGLUnlockContext(ctx);
 
     if (frame != &dummy)
         talloc_free(frame);
