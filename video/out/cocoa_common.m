@@ -850,7 +850,7 @@ static int vo_cocoa_check_events(struct vo *vo)
             dispatch_source_cancel(s->debounceTimer);
             s->debounceTimer = nil;
         }
-        s->debounceTimer = debounceTimer = CreateDebounceDispatchTimer(0.2, dispatch_get_main_queue(), ^{
+        s->debounceTimer = CreateDebounceDispatchTimer(0.05, dispatch_get_main_queue(), ^{
             [s->nsgl_ctx update];
         });
 
