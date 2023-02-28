@@ -771,7 +771,7 @@ static void resize_event(struct vo *vo)
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
 
-    CGLContextObj cglctx = [[s->nsgl_ctx] CGLContextObj];
+    CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
     CGLLockContext(cglctx);
     [s->nsgl_ctx update];
     CGLUnlockContext(cglctx);
