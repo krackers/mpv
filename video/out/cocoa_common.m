@@ -119,9 +119,6 @@ struct vo_cocoa_state {
     int frame_w, frame_h;               // dimensions of the frame rendered
 
     char *window_title;
-
-    pthread_cond_t update_after_resize_wakeup;
-    pthread_mutex_t update_after_resize_lock;
 };
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
@@ -390,9 +387,6 @@ void vo_cocoa_init(struct vo *vo)
     pthread_cond_init(&s->sync_wakeup, NULL);
     pthread_mutex_init(&s->anim_lock, NULL);
     pthread_cond_init(&s->anim_wakeup, NULL);
-    
-    pthread_cond_init(&s->update_after_resize_lock, NULL);
-    pthread_cond_init(&s->update_after_resize_wakeup, NULL);
     vo->cocoa = s;
     vo_cocoa_update_screen_info(vo);
     vo_cocoa_init_displaylink(vo);
@@ -474,8 +468,6 @@ void vo_cocoa_uninit(struct vo *vo)
         pthread_cond_destroy(&s->anim_wakeup);
         pthread_mutex_destroy(&s->anim_lock);
         pthread_cond_destroy(&s->sync_wakeup);
-        pthread_mutex_destroy(&s->update_after_resize_lock);
-        pthread_cond_destroy(&s->update_after_resize_wakeup);
         pthread_mutex_destroy(&s->sync_lock);
         pthread_cond_destroy(&s->wakeup);
         pthread_mutex_destroy(&s->lock);
@@ -779,9 +771,6 @@ static void resize_event(struct vo *vo)
     s->frame_w = s->frame_h = 0;
     pthread_mutex_unlock(&s->lock);
 
-    [s->nsgl_ctx update];
-    pthread_cond_signal(&s->update_after_resize_wakeup);
-
     vo_wakeup(vo);
 }
 
@@ -840,12 +829,9 @@ static int vo_cocoa_check_events(struct vo *vo)
         vo->dheight = s->vo_dheight;
     }
     pthread_mutex_unlock(&s->lock);
-
+  
     if (events & VO_EVENT_RESIZE) {
-        pthread_mutex_lock(&s->update_after_resize_lock);
-        struct timespec wait = mp_rel_time_to_timespec(0.1);
-        pthread_cond_timedwait(&s->update_after_resize_wakeup, &s->update_after_resize_lock, &wait);
-        pthread_mutex_unlock(&s->update_after_resize_lock);
+        [s->nsgl_ctx update];
     }
 
     return events;
