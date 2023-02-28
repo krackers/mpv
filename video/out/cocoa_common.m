@@ -836,7 +836,7 @@ static int vo_cocoa_check_events(struct vo *vo)
         vo->dwidth  = s->vo_dwidth;
         vo->dheight = s->vo_dheight;
     }
-    if (ctx_needs_update) {
+    if (s->ctx_needs_update) {
         double now = mp_time_sec();
         should_update_ctx = (now - s->last_ctx_update) > 0.1;
         if (should_update_ctx) {
