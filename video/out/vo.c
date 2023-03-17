@@ -881,6 +881,9 @@ bool vo_render_frame_external(struct vo *vo)
     if (use_vsync && !in->expecting_vsync) // first DS frame in a row
         in->prev_vsync = now;
     in->expecting_vsync = use_vsync;
+    
+    // Store the initial value before we unlock.
+    bool request_redraw = in->request_redraw;
 
     if (in->dropped_frame) {
         in->drop_count += 1;
@@ -925,7 +928,14 @@ bool vo_render_frame_external(struct vo *vo)
     if (in->dropped_frame) {
         MP_STATS(vo, "drop-vo");
     } else {
-        in->request_redraw = false;
+        // If the initial redraw request was true, then we can
+        // clear it here since we just performed a redraw and are
+        // merely clearing that request. However if there initially is
+        // no redraw request, then something can change this (i.e. the OSD)
+        // while the vo was unlocked. Don't touch in->request_redraw
+        // in that case.
+        if (request_redraw)
+            in->request_redraw = false;
     }
 
     pthread_cond_broadcast(&in->wakeup); // for vo_wait_frame()
