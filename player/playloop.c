@@ -244,6 +244,7 @@ void reset_playback_state(struct MPContext *mpctx)
     mpctx->paused_for_cache = false;
     mpctx->cache_buffer = 100;
     mpctx->seek_slave = NULL;
+    mpctx->cache_update_pts = MP_NOPTS_VALUE;
 
     encode_lavc_discontinuity(mpctx->encode_lavc_ctx);
 
@@ -680,6 +681,8 @@ static void handle_pause_on_low_cache(struct MPContext *mpctx)
 
     // Also update cache properties.
     bool busy = !s.idle || !c.idle;
+    if (fabs(mpctx->cache_update_pts - mpctx->playback_pts) >= 1.0)
+        busy = true;
     if (busy || mpctx->next_cache_update > 0) {
         if (mpctx->next_cache_update <= now) {
             mpctx->next_cache_update = busy ? now + 0.25 : 0;
@@ -710,8 +713,10 @@ static void handle_pause_on_low_cache(struct MPContext *mpctx)
     if (s.eof && !busy)
         prefetch_next(mpctx);
 
-    if (force_update)
+    if (force_update) {
+        mpctx->cache_update_pts = mpctx->playback_pts;
         mp_notify(mpctx, MP_EVENT_CACHE_UPDATE, NULL);
+    }
 }
 
 int get_cache_buffering_percentage(struct MPContext *mpctx)
