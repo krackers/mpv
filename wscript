@@ -124,6 +124,12 @@ build_options = [
         'desc': 'generate a clang compilation database',
         'func': check_true,
         'default': 'disable',
+    }, {
+        'name': '--swift-static',
+        'desc': 'static Swift linking',
+        'deps': 'os-darwin',
+        'func': check_ctx_vars('SWIFT_LIB_STATIC'),
+        'default': 'disable'
     }
 ]
 
@@ -919,6 +925,21 @@ standalone_features = [
         'desc': 'macOS opengl-cb backend',
         'deps': 'cocoa  && swift',
         'func': check_true
+    }, {
+        'name': '--macos-10-11-features',
+        'desc': 'macOS 10.11 SDK Features',
+        'deps': 'cocoa',
+        'func': check_macos_sdk('10.11')
+    }, {
+        'name': '--macos-10-12-2-features',
+        'desc': 'macOS 10.12.2 SDK Features',
+        'deps': 'cocoa',
+        'func': check_macos_sdk('10.12.2')
+    }, {
+        'name': '--macos-10-14-features',
+        'desc': 'macOS 10.14 SDK Features',
+        'deps': 'cocoa',
+        'func': check_macos_sdk('10.14')
     }
 ]
 

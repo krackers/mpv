@@ -142,39 +142,53 @@ def build(ctx):
     ctx(features = "ebml_definitions", target = "ebml_defs.c")
 
     def swift(task):
-        src = ' '.join([x.abspath() for x in task.inputs])
+        src = [x.abspath() for x in task.inputs]
         bridge = ctx.path.find_node("osdep/macOS_swift_bridge.h").abspath()
         tgt = task.outputs[0].abspath()
         header = task.outputs[1].abspath()
         module = task.outputs[2].abspath()
+        module_name = os.path.basename(module).rsplit(".", 1)[0]
 
-        cmd = ('%s %s -module-name macOS_swift -emit-module-path %s '
-               '-import-objc-header %s -emit-objc-header-path %s -o %s %s '
-               '-I. -I%s') % (ctx.env.SWIFT, ctx.env.SWIFT_FLAGS, module,
-                              bridge, header, tgt, src, ctx.srcnode.abspath())
+        cmd = [ ctx.env.SWIFT ]
+        cmd.extend(ctx.env.SWIFT_FLAGS)
+        cmd.extend([
+            "-module-name", module_name,
+            "-emit-module-path", module,
+            "-import-objc-header", bridge,
+            "-emit-objc-header-path", header,
+            "-o", tgt,
+        ])
+        cmd.extend(src)
+        cmd.extend([ "-I.", "-I%s" % ctx.srcnode.abspath() ])
+
         return task.exec_command(cmd)
 
     if ctx.dependency_satisfied('macos-cocoa-cb'):
         swift_source = [
-            ( "osdep/macOS_mpv_helper.swift" ),
+            ( "osdep/macos/log_helper.swift" ),
+            ( "osdep/macos/libmpv_helper.swift" ),
+            ( "osdep/macos/mpv_helper.swift" ),
+            ( "osdep/macos/swift_extensions.swift" ),
+            ( "osdep/macos/swift_compat.swift" ),
             ( "video/out/cocoa-cb/events_view.swift" ),
             ( "video/out/cocoa-cb/video_layer.swift" ),
             ( "video/out/cocoa-cb/window.swift" ),
+            ( "video/out/cocoa-cb/title_bar.swift" ),
             ( "video/out/cocoa_cb_common.swift" ),
         ]
 
         ctx(
             rule   = swift,
             source = ctx.filtered_sources(swift_source),
-            target = ('osdep/macOS_swift.o '
-                      'osdep/macOS_swift.h '
-                      'osdep/macOS_swift.swiftmodule'),
+            target = [ "osdep/macOS_swift.o",
+                       "osdep/macOS_swift.h",
+                       "osdep/macOS_swift.swiftmodule" ],
             before = 'c',
         )
 
         ctx.env.append_value('LINKFLAGS', [
             '-Xlinker', '-add_ast_path',
-            '-Xlinker', '%s' % ctx.path.find_or_declare("osdep/macOS_swift.swiftmodule").abspath()
+            '-Xlinker', ctx.path.find_or_declare("osdep/macOS_swift.swiftmodule").abspath()
         ])
 
     if ctx.dependency_satisfied('cplayer'):

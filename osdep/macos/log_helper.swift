@@ -15,26 +15,34 @@
  * License along with mpv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MPV_MACOSX_APPLICATION
-#define MPV_MACOSX_APPLICATION
+import Cocoa
 
-#include "osdep/macosx_menubar.h"
-#include "options/m_option.h"
+class LogHelper: NSObject {
 
+    var log: OpaquePointer?
 
-struct macos_opts {
-    int macos_title_bar_style;
-    int macos_title_bar_appearance;
-    int macos_title_bar_material;
-    struct m_color macos_title_bar_color;
-    int macos_fs_animation_duration;
-    int macos_force_dedicated_gpu;
-    int cocoa_cb_sw_renderer;
-    int cocoa_cb_10bit_context;
-};
+    init(_ log: OpaquePointer?) {
+        self.log = log
+    }
 
-// multithreaded wrapper for mpv_main
-int cocoa_main(int argc, char *argv[]);
-void cocoa_register_menu_item_action(MPMenuKey key, void* action);
+    func sendVerbose(_ msg: String) {
+        send(message: msg, type: MSGL_V)
+    }
 
-#endif /* MPV_MACOSX_APPLICATION */
+    func sendInfo(_ msg: String) {
+        send(message: msg, type: MSGL_INFO)
+    }
+
+    func sendWarning(_ msg: String) {
+        send(message: msg, type: MSGL_WARN)
+    }
+
+    func sendError(_ msg: String) {
+        send(message: msg, type: MSGL_ERR)
+    }
+
+    func send(message msg: String, type t: Int) {
+        let args: [CVarArg] = [ (msg as NSString).utf8String ?? "NO MESSAGE"]
+        mp_msg_va(log, Int32(t), "%s\n", getVaList(args))
+    }
+}
