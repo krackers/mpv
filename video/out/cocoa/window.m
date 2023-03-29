@@ -234,6 +234,11 @@
     [self.adapter windowDidResignKey:notification];
 }
 
+- (void)windowDidChangeOcclusionState:(NSNotification *)notification
+{
+    [self.adapter windowDidChangeOcclusionState:notification];
+}
+
 - (void)windowDidBecomeKey:(NSNotification *)notification
 {
     [self.adapter windowDidBecomeKey:notification];
