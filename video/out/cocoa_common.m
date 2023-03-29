@@ -105,6 +105,7 @@ struct vo_cocoa_state {
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
 
+
     // --- The following members are protected by the lock.
     //     If the VO and main threads are both blocked, locking is optional
     //     for members accessed only by VO and main thread.
@@ -119,6 +120,7 @@ struct vo_cocoa_state {
     int frame_w, frame_h;               // dimensions of the frame rendered
 
     char *window_title;
+    bool display_synced;
 };
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
@@ -379,6 +381,7 @@ void vo_cocoa_init(struct vo *vo)
         .embedded = vo->opts->WinID >= 0,
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
+        .display_synced = false,
         .fullscreen = 0,
     };
     pthread_mutex_init(&s->lock, NULL);
@@ -478,6 +481,8 @@ void vo_cocoa_uninit(struct vo *vo)
 static void vo_cocoa_update_displaylink(struct vo *vo)
 {
     struct vo_cocoa_state *s = vo->cocoa;
+
+    bool running = CVDisplayLinkIsRunning(s->link);
 
     vo_cocoa_uninit_displaylink(s);
     vo_cocoa_init_displaylink(vo);
@@ -804,22 +809,27 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     // Don't swap a frame with wrong size
     pthread_mutex_lock(&s->lock);
     bool skip = s->pending_events & VO_EVENT_RESIZE;
-    pthread_mutex_unlock(&s->lock);
     if (skip)
-        return;
+        goto ret;
 
-    pthread_mutex_lock(&s->sync_lock);
-    uint64_t old_counter = s->sync_counter;
-    while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
-        pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+    if (s->display_synced) {
+        pthread_mutex_unlock(&s->lock);
+        pthread_mutex_lock(&s->sync_lock);
+        uint64_t old_counter = s->sync_counter;
+        while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
+            pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+        }
+        pthread_mutex_unlock(&s->sync_lock);
+        pthread_mutex_lock(&s->lock);
     }
-    pthread_mutex_unlock(&s->sync_lock);
 
-    pthread_mutex_lock(&s->lock);
     s->frame_w = vo->dwidth;
     s->frame_h = vo->dheight;
     pthread_cond_signal(&s->wakeup);
+  
+ ret:
     pthread_mutex_unlock(&s->lock);
+    return;
 }
 
 static int vo_cocoa_check_events(struct vo *vo)
@@ -1102,6 +1112,17 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     vo_cocoa_update_screen_info(self.vout);
     flag_events(self.vout, VO_EVENT_ICC_PROFILE_CHANGED);
+}
+
+- (void)windowDidChangeOcclusionState:(NSNotification *)notification
+{
+    pthread_mutex_lock(&self.vout->cocoa->lock);
+    if ([[notification object] occlusionState]  &  NSWindowOcclusionStateVisible) {
+        self.vout->cocoa->display_synced = false;
+    } else {
+        self.vout->cocoa->display_synced = true;
+    }
+    pthread_mutex_unlock(&self.vout->cocoa->lock);
 }
 
 - (void)windowDidResignKey:(NSNotification *)notification
