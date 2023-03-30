@@ -75,6 +75,7 @@ static CGLError test_gl_version(struct ra_ctx *ctx, CGLOpenGLProfile ver)
         kCGLPFAOpenGLProfile,
         (CGLPixelFormatAttribute) ver,
         kCGLPFAAccelerated,
+        kCGLPFADoubleBuffer,
         kCGLPFAAllowOfflineRenderers,
         // keep this one last to apply the cocoa-force-dedicated-gpu option
         kCGLPFASupportsAutomaticGraphicsSwitching,
@@ -161,7 +162,7 @@ static void cocoa_swap_buffers(struct ra_ctx *ctx)
 {
     struct priv *p = ctx->priv;
     vo_cocoa_swap_buffers(ctx->vo);
-    p->Flush();
+    CGLFlushDrawable(p->ctx);
 }
 
 static bool cocoa_init(struct ra_ctx *ctx)
