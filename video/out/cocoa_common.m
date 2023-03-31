@@ -699,6 +699,8 @@ int vo_cocoa_config_window(struct vo *vo)
     struct vo_cocoa_state *s = vo->cocoa;
     struct mp_vo_opts *opts  = vo->opts;
 
+    CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
+
     run_on_main_thread(vo, ^{
         NSRect r = [s->current_screen frame];
         r = [s->current_screen convertRectToBacking:r];
@@ -745,11 +747,9 @@ int vo_cocoa_config_window(struct vo *vo)
         vo->dheight = s->vo_dheight = frame.size.height;
 
         s->update_context = 1;
-        CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-        CGLLockContext(cglctx);
         [s->nsgl_ctx update];
-        CGLUnlockContext(cglctx);
     });
+
     return 0;
 }
 
@@ -767,9 +767,7 @@ static void resize_event(struct vo *vo)
     if (!s->in_live_resize) {
         s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
         CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-        CGLLockContext(cglctx);
         [s->nsgl_ctx update];
-        CGLUnlockContext(cglctx);
         vo_wakeup(vo);
     }
     pthread_mutex_unlock(&s->lock);
