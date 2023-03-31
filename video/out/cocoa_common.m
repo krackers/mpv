@@ -571,6 +571,10 @@ static MpvVideoWindow *create_window(NSRect rect, NSScreen *s, bool border,
     w.adapter = adapter;
     [w setDelegate: w];
 
+    //When building against macOS SDK 10.15+ and running on macOS 10.15+, the system will trigger an assert because we
+    //are not using NSOpenGLContext on the main thread. Disable this assert since it doesn't cause any problem if we do.
+    CFPreferencesSetAppValue(CFSTR("NSOpenGLContextSuppressThreadAssertions"), kCFBooleanTrue, kCFPreferencesCurrentApplication);
+
     return w;
 }
 
@@ -747,8 +751,6 @@ int vo_cocoa_config_window(struct vo *vo)
         vo->dheight = s->vo_dheight = frame.size.height;
 
         s->update_context = 1;
-        fprintf(stderr, "Update 1\n");
-        //[s->nsgl_ctx update];
     });
 
     return 0;
@@ -767,9 +769,6 @@ static void resize_event(struct vo *vo)
     s->vo_dheight = frame.size.height;
     if (!s->in_live_resize) {
         s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
-        CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-        fprintf(stderr, "Update 2\n");
-        //[s->nsgl_ctx update];
         vo_wakeup(vo);
     }
     pthread_mutex_unlock(&s->lock);
@@ -790,14 +789,14 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         pthread_mutex_unlock(&s->sync_lock);
         pthread_mutex_lock(&s->lock);
     }
+    if (s->update_context) {
+        s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
+        vo_wakeup(vo);
+        s->update_context = 0;
+    }
     pthread_mutex_unlock(&s->lock);
 
     CGLFlushDrawable(s->cgl_ctx);
-
-    if (s->update_context) {
-        flag_events(vo, VO_EVENT_RESIZE | VO_EVENT_EXPOSE);
-        s->update_context = 0;
-    }
     return;
 }
 
@@ -813,6 +812,10 @@ static int vo_cocoa_check_events(struct vo *vo)
         vo->dheight = s->vo_dheight;
     }
     pthread_mutex_unlock(&s->lock);
+
+    if (events & VO_EVENT_RESIZE) {
+        [s->nsgl_ctx update];
+    }
 
     return events;
 }
@@ -1072,9 +1075,6 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 
     s->in_live_resize = 0;
     s->update_context = 1;
-    CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-    fprintf(stderr, "Update 3\n");
-    //[s->nsgl_ctx update];
     self.vout->want_redraw = true;
     vo_wakeup(self.vout);
 }
