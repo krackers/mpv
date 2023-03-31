@@ -27,6 +27,7 @@
     self = [super initWithFrame:frame];
     if (self) {
         [self setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
+        [self setNeedsDisplay: NO];
     }
     return self;
 }
