@@ -84,7 +84,6 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
     struct ra_fbo fbo;
-    CGLLockContext(p->gl_ctx);
     if (!sw->fns->start_frame(sw, &fbo))
         goto fend;
 
@@ -95,7 +94,6 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     }
 
 fend:
-    CGLUnlockContext(p->gl_ctx);
     return;
 }
 
@@ -104,9 +102,7 @@ static void flip_page(struct vo *vo)
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
 
-    CGLLockContext(p->gl_ctx);
     sw->fns->swap_buffers(sw);
-    CGLUnlockContext(p->gl_ctx);
 }
 
 static int query_format(struct vo *vo, int format)
