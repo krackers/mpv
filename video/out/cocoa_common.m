@@ -747,7 +747,8 @@ int vo_cocoa_config_window(struct vo *vo)
         vo->dheight = s->vo_dheight = frame.size.height;
 
         s->update_context = 1;
-        [s->nsgl_ctx update];
+        fprintf(stderr, "Update 1\n");
+        //[s->nsgl_ctx update];
     });
 
     return 0;
@@ -767,7 +768,8 @@ static void resize_event(struct vo *vo)
     if (!s->in_live_resize) {
         s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
         CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-        [s->nsgl_ctx update];
+        fprintf(stderr, "Update 2\n");
+        //[s->nsgl_ctx update];
         vo_wakeup(vo);
     }
     pthread_mutex_unlock(&s->lock);
@@ -1027,7 +1029,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     struct vo_cocoa_state *s = self.vout->cocoa;
     s->fullscreen = 1;
     s->pending_events |= VO_EVENT_FULLSCREEN_STATE;
-    vo_cocoa_anim_unlock(self.vout);
+    //vo_cocoa_anim_unlock(self.vout);
 }
 
 - (void)windowDidExitFullScreen
@@ -1035,27 +1037,27 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     struct vo_cocoa_state *s = self.vout->cocoa;
     s->fullscreen = 0;
     s->pending_events |= VO_EVENT_FULLSCREEN_STATE;
-    vo_cocoa_anim_unlock(self.vout);
+    //vo_cocoa_anim_unlock(self.vout);
 }
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification
 {
-    vo_cocoa_anim_lock(self.vout);
+    //vo_cocoa_anim_lock(self.vout);
 }
 
 - (void)windowWillExitFullScreen:(NSNotification *)notification
 {
-    vo_cocoa_anim_lock(self.vout);
+    //vo_cocoa_anim_lock(self.vout);
 }
 
 - (void)windowDidFailToEnterFullScreen:(NSWindow *)window
 {
-    vo_cocoa_anim_unlock(self.vout);
+    //vo_cocoa_anim_unlock(self.vout);
 }
 
 - (void)windowDidFailToExitFullScreen:(NSWindow *)window
 {
-    vo_cocoa_anim_unlock(self.vout);
+    //vo_cocoa_anim_unlock(self.vout);
 }
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification
@@ -1071,9 +1073,8 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     s->in_live_resize = 0;
     s->update_context = 1;
     CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-    CGLLockContext(cglctx);
-    [s->nsgl_ctx update];
-    CGLUnlockContext(cglctx);
+    fprintf(stderr, "Update 3\n");
+    //[s->nsgl_ctx update];
     self.vout->want_redraw = true;
     vo_wakeup(self.vout);
 }
