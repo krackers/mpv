@@ -77,9 +77,7 @@ static CGLError test_gl_version(struct ra_ctx *ctx, CGLOpenGLProfile ver)
         kCGLPFAAccelerated,
         kCGLPFADoubleBuffer,
         kCGLPFAAllowOfflineRenderers,
-        kCGLPFADoubleBuffer,
-        kCGLPFAAllowOfflineRenderers,
-        kCGLPFABackingStore,
+//        kCGLPFABackingStore,
         // keep this one last to apply the cocoa-force-dedicated-gpu option
         kCGLPFASupportsAutomaticGraphicsSwitching,
         0
