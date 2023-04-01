@@ -45,6 +45,10 @@ struct priv {
 
 static int set_swap_interval(int enabled)
 {
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
+#warning Disabling VSync
+    enabled = 0;
+#endif
     CGLContextObj ctx = CGLGetCurrentContext();
     CGLError err = CGLSetParameter(ctx, kCGLCPSwapInterval, &enabled);
     return (err == kCGLNoError) ? 0 : -1;

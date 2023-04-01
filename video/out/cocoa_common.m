@@ -813,6 +813,24 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     if (skip)
         goto ret;
 
+
+// Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
+// I don't understand why, probably because it messes with compositing?
+#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
+#warning Using CVDisplayLink to enforce VSync
+    pthread_mutex_lock(&s->sync_lock);
+    // Commented out version is adaptive vsync (force swap if late)
+    // while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
+    //     pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+    // }
+    // s->sync_counter = 0;
+    uint64_t old_counter = s->sync_counter;
+    while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
+        pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+    }
+    pthread_mutex_unlock(&s->sync_lock);
+#else
+#warning Using standard vsync approach
     if (s->display_synced) {
         pthread_mutex_unlock(&s->lock);
         pthread_mutex_lock(&s->sync_lock);
@@ -823,6 +841,8 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         pthread_mutex_unlock(&s->sync_lock);
         pthread_mutex_lock(&s->lock);
     }
+#endif
+
 
     s->frame_w = vo->dwidth;
     s->frame_h = vo->dheight;
