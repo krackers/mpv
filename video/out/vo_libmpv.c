@@ -291,6 +291,11 @@ void mpv_render_context_free(mpv_render_context *ctx)
     assert(!atomic_load(&ctx->in_use));
     assert(!ctx->vo);
 
+    // With the dispatch queue not being served anymore, allow frame free
+    // requests from this thread to be served directly.
+    if (ctx->dr)
+        dr_helper_acquire_thread(ctx->dr);
+
     // Possibly remaining outstanding work.
     mp_dispatch_queue_process(ctx->dispatch, 0);
 
