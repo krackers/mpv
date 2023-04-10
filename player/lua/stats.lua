@@ -607,10 +607,80 @@ local function vo_stats()
 end
 
 
--- Returns an ASS string with stats about filters/profiles/shaders
-local function filter_stats()
-    return "coming soon"
+
+local function opt_time(t)
+    if type(t) == type(1.1) then
+        return mp.format_time(t)
+    end
+    return "?"
 end
+
+-- Returns an ASS string with stats about the demuxer cache etc.
+local function cache_stats()
+    local stats = {}
+
+    eval_ass_formatting()
+
+    add_header(stats)
+    append(stats, "", {prefix=o.nl .. o.nl .. "Cache info:", nl="", indent=""})
+
+    local info = mp.get_property_native("demuxer-cache-state")
+    if info == nil then
+        append(stats, "Unavailable.", {})
+        return table.concat(stats)
+    end
+
+    append(stats, opt_time(info["reader-pts"]) .. " - " ..
+                  opt_time(info["cache-end"]),
+           {prefix = "Packet queue:"})
+
+    -- These states are not necessarily exclusive. They're about potentially
+    -- separate mechanisms, whose states may be decoupled.
+    local state = "reading"
+    local seek_ts = info["debug-seeking"]
+    if seek_ts ~= nil then
+        state = "seeking (to " .. mp.format_time(seek_ts) .. ")"
+    elseif info["eof"] == true then
+        state = "eof"
+    elseif info["underrun"] then
+        state = "underrun"
+    elseif info["idle"]  == true then
+        state = "inactive"
+    end
+    append(stats, state, {prefix = "State:"})
+
+    append(stats, utils.format_bytes_humanized(info["total-bytes"]),
+           {prefix = "Total RAM:"})
+    append(stats, utils.format_bytes_humanized(info["fw-bytes"]),
+           {prefix = "Forward RAM:"})
+
+    local fc = info["file-cache-bytes"]
+    if fc ~= nil then
+        fc = utils.format_bytes_humanized(fc)
+    else
+        fc = "(disabled)"
+    end
+    append(stats, fc, {prefix = "Disk cache:"})
+
+    append(stats, info["debug-low-level-seeks"], {prefix = "Media seeks:"})
+
+    append(stats, "", {prefix=o.nl .. o.nl .. "Ranges:", nl="", indent=""})
+
+    append(stats, info["bof-cached"] and "yes" or "no",
+           {prefix = "Start cached:"})
+    append(stats, info["eof-cached"] and "yes" or "no",
+           {prefix = "End cached:"})
+
+    local ranges = info["seekable-ranges"] or {}
+    for n, r in ipairs(ranges) do
+        append(stats, mp.format_time(r["start"]) .. " - " ..
+                      mp.format_time(r["end"]),
+               {prefix = format("Range %s:", n)})
+    end
+
+    return table.concat(stats)
+end
+
 
 
 -- Current page and <page key>:<page function> mapping
@@ -618,7 +688,7 @@ curr_page = o.key_page_1
 pages = {
     [o.key_page_1] = { f = default_stats, desc = "Default" },
     [o.key_page_2] = { f = vo_stats, desc = "Extended Frame Timings" },
-    --[o.key_page_3] = { f = filter_stats, desc = "Dummy" },
+    [o.key_page_3] = { f = cache_stats, desc = "Cache Statistics" },
 }
 
 
