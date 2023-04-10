@@ -84,6 +84,8 @@ class CocoaCB: NSObject {
 
     func uninit() {
         window?.orderOut(nil)
+        window?.close()
+        mpv = nil
     }
 
     func reconfig(_ vo: UnsafeMutablePointer<vo>) {
@@ -93,7 +95,7 @@ class CocoaCB: NSObject {
         } else {
             DispatchQueue.main.async {
                 self.updateWindowSize(vo)
-                self.layer?.update()
+                self.layer?.update(force: true)
             }
         }
     }
@@ -128,6 +130,7 @@ class CocoaCB: NSObject {
         titleBar = TitleBar(frame: wr, window: window, cocoaCB: self)
 
         window.isRestorable = false
+        window.isReleasedWhenClosed = false
         window.makeMain()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -151,7 +154,10 @@ class CocoaCB: NSObject {
         }
 
         let wr = getWindowGeometry(forScreen: targetScreen, videoOut: vo)
-        if !(window?.isVisible ?? false) {
+        if !(window?.isVisible ?? false) &&
+           !(window?.isMiniaturized ?? false) &&
+           !NSApp.isHidden
+        {
             window?.makeKeyAndOrderFront(nil)
         }
         layer?.atomicDrawingStart()
