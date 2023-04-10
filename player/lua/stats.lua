@@ -262,6 +262,15 @@ local function append_property(s, prop, attr, excluded)
     return append(s, ret, attr)
 end
 
+local function sorted_keys(t, comp_fn)
+    local keys = {}
+    for k,_ in pairs(t) do
+        keys[#keys+1] = k
+    end
+    table.sort(keys, comp_fn)
+    return keys
+end
+
 
 local function append_perfdata(s, dedicated_page)
     local vo_p = mp.get_property_native("vo-passes")
@@ -276,7 +285,8 @@ local function append_perfdata(s, dedicated_page)
 
     -- Sums of all last/avg/peak values
     local last_s, avg_s, peak_s = {}, {}, {}
-    for frame, data in pairs(vo_p) do
+    for _,frame in ipairs(sorted_keys(vo_p)) do  -- ensure fixed display order
+        local data = vo_p[frame]
         last_s[frame], avg_s[frame], peak_s[frame] = 0, 0, 0
         for _, pass in ipairs(data) do
             last_s[frame] = last_s[frame] + pass["last"]
