@@ -120,7 +120,9 @@ struct vo_cocoa_state {
     int frame_w, frame_h;               // dimensions of the frame rendered
 
     char *window_title;
-    bool display_synced;
+    bool force_displaylink_sync;
+
+    int swap_interval;
 };
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
@@ -381,7 +383,7 @@ void vo_cocoa_init(struct vo *vo)
         .embedded = vo->opts->WinID >= 0,
         .cursor_visibility = true,
         .cursor_visibility_wanted = true,
-        .display_synced = false,
+        .force_displaylink_sync = false,
         .fullscreen = 0,
     };
     pthread_mutex_init(&s->lock, NULL);
@@ -707,7 +709,7 @@ void vo_cocoa_set_opengl_ctx(struct vo *vo, CGLContextObj ctx)
     });
 }
 
-int vo_cocoa_config_window(struct vo *vo)
+int vo_cocoa_config_window(struct vo *vo, int swapinterval)
 {
     struct vo_cocoa_state *s = vo->cocoa;
     struct mp_vo_opts *opts  = vo->opts;
@@ -751,6 +753,8 @@ int vo_cocoa_config_window(struct vo *vo)
                 [s->window setBackgroundColor:[NSColor clearColor]];
             }
         }
+
+        s->swap_interval = swapinterval;
 
         s->vo_ready = true;
 
@@ -814,35 +818,24 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         goto ret;
 
 
-// Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
-// I don't understand why, probably because it messes with compositing?
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
-#warning Using CVDisplayLink to enforce VSync
-    pthread_mutex_lock(&s->sync_lock);
-    // Commented out version is adaptive vsync (force swap if late)
-    // while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
-    //     pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
-    // }
-    // s->sync_counter = 0;
-    uint64_t old_counter = s->sync_counter;
-    while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
-        pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
-    }
-    pthread_mutex_unlock(&s->sync_lock);
-#else
-#warning Using standard vsync approach
-    if (s->display_synced) {
-        pthread_mutex_unlock(&s->lock);
+    // Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
+    // I don't understand why, probably because it messes with compositing?
+    if (s->swap_interval < 0 || s->force_displaylink_sync) {
         pthread_mutex_lock(&s->sync_lock);
-        uint64_t old_counter = s->sync_counter;
-        while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
-            pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+        if (s->swap_interval == -1) {
+            // Adaptive vsync (force swap if late)
+            while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
+                pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+            }
+            s->sync_counter = 0;
+        } else {
+            uint64_t old_counter = s->sync_counter;
+            while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
+                pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+            }
         }
         pthread_mutex_unlock(&s->sync_lock);
-        pthread_mutex_lock(&s->lock);
     }
-#endif
-
 
     s->frame_w = vo->dwidth;
     s->frame_h = vo->dheight;
@@ -1144,9 +1137,9 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     pthread_mutex_lock(&self.vout->cocoa->lock);
     if ([[notification object] occlusionState]  &  NSWindowOcclusionStateVisible) {
-        self.vout->cocoa->display_synced = false;
+        self.vout->cocoa->force_displaylink_sync = false;
     } else {
-        self.vout->cocoa->display_synced = true;
+        self.vout->cocoa->force_displaylink_sync = true;
     }
     pthread_mutex_unlock(&self.vout->cocoa->lock);
 }

@@ -43,12 +43,12 @@ struct priv {
     struct cocoa_opts *opts;
 };
 
+static int openGlSwapInterval = 0;
+
 static int set_swap_interval(int enabled)
 {
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 101300
-#warning Disabling VSync
-    enabled = 0;
-#endif
+    openGlSwapInterval = enabled;
+    enabled = (enabled == 1);
     CGLContextObj ctx = CGLGetCurrentContext();
     CGLError err = CGLSetParameter(ctx, kCGLCPSwapInterval, &enabled);
     return (err == kCGLNoError) ? 0 : -1;
@@ -202,7 +202,7 @@ static void resize(struct ra_ctx *ctx)
 
 static bool cocoa_reconfig(struct ra_ctx *ctx)
 {
-    vo_cocoa_config_window(ctx->vo);
+    vo_cocoa_config_window(ctx->vo, openGlSwapInterval);
     resize(ctx);
     return true;
 }

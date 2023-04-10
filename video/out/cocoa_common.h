@@ -27,10 +27,16 @@
 struct vo;
 struct vo_cocoa_state;
 
+
 void vo_cocoa_init(struct vo *vo);
 void vo_cocoa_uninit(struct vo *vo);
 
-int vo_cocoa_config_window(struct vo *vo);
+
+// 0 = no vsync
+// 1 = vsync blocking using native gl
+// -1 = adaptive vsync using cvdisplaylink
+// -2 = vsync blocking using cvdisplaylink
+int vo_cocoa_config_window(struct vo *vo, int swapInterval);
 
 int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg);
 
