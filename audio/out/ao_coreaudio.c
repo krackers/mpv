@@ -39,6 +39,7 @@ struct priv {
     AudioStreamID original_asbd_stream;
 
     int change_physical_format;
+    int keep_device_open;
 };
 
 static int64_t ca_get_hardware_latency(struct ao *ao) {
@@ -329,6 +330,10 @@ static void reset(struct ao *ao)
 static void stop(struct ao *ao)
 {
     struct priv *p = ao->priv;
+    if (p->keep_device_open) {
+        reset(ao);
+        return;
+    }
     OSStatus err = AudioOutputUnitStop(p->audio_unit);
     CHECK_CA_WARN("can't stop audio unit");
 }
@@ -436,6 +441,7 @@ const struct ao_driver audio_out_coreaudio = {
     .priv_size      = sizeof(struct priv),
     .options = (const struct m_option[]){
         OPT_FLAG("change-physical-format", change_physical_format, 0),
+        OPT_FLAG("keep-device-open", keep_device_open, 0),
         {0}
     },
     .options_prefix = "coreaudio",
