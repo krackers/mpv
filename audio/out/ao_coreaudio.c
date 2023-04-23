@@ -169,6 +169,7 @@ coreaudio_error:
     return CONTROL_ERROR;
 }
 
+
 static void init_physical_format(struct ao *ao)
 {
     struct priv *p = ao->priv;
@@ -317,18 +318,19 @@ coreaudio_error:
     return false;
 }
 
-static void reset(struct ao *ao, bool paused)
+static void reset(struct ao *ao)
 {
     struct priv *p = ao->priv;
     
-    OSStatus err;
-    if (paused) {
-        err = AudioOutputUnitStop(p->audio_unit);
-    } else {
-        err = AudioUnitReset(p->audio_unit, kAudioUnitScope_Global, 0);
-    }
-    
+    OSStatus err = AudioUnitReset(p->audio_unit, kAudioUnitScope_Global, 0);
     CHECK_CA_WARN("can't reset audio unit");
+}
+
+static void pause(struct ao *ao)
+{
+    struct priv *p = ao->priv;
+    OSStatus err = AudioOutputUnitStop(p->audio_unit);
+    CHECK_CA_WARN("can't stop audio unit");
 }
 
 static void start(struct ao *ao)
@@ -426,6 +428,7 @@ const struct ao_driver audio_out_coreaudio = {
     .init           = init,
     .control        = control,
     .reset          = reset,
+    .pause          = pause,
     .resume         = start,
     .hotplug_init   = hotplug_init,
     .hotplug_uninit = hotplug_uninit,
