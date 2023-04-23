@@ -317,12 +317,12 @@ coreaudio_error:
     return false;
 }
 
-static void reset(struct ao *ao)
+static void reset(struct ao *ao, bool paused)
 {
     struct priv *p = ao->priv;
     
     OSStatus err;
-    if (ao->buffer_state->paused) {
+    if (paused) {
         err = AudioOutputUnitStop(p->audio_unit);
     } else {
         err = AudioUnitReset(p->audio_unit, kAudioUnitScope_Global, 0);
