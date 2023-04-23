@@ -326,7 +326,7 @@ static void reset(struct ao *ao)
     CHECK_CA_WARN("can't reset audio unit");
 }
 
-static void pause(struct ao *ao)
+static void stop(struct ao *ao)
 {
     struct priv *p = ao->priv;
     OSStatus err = AudioOutputUnitStop(p->audio_unit);
@@ -428,7 +428,7 @@ const struct ao_driver audio_out_coreaudio = {
     .init           = init,
     .control        = control,
     .reset          = reset,
-    .pause          = pause,
+    .pause          = stop,
     .resume         = start,
     .hotplug_init   = hotplug_init,
     .hotplug_uninit = hotplug_uninit,
