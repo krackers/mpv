@@ -259,7 +259,9 @@ static void reset(struct ao *ao)
 
 static void pause(struct ao *ao)
 {
-    if (!ao->stream_silence && ao->driver->reset)
+    if (!ao->stream_silence && ao->driver->pause)
+        ao->driver->pause(ao);
+    else if (!ao->stream_silence && ao->driver->reset)
         ao->driver->reset(ao);
     set_state(ao, AO_STATE_NONE);
 }
