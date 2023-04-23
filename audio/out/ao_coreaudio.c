@@ -320,7 +320,14 @@ coreaudio_error:
 static void reset(struct ao *ao)
 {
     struct priv *p = ao->priv;
-    OSStatus err = AudioUnitReset(p->audio_unit, kAudioUnitScope_Global, 0);
+    
+    OSStatus err;
+    if (ao->buffer_state->paused) {
+        err = AudioOutputUnitStop(p->audio_unit);
+    } else {
+        err = AudioUnitReset(p->audio_unit, kAudioUnitScope_Global, 0);
+    }
+    
     CHECK_CA_WARN("can't reset audio unit");
 }
 
