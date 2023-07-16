@@ -403,6 +403,7 @@ void sub_update_opts(struct dec_sub *sub)
     pthread_mutex_lock(&sub->lock);
     if (m_config_cache_update(sub->opts_cache))
         update_subtitle_speed(sub);
+    sub->sd->driver->control(sub->sd, SD_CTRL_UPDATE_OPTS, NULL);
     pthread_mutex_unlock(&sub->lock);
 }
 

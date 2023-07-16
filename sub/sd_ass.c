@@ -42,6 +42,7 @@ struct sd_ass_priv {
     struct ass_track *ass_track;
     struct ass_track *shadow_track; // for --sub-ass=no rendering
     bool is_converted;
+    bool ass_configured;
     struct lavc_conv *converter;
     bool on_top;
     struct mp_ass_packer *packer;
@@ -49,6 +50,7 @@ struct sd_ass_priv {
     char last_text[500];
     struct mp_image_params video_params;
     struct mp_image_params last_params;
+    struct mp_osd_res osd;
     int64_t *seen_packets;
     int num_seen_packets;
     bool duration_unknown;
@@ -436,6 +438,10 @@ static void get_bitmaps(struct sd *sd, struct mp_osd_res dim, int format,
     ASS_Track *track = no_ass ? ctx->shadow_track : ctx->ass_track;
     ASS_Renderer *renderer = ctx->ass_renderer;
 
+    // Always update the osd_res
+    struct mp_osd_res old_osd = ctx->osd;
+    ctx->osd = dim;
+    
     if (pts == MP_NOPTS_VALUE || !renderer)
         return;
 
@@ -448,7 +454,10 @@ static void get_bitmaps(struct sd *sd, struct mp_osd_res dim, int format,
         if (isnormal(par))
             scale *= par;
     }
-    configure_ass(sd, &dim, converted, track);
+    if (!ctx->ass_configured || !osd_res_equals(old_osd, ctx->osd)) {
+        configure_ass(sd, &dim, converted, track);
+        ctx->ass_configured = true;
+    }
     ass_set_pixel_aspect(renderer, scale);
     if (!converted && (!opts->ass_style_override ||
                        opts->ass_vsfilter_blur_compat))
@@ -669,6 +678,10 @@ static int control(struct sd *sd, enum sd_ctrl cmd, void *arg)
     case SD_CTRL_SET_TOP:
         ctx->on_top = *(bool *)arg;
         return CONTROL_OK;
+    case SD_CTRL_UPDATE_OPTS: {
+        ctx->ass_configured = false; // ass always needs to be reconfigured on option change
+        return CONTROL_OK;
+    }
     default:
         return CONTROL_UNKNOWN;
     }
