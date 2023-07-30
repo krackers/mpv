@@ -364,7 +364,7 @@ const struct filter_kernel mp_filter_kernels[] = {
     {{"ginseng",        3,  sinc, .resizable = true}, .window = "jinc"},
     // Jinc filters
     {{"jinc",           3,  jinc, .resizable = true}, .polar = true},
-    {{"ewa_lanczos",    3,  jinc, .resizable = true}, .polar = true, .window = "jinc"},
+    {{"ewa_lanczos",    3.2383154841662362,  jinc, .resizable = true}, .polar = true, .window = "jinc"},
     {{"ewa_hanning",    3,  jinc, .resizable = true}, .polar = true, .window = "hanning" },
     {{"ewa_ginseng",    3,  jinc, .resizable = true}, .polar = true, .window = "sinc"},
     // Radius is based on the true jinc radius, slightly sharpened as per
