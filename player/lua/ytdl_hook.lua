@@ -10,7 +10,7 @@ local o = {
 options.read_options(o)
 
 local ytdl = {
-    path = "youtube-dl",
+    path = "yt-dlp",
     searched = false,
     blacklisted = {}
 }
@@ -43,6 +43,19 @@ end
 -- return true if the option was set locally
 local function option_was_set_locally(name)
     return mp.get_property_bool("option-info/" ..name.. "/set-locally", false)
+end
+
+local function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
 end
 
 -- youtube-dl may set special http headers for some sites (user-agent, cookies)
@@ -212,7 +225,7 @@ local function join_url(base_url, fragment)
     return res
 end
 
-local function edl_track_joined(fragments, protocol, is_live, base)
+local function edl_track_joined(container, fragments, protocol, is_live, base)
     if not (type(fragments) == "table") or not fragments[1] then
         msg.debug("No fragments to join into EDL")
         return nil
@@ -222,22 +235,50 @@ local function edl_track_joined(fragments, protocol, is_live, base)
     local offset = 1
     local parts = {}
 
-    if (protocol == "http_dash_segments") and
-        not fragments[1].duration and not is_live then
+    if (protocol == "http_dash_segments") and not is_live then
+        -- msg.debug("Trying dash")
+        local args = ""
+
+        local has_init_segment = false
+
         -- assume MP4 DASH initialization segment
-        table.insert(parts,
-            "!mp4_dash,init=" .. edl_escape(join_url(base, fragments[1])))
-        offset = 2
+        if not fragments[1].duration and #fragments > 1 then
+            has_init_segment = true
+            args = args .. ",init=" .. edl_escape(join_url(base, fragments[1]))
+        end
 
         -- Check remaining fragments for duration;
         -- if not available in all, give up.
-        for i = offset, #fragments do
+        for i = 2, #fragments do
             if not fragments[i].duration then
-                msg.error("EDL doesn't support fragments" ..
-                         "without duration with MP4 DASH")
-                return nil
+                has_init_segment = false
+                -- msg.verbose("EDL doesn't support fragments" ..
+                --          "without duration with MP4 DASH")
             end
         end
+
+        if has_init_segment then
+            offset = 2
+            table.insert(parts, "!mp4_dash" .. args)
+        else
+            if #fragments > 5 then
+                msg.warn("Not using dash, too many fragments (found " .. #fragments .. ")")
+                return nil
+            end
+            msg.warn("Using concat for dash with " .. #fragments .. " fragments")
+            parts = {}
+            for i = 1, #fragments do
+                table.insert(parts, fragments[i].url)
+            end
+            -- Todo add lazy load support
+            return "concat://" .. table.concat(parts, "|")
+        end
+    end
+
+    -- We currently can't handle init fragment with webm dash
+    if container == "webm_dash" then
+        msg.warn("Currently don't support webm with dash in my fork")
+        return nil
     end
 
     for i = offset, #fragments do
@@ -275,9 +316,14 @@ local function valid_manifest(json)
 end
 
 local function add_single_video(json)
+
     local streamurl = ""
     local max_bitrate = 0
     local reqfmts = json["requested_formats"]
+    local has_reqfmts = reqfmts and #reqfmts > 0
+    local http_headers = has_reqfmts
+                         and reqfmts[1].http_headers
+                         or json.http_headers
 
     -- prefer manifest_url if present
     if o.use_manifests and valid_manifest(json) then
@@ -294,7 +340,7 @@ local function add_single_video(json)
 
         if reqfmts then
             for _, track in pairs(reqfmts) do
-                max_bitrate = track.tbr > max_bitrate and
+                max_bitrate = (track.tbr and track.tbr > max_bitrate) and
                     track.tbr or max_bitrate
             end
         elseif json.tbr then
@@ -303,12 +349,16 @@ local function add_single_video(json)
 
     -- DASH/split tracks
     elseif reqfmts then
+        -- msg.warn("Reqfmts " .. dump(reqfmts))
         for _, track in pairs(reqfmts) do
+            -- msg.warn("testing track" .. track.protocol .. " " .. track.format_id)
             local edl_track = nil
-            edl_track = edl_track_joined(track.fragments,
+            edl_track = edl_track_joined(track.container, track.fragments,
                 track.protocol, json.is_live,
                 track.fragment_base_url)
-            if not edl_track and not url_is_safe(track.url) then
+            -- msg.warn("Got edl track" .. (edl_track or "nil"))
+            if not edl_track and (track.manifest_url or not url_is_safe(track.url)) then
+                msg.error("No safe URL or supported fragmented stream available")
                 return
             end
             if track.vcodec and track.vcodec ~= "none" then
@@ -332,13 +382,19 @@ local function add_single_video(json)
         end
         -- normal video or single track
         streamurl = edl_track or json.url
-        set_http_headers(json.http_headers)
     else
         msg.error("No URL found in JSON data.")
         return
     end
 
+    set_http_headers(http_headers)
+
     msg.debug("streamurl: " .. streamurl)
+
+    if streamurl == "" then
+        msg.error("No safe URL or supported fragmented stream available")
+        return
+    end
 
     mp.set_property("stream-open-filename", streamurl:gsub("^data:", "data://", 1))
 
@@ -461,9 +517,7 @@ function run_ytdl_hook(url)
 
     -- Checks if video option is "no", change format accordingly,
     -- but only if user didn't explicitly set one
-    if (mp.get_property("options/vid") == "no")
-        and not option_was_set("ytdl-format") then
-
+    if (mp.get_property("options/vid") == "no") and (#format == 0) then
         format = "bestaudio/best"
         msg.verbose("Video disabled. Only using audio")
     end
@@ -496,30 +550,33 @@ function run_ytdl_hook(url)
     end
     table.insert(command, "--")
     table.insert(command, url)
-    msg.debug("Running: " .. table.concat(command,' '))
+    msg.verbose("Running: " .. table.concat(command,' '))
     local es, json, result, aborted = exec(command)
 
     if aborted then
         return
     end
 
-    if (es < 0) or (json == nil) or (json == "") then
+    local parse_err = nil
+
+    if (es < 0) or (json == "") then
+        json = nil
+    elseif json then
+        json, parse_err = utils.parse_json(json)
+    end
+
+    if (json == nil) then
         local err = "youtube-dl failed: "
         if result.error and result.error == "init" then
             err = err .. "not found or not enough permissions"
+        elseif parse_err then
+            err = err .. "failed to parse JSON data: " .. parse_err
         elseif not result.killed_by_us then
             err = err .. "unexpected error ocurred"
         else
             err = string.format("%s returned '%d'", err, es)
         end
         msg.error(err)
-        return
-    end
-
-    local json, err = utils.parse_json(json)
-
-    if (json == nil) then
-        msg.error("failed to parse JSON data: " .. err)
         return
     end
 
