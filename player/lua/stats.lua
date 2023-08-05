@@ -39,8 +39,8 @@ local o = {
     plot_color = "FFFFFF",
 
     -- Text style
-    font = "Source Sans Pro",
-    font_mono = "Source Sans Pro",   -- monospaced digits are sufficient
+    font = "Helvetica",
+    font_mono = "Helvetica",   -- monospaced digits are sufficient
     font_size = 8,
     font_color = "FFFFFF",
     border_size = 0.8,
@@ -262,6 +262,7 @@ local function append_property(s, prop, attr, excluded)
     return append(s, ret, attr)
 end
 
+
 local function sorted_keys(t, comp_fn)
     local keys = {}
     for k,_ in pairs(t) do
@@ -270,7 +271,6 @@ local function sorted_keys(t, comp_fn)
     table.sort(keys, comp_fn)
     return keys
 end
-
 
 local function append_perfdata(s, dedicated_page)
     local vo_p = mp.get_property_native("vo-passes")
@@ -317,7 +317,8 @@ local function append_perfdata(s, dedicated_page)
                      b("Frame Timings:"), o.prefix_sep, o.font_size * 0.66,
                      "(last/average/peak  μs)", o.font_size)
 
-    for frame, data in pairs(vo_p) do
+    for _,frame in ipairs(sorted_keys(vo_p)) do
+        local data = vo_p[frame]
         local f = "%s%s%s{\\fn%s}%s / %s / %s %s%s{\\fn%s}%s%s%s"
 
         if dedicated_page then
@@ -513,10 +514,12 @@ local function add_video(s)
     if append(s, r["w"], {prefix="Native Resolution:"}) then
         append(s, r["h"], {prefix="x", nl="", indent=" ", prefix_sep=" ", no_prefix_markup=true})
     end
-    append_property(s, "window-scale", {prefix="Window Scale:"})
-    append(s, format("%.2f", r["aspect"]), {prefix="Aspect Ratio:"})
-    append(s, r["pixelformat"], {prefix="Pixel Format:"})
-
+    if r["aspect"] then
+        append_property(s, "window-scale", {prefix="Window Scale:"})
+        append(s, format("%.2f", r["aspect"]), {prefix="Aspect Ratio:"})
+        append(s, r["pixelformat"], {prefix="Pixel Format:"})
+    end
+    
     -- Group these together to save vertical space
     local prim = append(s, r["primaries"], {prefix="Primaries:"})
     local cmat = append(s, r["colormatrix"], {prefix="Colormatrix:", nl=prim and "" or o.nl})
