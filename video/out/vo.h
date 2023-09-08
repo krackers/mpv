@@ -485,7 +485,7 @@ void vo_disable_external_renderloop(struct vo *vo);
 bool vo_render_frame_external(struct vo *vo);
 void vo_set_queue_params(struct vo *vo, int64_t offset_us, int num_req_frames);
 int vo_get_num_req_frames(struct vo *vo);
-int64_t vo_get_vsync_interval(struct vo *vo);
+double vo_get_vsync_interval(struct vo *vo);
 double vo_get_estimated_vsync_interval(struct vo *vo);
 double vo_get_estimated_vsync_jitter(struct vo *vo);
 double vo_get_display_fps(struct vo *vo);
