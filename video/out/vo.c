@@ -418,27 +418,30 @@ static void check_estimated_display_fps(struct vo *vo)
     {
         for (int n = 0; n < in->num_vsync_samples; n++) {
             if (fabs(in->vsync_samples[n] - in->estimated_vsync_interval)
-                >= in->estimated_vsync_interval / 4)
-                goto done;
+                >= in->estimated_vsync_interval / 4) {
+                MP_TRACE(vo, "Vsync sample with fps %f skewed from estimate %f. Ignoring sample run.\n", 1e6/in->vsync_samples[n], 1e6/in->estimated_vsync_interval);
+                return;
+            }
         }
         double mjitter = vsync_stddef(vo, in->estimated_vsync_interval);
         double njitter = vsync_stddef(vo, in->nominal_vsync_interval);
         MP_TRACE(vo, "jitter with estimated (%f) %f ; jitter with nominal (%f) %f\n", 1e6/in->estimated_vsync_interval, mjitter,  1e6/in->nominal_vsync_interval,  njitter);
         if (mjitter * 1.01 < njitter)
             use_estimated = true;
-        done: ;
-    }
-    if (use_estimated == (in->vsync_interval == in->nominal_vsync_interval)) {
-        if (use_estimated) {
-            MP_VERBOSE(vo, "adjusting display FPS to a value closer to %.3f Hz\n",
-                       1e6 / in->estimated_vsync_interval);
-        } else {
-            MP_VERBOSE(vo, "switching back to assuming display fps = %.3f Hz\n",
-                       1e6 / in->nominal_vsync_interval);
+        if (use_estimated == (in->vsync_interval == in->nominal_vsync_interval)) {
+            if (use_estimated) {
+                MP_VERBOSE(vo, "adjusting display FPS to a value closer to %.3f Hz\n",
+                        1e6 / in->estimated_vsync_interval);
+            } else {
+                MP_VERBOSE(vo, "switching back to assuming display fps = %.3f Hz\n",
+                        1e6 / in->nominal_vsync_interval);
+            }
         }
+        in->vsync_interval = use_estimated ? in->estimated_vsync_interval
+                                    : in->nominal_vsync_interval;
+    } else {
+        in->vsync_interval = in->nominal_vsync_interval;
     }
-    in->vsync_interval = use_estimated ? in->estimated_vsync_interval
-                                       : in->nominal_vsync_interval;
 }
 
 // Attempt to detect vsyncs delayed/skipped by the driver. This tries to deal
