@@ -423,6 +423,7 @@ static void check_estimated_display_fps(struct vo *vo)
         }
         double mjitter = vsync_stddef(vo, in->estimated_vsync_interval);
         double njitter = vsync_stddef(vo, in->nominal_vsync_interval);
+        MP_TRACE(vo, "jitter with estimated (%f) %f ; jitter with nominal (%f) %f\n", 1e6/in->estimated_vsync_interval, mjitter,  1e6/in->nominal_vsync_interval,  njitter);
         if (mjitter * 1.01 < njitter)
             use_estimated = true;
         done: ;
