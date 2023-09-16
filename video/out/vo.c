@@ -514,7 +514,18 @@ static void update_vsync_timing_after_swap(struct vo *vo)
         vsync_stddef(vo, in->vsync_interval) / in->vsync_interval;
 
     check_estimated_display_fps(vo);
+    int64_t prev_vsync_skips = in->delayed_count;
     vsync_skip_detection(vo);
+    int64_t skipped_vsyncs = in->delayed_count - prev_vsync_skips;
+    // If a vsync is delayed, we just skip the repeat frame.
+    // This is a bit of a hack to compensate for the fact that timing is only done for fresh frames in video.c
+    // We should in fact ideally get skipped vsyncs from presentation feedback mechanism.
+    // In its absence, we are conservative and only skip 1 frame. 
+    // Since vsync_skip_detection uses a delay of 2/3 of a vsync as the threshold, this will trigger when
+    // one vysnc is takes more than ((1+2/3)avg_vsync) 
+    in->current_frame->num_vsyncs -= skipped_vsyncs;
+    in->current_frame->vsync_offset += in->current_frame->vsync_interval * skipped_vsyncs;
+
 
     MP_STATS(vo, "value %f jitter", in->estimated_vsync_jitter);
     MP_STATS(vo, "value %f vsync-diff", in->vsync_samples[0] / 1e6);
