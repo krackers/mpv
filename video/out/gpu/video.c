@@ -3905,7 +3905,7 @@ void gl_video_configure_queue(struct gl_video *p, struct vo *vo)
 static int validate_scaler_opt(struct mp_log *log, const m_option_t *opt,
                                struct bstr name, struct bstr param)
 {
-    char s[20] = {0};
+    char s[32] = {0};
     int r = 1;
     bool tscale = bstr_equals0(name, "tscale");
     if (bstr_equals0(param, "help")) {
@@ -3935,7 +3935,7 @@ static int validate_scaler_opt(struct mp_log *log, const m_option_t *opt,
 static int validate_window_opt(struct mp_log *log, const m_option_t *opt,
                                struct bstr name, struct bstr param)
 {
-    char s[20] = {0};
+    char s[32] = {0};
     int r = 1;
     if (bstr_equals0(param, "help")) {
         r = M_OPT_EXIT;
