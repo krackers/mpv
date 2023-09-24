@@ -90,6 +90,7 @@ struct demux_opts {
     double min_secs;
     int force_seekable;
     double min_secs_cache;
+    int demux_cache;
     int access_references;
     int seekable_cache;
     int create_ccs;
@@ -103,9 +104,11 @@ const struct m_sub_options demux_conf = {
         OPT_BYTE_SIZE("demuxer-max-bytes", max_bytes, 0, 0, INT_MAX),
         OPT_BYTE_SIZE("demuxer-max-back-bytes", max_bytes_bw, 0, 0, INT_MAX),
         OPT_FLAG("force-seekable", force_seekable, 0),
-        OPT_DOUBLE("cache-secs", min_secs_cache, M_OPT_MIN, .min = 0),
+        OPT_DOUBLE("demuxer-cache-secs", min_secs_cache, M_OPT_MIN, .min = 0),
         OPT_FLAG("access-references", access_references, 0),
         OPT_CHOICE("demuxer-seekable-cache", seekable_cache, 0,
+                   ({"auto", -1}, {"no", 0}, {"yes", 1})),
+        OPT_CHOICE("demuxer-cache", demux_cache, 0,
                    ({"auto", -1}, {"no", 0}, {"yes", 1})),
         OPT_FLAG("sub-create-cc-track", create_ccs, 0),
         {0}
@@ -117,6 +120,7 @@ const struct m_sub_options demux_conf = {
         .min_secs = 1.0,
         .min_secs_cache = 10.0 * 60 * 60,
         .seekable_cache = -1,
+        .demux_cache = -1,
         .access_references = 1,
     },
 };
@@ -2257,8 +2261,13 @@ static struct demuxer *open_given_type(struct mpv_global *global,
         demux_update(demuxer);
         stream_control(demuxer->stream, STREAM_CTRL_SET_READAHEAD,
                        &(int){params ? params->initial_readahead : false});
+        
+        int use_demux_cache = opts->demux_cache;
+        if (use_demux_cache < 0) {
+            use_demux_cache = demuxer->is_network || stream->caching;
+        }
         int seekable = opts->seekable_cache;
-        if (demuxer->is_network || stream->caching) {
+        if (use_demux_cache) {
             in->min_secs = MPMAX(in->min_secs, opts->min_secs_cache);
             if (seekable < 0)
                 seekable = 1;
