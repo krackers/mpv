@@ -856,9 +856,9 @@ struct deband_opts {
 
 const struct deband_opts deband_opts_def = {
     .iterations = 1,
-    .threshold = 64.0,
+    .threshold = 48.0,
     .range = 16.0,
-    .grain = 48.0,
+    .grain = 32.0,
 };
 
 #define OPT_BASE_STRUCT struct deband_opts
