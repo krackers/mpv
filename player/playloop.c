@@ -613,7 +613,13 @@ static void handle_osd_redraw(struct MPContext *mpctx)
     // If we're playing normally, let OSD be redrawn naturally as part of
     // video display.
     if (!mpctx->paused) {
-        if (mpctx->sleeptime < 0.1 && mpctx->video_status == STATUS_PLAYING)
+        // Ideally VO itself should take care of batching redraws if they are close enough to the next draw time
+        // This is in fact already done for display-resample, but not with audio timed case
+        // Probably the line "wait_until > now && redraw" should be changed to introduce a fudge factor of 1/60
+
+        // In audio timed mode, time_frame is actually 2*1/video_fps, since we schedule one frame ahead
+        // This would give us a lower bound OSD redraw of about ~20fps.
+        if (mpctx->sleeptime < 0.1 && mpctx->time_frame < 0.1 && mpctx->video_status == STATUS_PLAYING)
             return;
     }
     // Don't redraw immediately during a seek (makes it significantly slower).
