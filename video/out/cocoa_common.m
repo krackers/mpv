@@ -48,6 +48,9 @@
 #include "mpv_talloc.h"
 
 #include "common/msg.h"
+#include <dispatch/dispatch.h>
+
+
 
 static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp* now,
                                     const CVTimeStamp* outputTime, CVOptionFlags flagsIn,
@@ -100,7 +103,9 @@ struct vo_cocoa_state {
     CVDisplayLinkRef link;
     pthread_mutex_t sync_lock;
     pthread_cond_t sync_wakeup;
-    uint64_t sync_counter;
+    volatile uint64_t sync_counter;
+    dispatch_semaphore_t wakeup_semaphore;
+    
 
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
@@ -322,10 +327,11 @@ static void vo_cocoa_anim_unlock(struct vo *vo)
 
 static void vo_cocoa_signal_swap(struct vo_cocoa_state *s)
 {
-    pthread_mutex_lock(&s->sync_lock);
-    s->sync_counter += 1;
-    pthread_cond_signal(&s->sync_wakeup);
-    pthread_mutex_unlock(&s->sync_lock);
+    if (s->sync_counter > 0) {
+        dispatch_semaphore_signal(s->wakeup_semaphore);
+        s->sync_counter -= 1;
+    }
+
 }
 
 static void vo_cocoa_start_displaylink(struct vo_cocoa_state *s)
@@ -374,8 +380,33 @@ static void cocoa_rm_event_monitor(struct vo *vo)
     [NSEvent removeMonitor:vo->cocoa->event_monitor_mouseup];
 }
 
+#include <mach/mach_init.h>
+#include <mach/thread_policy.h>
+#include <sched.h>
+#include <pthread.h>
+ 
+int set_realtime(int period, int computation, int constraint) {
+    struct thread_time_constraint_policy ttcpolicy;
+    int ret;
+    thread_port_t threadport = pthread_mach_thread_np(pthread_self());
+ 
+    ttcpolicy.period=period; // HZ/160
+    ttcpolicy.computation=computation; // HZ/3300;
+    ttcpolicy.constraint=constraint; // HZ/2200;
+    ttcpolicy.preemptible=1;
+ 
+    if ((ret=thread_policy_set(threadport,
+        THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
+        THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
+            fprintf(stderr, "set_realtime() failed.\n");
+            return 0;
+    }
+    return 1;
+}
+
 void vo_cocoa_init(struct vo *vo)
 {
+    set_realtime((1/60)*1000000000, 61*0.75*1000000, 61*0.85*1000000);
     struct vo_cocoa_state *s = talloc_zero(NULL, struct vo_cocoa_state);
     *s = (struct vo_cocoa_state){
         .power_mgmt_assertion = kIOPMNullAssertionID,
@@ -392,6 +423,7 @@ void vo_cocoa_init(struct vo *vo)
     pthread_cond_init(&s->sync_wakeup, NULL);
     pthread_mutex_init(&s->anim_lock, NULL);
     pthread_cond_init(&s->anim_wakeup, NULL);
+    s->wakeup_semaphore = dispatch_semaphore_create(0);
     vo->cocoa = s;
     vo_cocoa_update_screen_info(vo);
     vo_cocoa_init_displaylink(vo);
@@ -789,6 +821,7 @@ static void resize_event(struct vo *vo)
     vo_wakeup(vo);
 }
 
+
 static void vo_cocoa_resize_redraw(struct vo *vo, int width, int height)
 {
     struct vo_cocoa_state *s = vo->cocoa;
@@ -820,21 +853,24 @@ void vo_cocoa_swap_buffers(struct vo *vo)
 
     // Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
     // I don't understand why, probably because it messes with compositing?
-    if (s->swap_interval < 0 || s->force_displaylink_sync) {
-        pthread_mutex_lock(&s->sync_lock);
+    if (CVDisplayLinkIsRunning(s->link) && (s->swap_interval < 0 || s->force_displaylink_sync)) {
+
         if (s->swap_interval == -1) {
             // Adaptive vsync (force swap if late)
-            while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
+            while(s->sync_counter == 0) {
                 pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
             }
             s->sync_counter = 0;
         } else {
-            uint64_t old_counter = s->sync_counter;
-            while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
-                pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
-            }
+            s->sync_counter += 1;
+            dispatch_semaphore_wait(s->wakeup_semaphore, DISPATCH_TIME_FOREVER);
+            // pthread_mutex_lock(&s->sync_lock);
+            // uint64_t old_counter = s->sync_counter;
+            // while(old_counter == s->sync_counter) {
+            //    pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
+            // }
+            // pthread_mutex_unlock(&s->sync_lock);
         }
-        pthread_mutex_unlock(&s->sync_lock);
     }
 
     s->frame_w = vo->dwidth;

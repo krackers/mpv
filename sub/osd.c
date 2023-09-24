@@ -238,6 +238,7 @@ static void check_obj_resize(struct osd_state *osd, struct mp_osd_res res,
 {
     if (!osd_res_equals(res, obj->vo_res)) {
         obj->vo_res = res;
+        obj->osd_changed = true;
         mp_client_broadcast_event(mp_client_api_get_core(osd->global->client_api),
                                   MP_EVENT_WIN_RESIZE, NULL);
     }
