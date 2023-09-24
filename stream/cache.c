@@ -63,27 +63,26 @@
 
 const struct m_sub_options stream_cache_conf = {
     .opts = (const struct m_option[]){
-        OPT_CHOICE_OR_INT("cache", size, 0, 32, 0x7fffffff,
+        OPT_CHOICE("cache", size, 0,
                           ({"no", 0},
                            {"auto", -1},
                            {"yes", -2})),
-        OPT_CHOICE_OR_INT("cache-default", def_size, 0, 32, 0x7fffffff,
-                          ({"no", 0})),
-        OPT_INTRANGE("cache-initial", initial, 0, 0, 0x7fffffff),
-        OPT_INTRANGE("cache-seek-min", seek_min, 0, 0, 0x7fffffff),
-        OPT_INTRANGE("cache-backbuffer", back_buffer, 0, 0, 0x7fffffff),
+        OPT_BYTE_SIZE("cache-default", def_size, 0, 32 * 1024, INT_MAX),
+        OPT_BYTE_SIZE("cache-initial", initial, 0, 0, INT_MAX),
+        OPT_BYTE_SIZE("cache-seek-min", seek_min, 0, 0, INT_MAX),
+        OPT_BYTE_SIZE("cache-backbuffer", back_buffer, 0, 0, INT_MAX),
         OPT_STRING("cache-file", file, M_OPT_FILE),
-        OPT_INTRANGE("cache-file-size", file_max, 0, 0, 0x7fffffff),
+        OPT_BYTE_SIZE("cache-file-size", file_max, 0, 0, INT_MAX),
         {0}
     },
     .size = sizeof(struct mp_cache_opts),
     .defaults = &(const struct mp_cache_opts){
         .size = -1,
-        .def_size = 10000,
+        .def_size = 10 * 1024 * 1024,
         .initial = 0,
-        .seek_min = 500,
-        .back_buffer = 10000,
-        .file_max = 1024 * 1024,
+        .seek_min = 500 * 1024,
+        .back_buffer = 10 * 1024 * 1024,
+        .file_max = 1 * 1024 * 1024 * 1024,
     },
 };
 
@@ -746,12 +745,12 @@ int stream_cache_init(stream_t *cache, stream_t *stream,
 
     s->speed_start = mp_time_us();
 
-    s->seek_limit = opts->seek_min * 1024ULL;
-    s->back_size = opts->back_buffer * 1024ULL;
+    s->seek_limit = opts->seek_min;
+    s->back_size = opts->back_buffer;
 
     s->stream_size = stream_get_size(stream);
 
-    if (resize_cache(s, opts->size * 1024ULL) != STREAM_OK) {
+    if (resize_cache(s, opts->size) != STREAM_OK) {
         MP_ERR(s, "Failed to allocate cache buffer.\n");
         talloc_free(s);
         return -1;
@@ -769,7 +768,7 @@ int stream_cache_init(stream_t *cache, stream_t *stream,
     cache->control = cache_control;
     cache->close = cache_uninit;
 
-    int64_t min = opts->initial * 1024ULL;
+    int64_t min = opts->initial;
     if (min > s->buffer_size - FILL_LIMIT)
         min = s->buffer_size - FILL_LIMIT;
 

@@ -144,7 +144,7 @@ int stream_file_cache_init(stream_t *cache, stream_t *stream,
     cache->priv = p;
     p->original = stream;
     p->cache_file = file;
-    p->max_size = opts->file_max * 1024LL;
+    p->max_size = opts->file_max;
 
     // file_max can be INT_MAX, so this is at most about 256MB
     p->block_bits = talloc_zero_size(p, (p->max_size / BLOCK_SIZE + 1) / 8 + 1);
