@@ -67,10 +67,10 @@ const struct m_sub_options stream_cache_conf = {
                           ({"no", 0},
                            {"auto", -1},
                            {"yes", -2})),
-        OPT_BYTE_SIZE("cache-default", def_size, 0, 32 * 1024, INT_MAX),
-        OPT_BYTE_SIZE("cache-initial", initial, 0, 0, INT_MAX),
+        OPT_BYTE_SIZE("cache-max-bytes", def_size, 0, 32 * 1024, INT_MAX),
+        OPT_BYTE_SIZE("cache-initial-wait", initial, 0, 0, INT_MAX),
         OPT_BYTE_SIZE("cache-seek-min", seek_min, 0, 0, INT_MAX),
-        OPT_BYTE_SIZE("cache-backbuffer", back_buffer, 0, 0, INT_MAX),
+        OPT_BYTE_SIZE("cache-max-back-bytes", back_buffer, 0, 0, INT_MAX),
         OPT_STRING("cache-file", file, M_OPT_FILE),
         OPT_BYTE_SIZE("cache-file-size", file_max, 0, 0, INT_MAX),
         {0}
