@@ -807,8 +807,52 @@ static void vo_cocoa_resize_redraw(struct vo *vo, int width, int height)
     pthread_mutex_unlock(&s->lock);
 }
 
+#include <mach/mach_time.h>
+#include <sched.h>
+
+#include <mach/mach_init.h>
+#include <mach/thread_policy.h>
+#include <pthread.h>
+
+int set_realtime(int period, int computation, int constraint) {
+    struct thread_time_constraint_policy ttcpolicy;
+    int ret;
+    thread_port_t threadport = pthread_mach_thread_np(pthread_self());
+
+    struct sched_param param;
+    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &param)  == -1) {
+        printf("Failed to change priority.\n");
+        return -1;
+    }
+
+    ttcpolicy.period=period; // HZ/160
+    ttcpolicy.computation=computation; // HZ/3300;
+    ttcpolicy.constraint=constraint; // HZ/2200;
+    ttcpolicy.preemptible=1;
+
+    if ((ret=thread_policy_set(threadport,
+        THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
+        THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
+            fprintf(stderr, "set_realtime() failed.\n");
+            return 0;
+    }
+    return 1;
+}
+
+int realtime = 0;
+
 void vo_cocoa_swap_buffers(struct vo *vo)
 {
+     if (!realtime) {
+        // See https://github.com/hooleyhoop/HooleyBits/blob/master/thread_time_constraint_policy/Thread_time_constraint_policy.m
+        realtime = 1;
+		double conv = 3.0/125.0;
+        // We set the period to be thrice what we need, to ensure we get called close to a vsync
+		double period = (1/(59.95*7)) * 1e9 * conv;
+        // Basically we want to be woken up as close as possible to swap
+		set_realtime(period, period/5, period/2);
+    }
     struct vo_cocoa_state *s = vo->cocoa;
 
     // Don't swap a frame with wrong size
