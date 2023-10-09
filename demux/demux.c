@@ -266,6 +266,8 @@ struct demux_queue {
 
     // incomplete index to somewhat speed up seek operations
     // the entries in index[] must be in packet queue append/removal order
+    // Entries are guaranteed to be sorted, with entry i+1 of pts at 
+    // least index_distance from entry i
     int num_index;          // valid index[] entries
     double index_distance;  // minimum keyframe distance to add index element
     struct demux_packet *index[MAX_INDEX_ENTRIES];
@@ -1053,11 +1055,18 @@ static void add_index_entry(struct demux_queue *queue, struct demux_packet *dp)
             return;
     }
 
-    if (queue->num_index == MAX_INDEX_ENTRIES) {
-        for (int n = 0; n < MAX_INDEX_ENTRIES / 2; n++)
-            queue->index[n] = queue->index[n * 2];
-        queue->num_index = MAX_INDEX_ENTRIES / 2;
+    while (queue->num_index == MAX_INDEX_ENTRIES) {
+        // For case of video streams where keyframes may not be even
+        // we can't directly just take every other index
+        // but instead should keep indices with a distance that satisfies the new distance
         queue->index_distance *= 2;
+        int current_index = 0;
+        for (int i = 1; i < MAX_INDEX_ENTRIES; i++) {
+            if (queue->index[i]->kf_seek_pts - queue->index[current_index]->kf_seek_pts >= queue->index_distance) {
+                queue->index[++current_index] = queue->index[i];
+            }
+        }
+        queue->num_index = current_index + 1;
     }
 
     queue->index[queue->num_index++] = dp;
