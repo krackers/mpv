@@ -233,7 +233,7 @@ struct demux_cached_range {
     bool is_eof;            // set if the file ends with this range
 };
 
-#define MAX_INDEX_ENTRIES 16
+#define MAX_INDEX_ENTRIES 128
 
 // A continuous list of cached packets for a single stream/range. There is one
 // for each stream and range. Also contains some state for use during demuxing
