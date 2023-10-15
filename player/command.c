@@ -482,7 +482,7 @@ static int mp_property_av_speed_correction(void *ctx, struct m_property *prop,
     }
 
     if (action == M_PROPERTY_PRINT) {
-        *(char **)arg = talloc_asprintf(NULL, "%+.05f%%", (val - 1) * 100);
+        *(char **)arg = talloc_asprintf(NULL, "%+.02f%%", (val - 1) * 100);
         return M_PROPERTY_OK;
     }
 
