@@ -194,14 +194,7 @@ class CocoaCB: NSObject {
         }
 
         CVDisplayLinkSetCurrentCGDisplay(link, screen.displayID)
-        if #available(macOS 10.12, *) {
-            CVDisplayLinkSetOutputHandler(link) { link, now, out, inFlags, outFlags -> CVReturn in
-                self.libmpv.reportRenderFlip()
-                return kCVReturnSuccess
-            }
-        } else {
-            CVDisplayLinkSetOutputCallback(link, linkCallback, MPVHelper.bridge(obj: self))
-        }
+        CVDisplayLinkSetOutputCallback(link, linkCallback, MPVHelper.bridge(obj: self))
         CVDisplayLinkStart(link)
     }
 
