@@ -105,6 +105,9 @@ enum mp_property_return {
     // Returned on success.
     M_PROPERTY_OK = 1,
 
+    // Returned from validator if action should be executed.
+    M_PROPERTY_VALID = 2,
+
     // Returned on error.
     M_PROPERTY_ERROR = 0,
 
@@ -209,7 +212,9 @@ struct m_sub_property {
 
 int m_property_read_sub(const struct m_sub_property *props, int action, void *arg);
 
-
+int m_property_read_sub_validate(void *ctx, struct m_property *prop,
+                                 int action, void *arg);
+                                 
 // Used with m_property_read_list().
 // Get an entry. item is the 0-based index of the item. This behaves like a
 // top-level property request (but you must implement M_PROPERTY_GET_TYPE).
