@@ -170,6 +170,7 @@ def build(ctx):
             ( "osdep/macos/mpv_helper.swift" ),
             ( "osdep/macos/swift_extensions.swift" ),
             ( "osdep/macos/swift_compat.swift" ),
+            ( "osdep/macos/precise_timer.swift" ),
             ( "video/out/cocoa-cb/events_view.swift" ),
             ( "video/out/cocoa-cb/video_layer.swift" ),
             ( "video/out/cocoa-cb/window.swift" ),

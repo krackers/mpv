@@ -27,6 +27,7 @@ class CocoaCB: NSObject {
     var view: EventsView?
     var layer: VideoLayer?
     var link: CVDisplayLink?
+    var timer: PreciseTimer?
 
     var cursorHidden: Bool = false
     var cursorVisibilityWanted: Bool = true
@@ -57,6 +58,7 @@ class CocoaCB: NSObject {
         libmpv = LibmpvHelper(mpvHandle, "cocoacb")
         super.init()
         layer = VideoLayer(cocoaCB: self)
+        timer =  PreciseTimer(common: self)
 
         libmpv.observeFlag("ontop")
         libmpv.observeFlag("border")
@@ -178,7 +180,18 @@ class CocoaCB: NSObject {
                         flagsOut: UnsafeMutablePointer<CVOptionFlags>,
               displayLinkContext: UnsafeMutableRawPointer?) -> CVReturn in
         let ccb = unsafeBitCast(displayLinkContext, to: CocoaCB.self)
-        ccb.libmpv.reportRenderFlip()
+        return ccb.displayLinkCallback(displayLink, inNow, inOutputTime, flagsIn, flagsOut)
+    }
+
+    func displayLinkCallback(_ displayLink: CVDisplayLink,
+                                   _ inNow: UnsafePointer<CVTimeStamp>,
+                            _ inOutputTime: UnsafePointer<CVTimeStamp>,
+                                 _ flagsIn: CVOptionFlags,
+                                _ flagsOut: UnsafeMutablePointer<CVOptionFlags>) -> CVReturn
+    {
+        timer?.scheduleAt(time: inOutputTime.pointee.hostTime, closure: {
+            self.libmpv.reportRenderFlip()
+        })
         return kCVReturnSuccess
     }
 
@@ -196,6 +209,7 @@ class CocoaCB: NSObject {
         CVDisplayLinkSetCurrentCGDisplay(link, screen.displayID)
         CVDisplayLinkSetOutputCallback(link, linkCallback, MPVHelper.bridge(obj: self))
         CVDisplayLinkStart(link)
+        timer?.updatePolicy(periodSeconds: 1 / currentFps())
     }
 
     func stopDisplaylink() {
