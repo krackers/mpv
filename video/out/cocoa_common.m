@@ -584,6 +584,8 @@ static MpvVideoWindow *create_window(NSRect rect, NSScreen *s, bool border,
 
     //When building against macOS SDK 10.15+ and running on macOS 10.15+, the system will trigger an assert because we
     //are not using NSOpenGLContext on the main thread. Disable this assert since it doesn't cause any problem if we do.
+    // Note that CGLContextUpdate does not trigger this, but it is not equivalent to NSOpenGLContext update.
+    // The AppKit version does some additional finangling to the view.
     CFPreferencesSetAppValue(CFSTR("NSOpenGLContextSuppressThreadAssertions"), kCFBooleanTrue, kCFPreferencesCurrentApplication);
 
     return w;
@@ -763,8 +765,6 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
         vo->dwidth  = s->vo_dwidth  = frame.size.width;
         vo->dheight = s->vo_dheight = frame.size.height;
 
-        CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
-
         [s->nsgl_ctx update];
 
     });
@@ -904,7 +904,6 @@ static int vo_cocoa_check_events(struct vo *vo)
     pthread_mutex_unlock(&s->lock);
 
     if (events & VO_EVENT_RESIZE) {
-        CGLContextObj cglctx = [s->nsgl_ctx CGLContextObj];
         [s->nsgl_ctx update];
     }
 
