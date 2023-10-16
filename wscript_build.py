@@ -432,6 +432,7 @@ def build(ctx):
         ( "video/out/cocoa/events_view.m",       "cocoa" ),
         ( "video/out/cocoa/video_view.m",        "cocoa" ),
         ( "video/out/cocoa/window.m",            "cocoa" ),
+        ( "video/out/cocoa/TPPreciseTimer.m",            "cocoa" ),
         ( "video/out/cocoa_common.m",            "cocoa" ),
         ( "video/out/d3d11/context.c",           "d3d11" ),
         ( "video/out/d3d11/hwdec_d3d11va.c",     "d3d11 && d3d-hwaccel" ),
