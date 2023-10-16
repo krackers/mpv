@@ -526,8 +526,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
 {
     struct vo *vo = displayLinkContext;
     struct vo_cocoa_state *s = vo->cocoa;
+    vo_cocoa_signal_swap(s);
 
-    [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
+    // [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
 
     return kCVReturnSuccess;
 }
@@ -870,8 +871,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     if (skip)
         goto ret;
 
-    uint64_t old_counter = s->sync_counter;
-    CGLFlushDrawable(s->cgl_ctx);
+
     // Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
     // I don't understand why, probably because it messes with compositing?
     // Second bit determines whether CVDisplayLink is used
@@ -885,6 +885,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
             }
             s->sync_counter = 0;
         } else {
+            uint64_t old_counter = s->sync_counter;
             while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
                 pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
             }
@@ -898,6 +899,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
   
  ret:
     pthread_mutex_unlock(&s->lock);
+    CGLFlushDrawable(s->cgl_ctx);
     return;
 }
 
