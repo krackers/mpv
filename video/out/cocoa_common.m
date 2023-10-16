@@ -402,7 +402,7 @@ void vo_cocoa_init(struct vo *vo)
     cocoa_add_screen_reconfiguration_observer(vo);
     cocoa_add_event_monitor(vo);
 
-    s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
+    // s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
 
     if (!s->embedded) {
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
