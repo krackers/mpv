@@ -52,6 +52,9 @@ static int set_swap_interval(int enabled)
     enabled = (enabled & 1);
     CGLContextObj ctx = CGLGetCurrentContext();
     CGLError err = CGLSetParameter(ctx, kCGLCPSwapInterval, &enabled);
+    if ((enabled >> 4) & 1) {
+        err =  CGLEnable( ctx, kCGLCEMPEngine);
+    }
     return (err == kCGLNoError) ? 0 : -1;
 }
 
@@ -80,7 +83,7 @@ static CGLError test_gl_version(struct ra_ctx *ctx, CGLOpenGLProfile ver)
         kCGLPFAOpenGLProfile,
         (CGLPixelFormatAttribute) ver,
         kCGLPFAAccelerated,
-        kCGLPFADoubleBuffer,
+        kCGLPFATripleBuffer,
         kCGLPFAAllowOfflineRenderers,
         // keep this one last to apply the cocoa-force-dedicated-gpu option
         kCGLPFASupportsAutomaticGraphicsSwitching,
@@ -163,10 +166,18 @@ static void cocoa_uninit(struct ra_ctx *ctx)
     vo_cocoa_uninit(ctx->vo);
 }
 
+extern double mach_timebase_ratio;
+extern uint64_t mach_absolute_time(void);
+
 static void cocoa_swap_buffers(struct ra_ctx *ctx)
 {
     struct priv *p = ctx->priv;
     vo_cocoa_swap_buffers(ctx->vo);
+
+    // uint64_t bef = mach_absolute_time();
+    // p->Flush();
+    // uint64_t aft = mach_absolute_time();
+    // printf("\tFlush drawable time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
     CGLFlushDrawable(p->ctx);
 }
 

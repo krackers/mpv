@@ -523,8 +523,11 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
     // In its absence, we are conservative and only skip 1 frame. 
     // Since vsync_skip_detection uses a delay of 2/3 of a vsync as the threshold, this will trigger when
     // one vysnc is takes more than ((1+2/3)avg_vsync) 
-    in->current_frame->num_vsyncs -= skipped_vsyncs;
+    in->current_frame->num_vsyncs = MPMAX(0, in->current_frame->num_vsyncs - skipped_vsyncs);
     in->current_frame->vsync_offset += in->current_frame->vsync_interval * skipped_vsyncs;
+    if (skipped_vsyncs > 0) {
+        printf("New num vsyncs %d\n", in->current_frame->num_vsyncs);
+    }
 
 
     MP_STATS(vo, "value %f jitter", in->estimated_vsync_jitter);
@@ -833,6 +836,9 @@ static void wait_until(struct vo *vo, int64_t target)
     pthread_mutex_unlock(&in->lock);
 }
 
+extern uint64_t mach_absolute_time(void);
+extern double mach_timebase_ratio;
+
 bool vo_render_frame_external(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
@@ -924,7 +930,12 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-flip");
 
+        uint64_t bef = mach_absolute_time();
+
         vo->driver->flip_page(vo);
+
+        uint64_t aft = mach_absolute_time();
+        // printf("flip time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
 
         MP_STATS(vo, "end video-flip");
 
