@@ -102,6 +102,7 @@ struct vo_cocoa_state {
     pthread_cond_t sync_wakeup;
     uint64_t sync_counter;
     _Atomic uint64_t displayLinkOutputTime;
+    _Atomic uint64_t skipOutputTime;
 
     uint64_t last_vsync_time;
 
@@ -522,13 +523,25 @@ static double vo_cocoa_update_screen_fps(struct vo *vo)
     return 60.0;
 }
 
-static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp* now,
+static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp* inTime,
                                     const CVTimeStamp* outputTime, CVOptionFlags flagsIn,
                                     CVOptionFlags* flagsOut, void* displayLinkContext)
 {
     struct vo *vo = displayLinkContext;
     struct vo_cocoa_state *s = vo->cocoa;
+
     s->displayLinkOutputTime = outputTime->hostTime;
+    // CVTimeStamp inTstamp;
+    // inTstamp.videoTime = inTime->videoTime + inTime->videoRefreshPeriod;
+    // inTstamp.videoTimeScale = inTime->videoTimeScale;
+    // inTstamp.flags = kCVTimeStampVideoTimeValid;
+    // CVTimeStamp outTstamp;
+    // outTstamp.flags = kCVTimeStampHostTimeValid;
+    // CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp);
+
+    // s->displayLinkOutputTime = outTstamp.hostTime;
+    // s->skipOutputTime = outputTime->hostTime;
+    
     vo_cocoa_signal_swap(s);
  
     // [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
@@ -825,28 +838,39 @@ static void vo_cocoa_resize_redraw(struct vo *vo, int width, int height)
 #include <pthread.h>
 
 int set_realtime(int period, int computation, int constraint) {
-    struct thread_time_constraint_policy ttcpolicy;
+    // struct thread_time_constraint_policy ttcpolicy;
     int ret;
-    thread_port_t threadport = pthread_mach_thread_np(pthread_self());
+    // thread_port_t threadport = pthread_mach_thread_np(pthread_self());
 
-    struct sched_param param;
-    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    if (pthread_setschedparam(pthread_self(), SCHED_FIFO, &param)  == -1) {
-        printf("Failed to change priority.\n");
-        return -1;
+    // struct sched_param param;
+    // param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    int err;
+    // if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param)) != 0) {
+    //     printf("Failed to set fifo priority, got err %d\n");
+    // }
+
+    // Calls to interfaces such as pthread_setschedparam() that are
+    // incompatible or in conflict with the QOS class system will unset the QOS
+    // class requested with this interface and pthread_get_qos_class_np() will
+    // return QOS_CLASS_UNSPECIFIED thereafter. A thread so modified is permanently
+    // opted-out of the QOS class system and calls to this function to request a QOS
+    // class for such a thread will fail and return EPERM.
+    
+    if ((err = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)) != 0) {
+        printf("Failed to set qos, got err %d\n", err);
     }
 
-    ttcpolicy.period=period; // HZ/160
-    ttcpolicy.computation=computation; // HZ/3300;
-    ttcpolicy.constraint=constraint; // HZ/2200;
-    ttcpolicy.preemptible=1;
+    // ttcpolicy.period=period; // HZ/160
+    // ttcpolicy.computation=computation; // HZ/3300;
+    // ttcpolicy.constraint=constraint; // HZ/2200;
+    // ttcpolicy.preemptible=1;
 
-    if ((ret=thread_policy_set(threadport,
-        THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
-        THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
-            fprintf(stderr, "set_realtime() failed.\n");
-            return 0;
-    }
+    // if ((ret=thread_policy_set(threadport,
+    //     THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
+    //     THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
+    //         fprintf(stderr, "set_realtime() failed.\n");
+    //         return 0;
+    // }
     return 1;
 }
 
@@ -858,7 +882,7 @@ void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
     // info->skipped_vsyncs = p->last_skipped_vsyncs;
     uint64_t diff = s->last_vsync_time - last_time;
     if (diff > 500330) {
-        printf("Skipped vsync %llu\n", diff);
+        printf("\tSkipped vsync %llu\n", diff);
     }
     info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
     last_time = s->last_vsync_time;
@@ -882,6 +906,8 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // Basically we want to be woken up as close as possible to swap
 		set_realtime(period, period * 0.75, period * 0.85);
     }
+
+    uint64_t bef = mach_absolute_time();
  
 
     // Don't swap a frame with wrong size
@@ -915,10 +941,16 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     s->frame_w = vo->dwidth;
     s->frame_h = vo->dheight;
     pthread_cond_signal(&s->wakeup);
+
+    uint64_t aft = mach_absolute_time();
+    // printf("\tWait for cvdisplaylink time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
+    bef = aft;
   
  ret:
     pthread_mutex_unlock(&s->lock);
     s->last_vsync_time = s->displayLinkOutputTime;
+    // [s->nsgl_ctx flushBuffer];
+    // CGLFlushDrawable(s->cgl_ctx);
     return;
 }
 
