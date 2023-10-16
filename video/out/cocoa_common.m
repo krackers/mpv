@@ -850,7 +850,10 @@ int realtime = 0;
 
 void vo_cocoa_swap_buffers(struct vo *vo)
 {
-     if (!realtime) {
+    struct vo_cocoa_state *s = vo->cocoa;
+
+    // Fourth bit determines whether precise timer should be used.
+    if ((s->swap_interval >> 3 & 1) && !realtime) {
         // See https://github.com/hooleyhoop/HooleyBits/blob/master/thread_time_constraint_policy/Thread_time_constraint_policy.m
         realtime = 1;
 		double conv = 3.0/125.0;
@@ -859,7 +862,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // Basically we want to be woken up as close as possible to swap
 		set_realtime(period, period * 0.75, period * 0.85);
     }
-    struct vo_cocoa_state *s = vo->cocoa;
+ 
 
     // Don't swap a frame with wrong size
     pthread_mutex_lock(&s->lock);
