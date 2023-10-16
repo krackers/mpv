@@ -47,8 +47,9 @@ static int openGlSwapInterval = 0;
 
 static int set_swap_interval(int enabled)
 {
+    // Low bit determines swap interval
     openGlSwapInterval = enabled;
-    enabled = (enabled == 1);
+    enabled = (enabled & 1);
     CGLContextObj ctx = CGLGetCurrentContext();
     CGLError err = CGLSetParameter(ctx, kCGLCPSwapInterval, &enabled);
     return (err == kCGLNoError) ? 0 : -1;
@@ -166,7 +167,7 @@ static void cocoa_swap_buffers(struct ra_ctx *ctx)
 {
     struct priv *p = ctx->priv;
     vo_cocoa_swap_buffers(ctx->vo);
-    CGLFlushDrawable(p->ctx);
+    // CGLFlushDrawable(p->ctx);
 }
 
 static bool cocoa_init(struct ra_ctx *ctx)
