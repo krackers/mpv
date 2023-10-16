@@ -23,6 +23,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <OpenGL/OpenGL.h>
+#include "video/out/vo.h"
 
 struct vo;
 struct vo_cocoa_state;
@@ -41,6 +42,7 @@ int vo_cocoa_config_window(struct vo *vo, int swapInterval);
 int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg);
 
 void vo_cocoa_swap_buffers(struct vo *vo);
+void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info);
 void vo_cocoa_set_opengl_ctx(struct vo *vo, CGLContextObj ctx);
 
 #endif /* MPLAYER_COCOA_COMMON_H */

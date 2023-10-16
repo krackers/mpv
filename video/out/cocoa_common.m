@@ -42,7 +42,6 @@
 #include "osdep/macosx_application_objc.h"
 
 #include "options/options.h"
-#include "video/out/vo.h"
 #include "win_state.h"
 
 #include "input/input.h"
@@ -102,6 +101,9 @@ struct vo_cocoa_state {
     pthread_mutex_t sync_lock;
     pthread_cond_t sync_wakeup;
     uint64_t sync_counter;
+    _Atomic uint64_t displayLinkOutputTime;
+
+    uint64_t last_vsync_time;
 
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
@@ -526,8 +528,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
 {
     struct vo *vo = displayLinkContext;
     struct vo_cocoa_state *s = vo->cocoa;
+    s->displayLinkOutputTime = outputTime->hostTime;
     vo_cocoa_signal_swap(s);
-
+ 
     // [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
 
     return kCVReturnSuccess;
@@ -847,7 +850,23 @@ int set_realtime(int period, int computation, int constraint) {
     return 1;
 }
 
+extern double mach_timebase_ratio;
+uint64_t last_time = 0;
+void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
+    struct vo_cocoa_state *s = vo->cocoa;
+    // info->vsync_duration = p->vsync_duration;
+    // info->skipped_vsyncs = p->last_skipped_vsyncs;
+    uint64_t diff = s->last_vsync_time - last_time;
+    if (diff > 500330) {
+        printf("Skipped vsync %llu\n", diff);
+    }
+    info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
+    last_time = s->last_vsync_time;
+}
+
 int realtime = 0;
+
+int last_swap_time = 0;
 
 void vo_cocoa_swap_buffers(struct vo *vo)
 {
@@ -899,7 +918,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
   
  ret:
     pthread_mutex_unlock(&s->lock);
-    CGLFlushDrawable(s->cgl_ctx);
+    s->last_vsync_time = s->displayLinkOutputTime;
     return;
 }
 
