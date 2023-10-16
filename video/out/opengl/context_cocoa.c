@@ -167,7 +167,13 @@ static void cocoa_swap_buffers(struct ra_ctx *ctx)
 {
     struct priv *p = ctx->priv;
     vo_cocoa_swap_buffers(ctx->vo);
-    // CGLFlushDrawable(p->ctx);
+    CGLFlushDrawable(p->ctx);
+}
+
+static void cocoa_get_vsync(struct ra_ctx *ctx, struct vo_vsync_info *info)
+{
+    struct priv *p = ctx->priv;
+    vo_cocoa_get_vsync(ctx->vo, info);
 }
 
 static bool cocoa_init(struct ra_ctx *ctx)
@@ -184,6 +190,7 @@ static bool cocoa_init(struct ra_ctx *ctx)
 
     struct ra_gl_ctx_params params = {
         .swap_buffers = cocoa_swap_buffers,
+        .get_vsync    = cocoa_get_vsync,
     };
 
     if (!ra_gl_ctx_init(ctx, gl, params))
