@@ -849,9 +849,9 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         realtime = 1;
 		double conv = 3.0/125.0;
         // We set the period to be thrice what we need, to ensure we get called close to a vsync
-		double period = (1/(59.95*7)) * 1e9 * conv;
+		double period = (1/(59.95)) * 1e9 * conv;
         // Basically we want to be woken up as close as possible to swap
-		set_realtime(period, period/5, period/2);
+		set_realtime(period, period * 0.75, period * 0.85);
     }
     struct vo_cocoa_state *s = vo->cocoa;
 
@@ -861,19 +861,21 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     if (skip)
         goto ret;
 
-
+    uint64_t old_counter = s->sync_counter;
+    CGLFlushDrawable(s->cgl_ctx);
     // Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
     // I don't understand why, probably because it messes with compositing?
-    if (s->swap_interval < 0 || s->force_displaylink_sync) {
+    // Second bit determines whether CVDisplayLink is used
+    if (((s->swap_interval >> 1) & 1) || s->force_displaylink_sync) {
         pthread_mutex_lock(&s->sync_lock);
-        if (s->swap_interval == -1) {
+        // Third bit determines late swap or not
+        if ((s->swap_interval >> 2) & 1) {
             // Adaptive vsync (force swap if late)
             while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
                 pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
             }
             s->sync_counter = 0;
         } else {
-            uint64_t old_counter = s->sync_counter;
             while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
                 pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
             }
