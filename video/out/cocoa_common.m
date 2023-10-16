@@ -28,6 +28,7 @@
 #import "video/out/cocoa/events_view.h"
 #import "video/out/cocoa/video_view.h"
 #import "video/out/cocoa/mpvadapter.h"
+#import "video/out/cocoa/TPPreciseTimer.h"
 
 #include "osdep/threads.h"
 #include "osdep/atomic.h"
@@ -104,6 +105,8 @@ struct vo_cocoa_state {
 
     pthread_mutex_t lock;
     pthread_cond_t wakeup;
+
+    TPPreciseTimer *precise_timer;
 
 
     // --- The following members are protected by the lock.
@@ -399,6 +402,8 @@ void vo_cocoa_init(struct vo *vo)
     cocoa_add_screen_reconfiguration_observer(vo);
     cocoa_add_event_monitor(vo);
 
+    s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
+
     if (!s->embedded) {
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         set_application_icon(NSApp);
@@ -522,7 +527,8 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
     struct vo *vo = displayLinkContext;
     struct vo_cocoa_state *s = vo->cocoa;
 
-    vo_cocoa_signal_swap(s);
+    [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
+
     return kCVReturnSuccess;
 }
 
