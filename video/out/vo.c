@@ -476,14 +476,14 @@ static void vsync_skip_detection(struct vo *vo)
 }
 
 // Always called locked.
-static void update_vsync_timing_after_swap(struct vo *vo)
+static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info *vsync)
 {
     struct vo_internal *in = vo->in;
 
-    int64_t now = mp_time_us();
+    int64_t vsync_time = vsync->last_queue_display_time;
     int64_t prev_vsync = in->prev_vsync;
 
-    in->prev_vsync = now;
+    in->prev_vsync = vsync_time;
 
     if (!in->expecting_vsync) {
         reset_vsync_timings(vo);
@@ -497,13 +497,13 @@ static void update_vsync_timing_after_swap(struct vo *vo)
     if (in->num_vsync_samples >= MAX_VSYNC_SAMPLES)
         in->num_vsync_samples -= 1;
     MP_TARRAY_INSERT_AT(in, in->vsync_samples, in->num_vsync_samples, 0,
-                        now - prev_vsync);
+                        vsync_time - prev_vsync);
     in->drop_point = MPMIN(in->drop_point + 1, in->num_vsync_samples);
     in->num_total_vsync_samples += 1;
     if (in->base_vsync) {
         in->base_vsync += in->vsync_interval;
     } else {
-        in->base_vsync = now;
+        in->base_vsync = vsync_time;
     }
 
     double avg = 0;
@@ -928,11 +928,22 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "end video-flip");
 
+        struct vo_vsync_info vsync = {
+            .last_queue_display_time = -1,
+            .skipped_vsyncs = -1,
+        };
+        if (vo->driver->get_vsync)
+            vo->driver->get_vsync(vo, &vsync);
+
+        // Make up some crap if presentation feedback is missing.
+        if (vsync.last_queue_display_time < 0)
+            vsync.last_queue_display_time = mp_time_us();
+
         pthread_mutex_lock(&in->lock);
         in->dropped_frame = prev_drop_count < vo->in->drop_count;
         in->rendering = false;
 
-        update_vsync_timing_after_swap(vo);
+        update_vsync_timing_after_swap(vo, &vsync);
     }
 
     if (vo->driver->caps & VO_CAP_NORETAIN) {
