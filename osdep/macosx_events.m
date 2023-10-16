@@ -345,8 +345,12 @@ void cocoa_set_mpv_handle(struct mpv_handle *ctx)
             return;
         }
         #endif
-        mpv_destroy(_ctx);
+        struct mpv_handle *old_ctx = _ctx;
         _ctx = nil;
+        // Avoid blocking the main thread
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            mpv_destroy(old_ctx);
+        });
         break;
     }
     }
