@@ -80,7 +80,7 @@ class VideoLayer: CAOpenGLLayer {
     enum Draw: Int { case normal = 1, atomic, atomicEnd }
     var draw: Draw = .normal
 
-    let queue: DispatchQueue = DispatchQueue(label: "io.mpv.queue.draw")
+    let queue: DispatchQueue = DispatchQueue(label: "io.mpv.queue.draw", qos: .userInteractive)
 
     var needsICCUpdate: Bool = false {
         didSet {
