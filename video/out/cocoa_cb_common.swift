@@ -189,10 +189,10 @@ class CocoaCB: NSObject {
                                  _ flagsIn: CVOptionFlags,
                                 _ flagsOut: UnsafeMutablePointer<CVOptionFlags>) -> CVReturn
     {
-        self.libmpv.reportRenderFlip()
-        // timer?.scheduleAt(time: inOutputTime.pointee.hostTime, closure: {
-        //     self.libmpv.reportRenderFlip()
-        // })
+        // self.libmpv.reportRenderFlip()
+        timer?.scheduleAt(time: inOutputTime.pointee.hostTime, closure: {
+            self.libmpv.reportRenderFlip()
+        })
         return kCVReturnSuccess
     }
 
@@ -210,7 +210,7 @@ class CocoaCB: NSObject {
         CVDisplayLinkSetCurrentCGDisplay(link, screen.displayID)
         CVDisplayLinkSetOutputCallback(link, linkCallback, MPVHelper.bridge(obj: self))
         CVDisplayLinkStart(link)
-        // timer?.updatePolicy(periodSeconds: 1 / currentFps())
+        timer?.updatePolicy(periodSeconds: 1 / currentFps())
     }
 
     func stopDisplaylink() {
