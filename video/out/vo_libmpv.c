@@ -535,6 +535,7 @@ static void flip_page(struct vo *vo)
 
     
     
+    int64_t flp_count_before_flush = ctx->flip_count;
     while (ctx->expected_flush_count > ctx->flush_count) {
         if (!ctx->flush_count)
             break;
@@ -545,7 +546,7 @@ static void flip_page(struct vo *vo)
     }
 
     // Wait for next vsync after flush
-    int64_t flp_count_before_flush = ctx->flip_count;
+    // int64_t flp_count_before_flush = ctx->flip_count;
     while (ctx->flip_count == flp_count_before_flush) {
         // mpv_render_report_swap() is declared as optional API.
         // Assume the user calls it consistently _if_ it's called at all.
