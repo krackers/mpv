@@ -85,6 +85,7 @@ class CocoaCB: NSObject {
     }
 
     func uninit() {
+        timer?.terminate()
         window?.orderOut(nil)
         window?.close()
         mpv = nil
