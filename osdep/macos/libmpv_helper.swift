@@ -107,6 +107,11 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_swap(mpvRenderContext)
     }
 
+    func reportRenderFlush() {
+        if mpvRenderContext == nil { return }
+        mpv_render_context_report_flush(mpvRenderContext)
+    }
+
     func isRenderUpdateFrame() -> Bool {
         deinitLock.lock()
         if mpvRenderContext == nil {

@@ -533,6 +533,8 @@ static void flip_page(struct vo *vo)
     if (ctx->redrawing)
         goto done; // do not block for redrawing
 
+    
+    
     while (ctx->expected_flush_count > ctx->flush_count) {
         if (!ctx->flush_count)
             break;
@@ -542,9 +544,9 @@ static void flip_page(struct vo *vo)
         }
     }
 
-    // Wait until frame was presented
-    int64_t current_flip_count = ctx->flip_count;
-    while (ctx->flip_count == current_flip_count) {
+    // Wait for next vsync after flush
+    int64_t flp_count_before_flush = ctx->flip_count;
+    while (ctx->flip_count == flp_count_before_flush) {
         // mpv_render_report_swap() is declared as optional API.
         // Assume the user calls it consistently _if_ it's called at all.
         if (!ctx->flip_count)
