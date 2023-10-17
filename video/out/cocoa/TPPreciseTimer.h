@@ -14,9 +14,11 @@
     NSMutableArray *events;
     NSCondition *condition;
     pthread_t thread;
+    BOOL isRunning;
 }
 
 - (id)initWithSpinLock:(double)spinLock spinLockSleepRatio:(int)sleep highPrecision:(BOOL)pre;
 - (void)scheduleBlock:(void (^)(void))block atTime:(UInt64)time;
+- (int) terminate;
 
 @end

@@ -29,6 +29,8 @@ static NSString *kBlockKey = @"block";
     _spinLockTime = spinLock;
     _spinLockSleepRatio = sleep;
 
+    self->isRunning = YES;
+
     struct mach_timebase_info timebase;
     mach_timebase_info(&timebase);
     timebase_ratio = ((double)timebase.numer / (double)timebase.denom) * 1.0e-9;
@@ -69,6 +71,15 @@ static NSString *kBlockKey = @"block";
     return self;
 }
 
+-(int) terminate {
+    [condition lock];
+    self->isRunning = NO;
+    [condition signal];
+    [condition unlock];
+    pthread_kill(thread, SIGALRM);
+    return pthread_join(thread, NULL);
+}
+
 
 - (void)scheduleBlock:(void (^)(void))block atTime:(UInt64)time {
     [self addSchedule:[NSDictionary dictionaryWithObjectsAndKeys:
@@ -79,6 +90,10 @@ static NSString *kBlockKey = @"block";
 
 - (void)addSchedule:(NSDictionary*)schedule {
     [condition lock];
+    if (!isRunning) {
+        [condition unlock];
+        return;
+    }
     [events addObject:schedule];
     [events sortUsingDescriptors:[NSArray arrayWithObject:[NSSortDescriptor sortDescriptorWithKey:kTimeKey ascending:YES]]];
     BOOL mustSignal = [events count] > 1 && [events objectAtIndex:0] == schedule;
@@ -102,9 +117,12 @@ void thread_signal(int signal) {
     signal(SIGALRM, thread_signal);
     [condition lock];
 
-    while ( 1 ) {
-        while ( [events count] == 0 ) {
+    while ( isRunning ) {
+        while ( [events count] == 0 && isRunning ) {
             [condition wait];
+        }
+        if (!isRunning) {
+            break;
         }
         NSDictionary *nextEvent = [events objectAtIndex:0];
         NSTimeInterval time = [[nextEvent objectForKey:kTimeKey] unsignedLongLongValue] * timebase_ratio;
@@ -134,6 +152,8 @@ void thread_signal(int signal) {
             [condition lock];
         }
     }
+
+    [condition unlock];
 }
 
 @end

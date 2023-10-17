@@ -101,8 +101,11 @@ struct vo_cocoa_state {
     pthread_mutex_t sync_lock;
     pthread_cond_t sync_wakeup;
     uint64_t sync_counter;
+
+    
+    int pending_swaps;
     _Atomic uint64_t displayLinkOutputTime;
-    _Atomic uint64_t skipOutputTime;
+    _Atomic uint64_t vsync_interval;
 
     uint64_t last_vsync_time;
 
@@ -329,6 +332,7 @@ static void vo_cocoa_anim_unlock(struct vo *vo)
 static void vo_cocoa_signal_swap(struct vo_cocoa_state *s)
 {
     pthread_mutex_lock(&s->sync_lock);
+    s->pending_swaps = MPMAX(s->pending_swaps - 1, 0);
     s->sync_counter += 1;
     pthread_cond_signal(&s->sync_wakeup);
     pthread_mutex_unlock(&s->sync_lock);
@@ -406,6 +410,7 @@ void vo_cocoa_init(struct vo *vo)
     cocoa_add_event_monitor(vo);
 
     s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
+    s->pending_swaps = 0;
 
     if (!s->embedded) {
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -438,6 +443,8 @@ static int vo_cocoa_update_cursor_visibility(struct vo *vo, bool forceVisible)
 void vo_cocoa_uninit(struct vo *vo)
 {
     struct vo_cocoa_state *s = vo->cocoa;
+    int term = [s->precise_timer terminate];
+    // printf("Timer terminated with code %d\n", term);
 
     pthread_mutex_lock(&s->lock);
     s->vo_ready = false;
@@ -530,21 +537,24 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
     struct vo *vo = displayLinkContext;
     struct vo_cocoa_state *s = vo->cocoa;
 
-    s->displayLinkOutputTime = outputTime->hostTime;
-    // CVTimeStamp inTstamp;
-    // inTstamp.videoTime = inTime->videoTime + inTime->videoRefreshPeriod;
-    // inTstamp.videoTimeScale = inTime->videoTimeScale;
-    // inTstamp.flags = kCVTimeStampVideoTimeValid;
-    // CVTimeStamp outTstamp;
-    // outTstamp.flags = kCVTimeStampHostTimeValid;
-    // CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp);
+
+    CVTimeStamp inTstamp;
+    inTstamp.videoTime = outputTime->videoTime - outputTime->videoRefreshPeriod;
+    inTstamp.videoTimeScale = outputTime->videoTimeScale;
+    inTstamp.flags = kCVTimeStampVideoTimeValid;
+    CVTimeStamp outTstamp;
+    outTstamp.flags = kCVTimeStampHostTimeValid;
+    CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp);
+
+
 
     // s->displayLinkOutputTime = outTstamp.hostTime;
     // s->skipOutputTime = outputTime->hostTime;
     
     // vo_cocoa_signal_swap(s);
- 
-    [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
+    s->vsync_interval = outputTime->hostTime - outTstamp.hostTime;
+    uint64_t outputtimescalar = outputTime->hostTime;
+    [s->precise_timer scheduleBlock: ^{ s->displayLinkOutputTime = outputtimescalar;  vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
 
     return kCVReturnSuccess;
 }
@@ -877,14 +887,14 @@ int set_realtime(int period, int computation, int constraint) {
 extern double mach_timebase_ratio;
 uint64_t last_time = 0;
 void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
-    // struct vo_cocoa_state *s = vo->cocoa;
+    struct vo_cocoa_state *s = vo->cocoa;
     // // info->vsync_duration = p->vsync_duration;
     // // info->skipped_vsyncs = p->last_skipped_vsyncs;
     // uint64_t diff = s->last_vsync_time - last_time;
     // if (diff > 500330) {
     //     printf("\tSkipped vsync %llu\n", diff);
     // }
-    // info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
+    info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
     // last_time = s->last_vsync_time;
 }
 
@@ -906,12 +916,8 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // Basically we want to be woken up as close as possible to swap
 		set_realtime(period, period * 0.75, period * 0.85);
     }
-
-    uint64_t bef = mach_absolute_time();
  
 
-
-    uint64_t old_counter = s->sync_counter;
     CGLFlushDrawable(s->cgl_ctx);
     // Don't swap a frame with wrong size
     pthread_mutex_lock(&s->lock);
@@ -924,17 +930,16 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     // Second bit determines whether CVDisplayLink is used
     if (((s->swap_interval >> 1) & 1) || s->force_displaylink_sync) {
         pthread_mutex_lock(&s->sync_lock);
-        // Third bit determines late swap or not
-        if ((s->swap_interval >> 2) & 1) {
-            // Adaptive vsync (force swap if late)
-            while(CVDisplayLinkIsRunning(s->link) && s->sync_counter == 0) {
-                pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
-            }
-            s->sync_counter = 0;
-        } else {
-            while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
-                pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
-            }
+        // This is kind of racy. We assume that a CGLFlush will not span across a vsync boundary.
+        // If that happens it's not clear whether or not it actually displayed, so be conservative and wait for the next if we need to.
+        s->pending_swaps += 1;
+        uint64_t old_counter = s->sync_counter;
+        // Even though we tried to get triple-buffered context
+        // it seems system only ever gives a double-buffered one.
+        // Vsync is broken on newer versions of osx. But we still have 2 buffers.
+        // So instead of syncing to every vsync, we limit the number of buffer swaps in flight.
+        while(CVDisplayLinkIsRunning(s->link) && s->pending_swaps > 1) {
+            pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
         }
         pthread_mutex_unlock(&s->sync_lock);
     }
@@ -942,16 +947,17 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     s->frame_w = vo->dwidth;
     s->frame_h = vo->dheight;
     pthread_cond_signal(&s->wakeup);
-
-    uint64_t aft = mach_absolute_time();
-    // printf("\tWait for cvdisplaylink time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
-    bef = aft;
   
  ret:
     pthread_mutex_unlock(&s->lock);
-    // s->last_vsync_time = s->displayLinkOutputTime;
+    pthread_mutex_lock(&s->sync_lock);
+    s->last_vsync_time = s->displayLinkOutputTime + s->pending_swaps * s->vsync_interval;
+    // printf("Pending swap %d, output time %llu, interval %llu\n", s->pending_swaps, s->displayLinkOutputTime, s->vsync_interval );
+    pthread_mutex_unlock(&s->sync_lock);
     // [s->nsgl_ctx flushBuffer];
- 
+    if (s->pending_swaps > 2) {
+        MP_WARN(vo, "Double/triple-buffering on system appears to be broken.\n");
+    }
     return;
 }
 
