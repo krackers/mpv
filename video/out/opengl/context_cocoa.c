@@ -178,7 +178,7 @@ static void cocoa_swap_buffers(struct ra_ctx *ctx)
     // p->Flush();
     // uint64_t aft = mach_absolute_time();
     // printf("\tFlush drawable time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
-    CGLFlushDrawable(p->ctx);
+    // CGLFlushDrawable(p->ctx);
 }
 
 static void cocoa_get_vsync(struct ra_ctx *ctx, struct vo_vsync_info *info)

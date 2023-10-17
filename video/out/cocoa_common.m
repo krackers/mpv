@@ -405,7 +405,7 @@ void vo_cocoa_init(struct vo *vo)
     cocoa_add_screen_reconfiguration_observer(vo);
     cocoa_add_event_monitor(vo);
 
-    // s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
+    s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
 
     if (!s->embedded) {
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -542,9 +542,9 @@ static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeSt
     // s->displayLinkOutputTime = outTstamp.hostTime;
     // s->skipOutputTime = outputTime->hostTime;
     
-    vo_cocoa_signal_swap(s);
+    // vo_cocoa_signal_swap(s);
  
-    // [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
+    [s->precise_timer scheduleBlock: ^{vo_cocoa_signal_swap(s);} atTime: outputTime->hostTime];
 
     return kCVReturnSuccess;
 }
@@ -877,15 +877,15 @@ int set_realtime(int period, int computation, int constraint) {
 extern double mach_timebase_ratio;
 uint64_t last_time = 0;
 void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
-    struct vo_cocoa_state *s = vo->cocoa;
-    // info->vsync_duration = p->vsync_duration;
-    // info->skipped_vsyncs = p->last_skipped_vsyncs;
-    uint64_t diff = s->last_vsync_time - last_time;
-    if (diff > 500330) {
-        printf("\tSkipped vsync %llu\n", diff);
-    }
-    info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
-    last_time = s->last_vsync_time;
+    // struct vo_cocoa_state *s = vo->cocoa;
+    // // info->vsync_duration = p->vsync_duration;
+    // // info->skipped_vsyncs = p->last_skipped_vsyncs;
+    // uint64_t diff = s->last_vsync_time - last_time;
+    // if (diff > 500330) {
+    //     printf("\tSkipped vsync %llu\n", diff);
+    // }
+    // info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
+    // last_time = s->last_vsync_time;
 }
 
 int realtime = 0;
@@ -910,12 +910,14 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     uint64_t bef = mach_absolute_time();
  
 
+
+    uint64_t old_counter = s->sync_counter;
+    CGLFlushDrawable(s->cgl_ctx);
     // Don't swap a frame with wrong size
     pthread_mutex_lock(&s->lock);
     bool skip = s->pending_events & VO_EVENT_RESIZE;
     if (skip)
         goto ret;
-
 
     // Trying to use CVDisplayLink to VSync on older versions of OSX causes tearing.
     // I don't understand why, probably because it messes with compositing?
@@ -930,7 +932,6 @@ void vo_cocoa_swap_buffers(struct vo *vo)
             }
             s->sync_counter = 0;
         } else {
-            uint64_t old_counter = s->sync_counter;
             while(CVDisplayLinkIsRunning(s->link) && old_counter == s->sync_counter) {
                 pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
             }
@@ -948,9 +949,9 @@ void vo_cocoa_swap_buffers(struct vo *vo)
   
  ret:
     pthread_mutex_unlock(&s->lock);
-    s->last_vsync_time = s->displayLinkOutputTime;
+    // s->last_vsync_time = s->displayLinkOutputTime;
     // [s->nsgl_ctx flushBuffer];
-    // CGLFlushDrawable(s->cgl_ctx);
+ 
     return;
 }
 
