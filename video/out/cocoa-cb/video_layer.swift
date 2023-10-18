@@ -216,7 +216,6 @@ class VideoLayer: CAOpenGLLayer {
         let isUpdate = needsFlip
         super.display()
         CATransaction.flush()
-        libmpv.reportRenderFlush()
         if isUpdate && needsFlip {
             CGLSetCurrentContext(cglContext)
             if libmpv.isRenderUpdateFrame() {
