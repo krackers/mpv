@@ -153,6 +153,7 @@ class LibmpvHelper: LogHelper {
         }
 
         if !skip { CGLFlushDrawable(ctx) }
+        self.reportRenderFlush()
 
         deinitLock.unlock()
     }

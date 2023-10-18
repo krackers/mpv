@@ -84,6 +84,7 @@ struct mpv_render_context {
     int64_t flush_count;          // incremented when client does glFlush() for drawable
     int64_t expected_flip_count;    // next vsync event for next_frame
     int64_t expected_flush_count;  
+    int pending_swap_count;
     bool redrawing;                 // next_frame was a redraw request
     int64_t flip_count;
     struct vo_frame *cur_frame;
@@ -428,6 +429,7 @@ void mpv_render_context_report_swap(mpv_render_context *ctx)
 
     pthread_mutex_lock(&ctx->lock);
     ctx->flip_count += 1;
+    ctx->pending_swap_count = MPMAX(ctx->pending_swap_count - 1, 0);
     pthread_cond_broadcast(&ctx->video_wait);
     pthread_mutex_unlock(&ctx->lock);
 }
@@ -438,6 +440,7 @@ void mpv_render_context_report_flush(mpv_render_context *ctx)
 
     pthread_mutex_lock(&ctx->lock);
     ctx->flush_count += 1;
+    ctx->pending_swap_count += 1;
     pthread_cond_broadcast(&ctx->video_wait);
     pthread_mutex_unlock(&ctx->lock);
 }
@@ -535,7 +538,6 @@ static void flip_page(struct vo *vo)
 
     
     
-    int64_t flp_count_before_flush = ctx->flip_count;
     while (ctx->expected_flush_count > ctx->flush_count) {
         if (!ctx->flush_count)
             break;
@@ -547,7 +549,7 @@ static void flip_page(struct vo *vo)
 
     // Wait for next vsync after flush
     // int64_t flp_count_before_flush = ctx->flip_count;
-    while (ctx->flip_count == flp_count_before_flush) {
+    while (ctx->pending_swap_count > 1) {
         // mpv_render_report_swap() is declared as optional API.
         // Assume the user calls it consistently _if_ it's called at all.
         if (!ctx->flip_count)
