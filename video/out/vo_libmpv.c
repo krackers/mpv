@@ -87,6 +87,8 @@ struct mpv_render_context {
     int pending_swap_count;
     bool redrawing;                 // next_frame was a redraw request
     int64_t flip_count;
+    uint64_t last_vsync_time; // In mpv-relative units
+    uint64_t vsync_interval;
     struct vo_frame *cur_frame;
     struct mp_image_params img_params;
     int vp_w, vp_h;
@@ -98,6 +100,7 @@ struct mpv_render_context {
     bool need_update_external;
     struct vo *vo;
 
+
     // --- Mostly immutable after init.
     struct mp_hwdec_devices *hwdec_devs;
 
@@ -106,6 +109,9 @@ struct mpv_render_context {
     struct render_backend *renderer;
     struct m_config_cache *vo_opts_cache;
     struct mp_vo_opts *vo_opts;
+
+    // Accessible only from VO thread
+    uint64_t last_presentation_time;
 };
 
 const struct render_backend_fns *render_backends[] = {
@@ -430,6 +436,15 @@ void mpv_render_context_report_swap(mpv_render_context *ctx)
     pthread_mutex_lock(&ctx->lock);
     ctx->flip_count += 1;
     ctx->pending_swap_count = MPMAX(ctx->pending_swap_count - 1, 0);
+
+    uint64_t now = mp_time_us();
+
+    if (ctx->last_vsync_time > 0) {
+        ctx->vsync_interval = ctx->vsync_interval > 0 ? (now - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : now - ctx->last_vsync_time;
+    }
+    
+    ctx->last_vsync_time = now;
+    
     pthread_cond_broadcast(&ctx->video_wait);
     pthread_mutex_unlock(&ctx->lock);
 }
@@ -559,6 +574,7 @@ static void flip_page(struct vo *vo)
             goto done;
         }
     }
+    ctx->last_presentation_time = ctx->last_vsync_time + ctx->pending_swap_count * ctx->vsync_interval;
 
 done:
 
@@ -568,6 +584,7 @@ done:
         ctx->cur_frame = ctx->next_frame;
         ctx->next_frame = NULL;
         ctx->present_count += 2;
+        ctx->last_presentation_time = 0;
         pthread_cond_signal(&ctx->video_wait);
         vo_increment_drop_count(vo, 1);
     }
@@ -758,6 +775,17 @@ static int preinit(struct vo *vo)
     return 0;
 }
 
+static void get_vsync(struct vo *vo, struct vo_vsync_info *info)
+{
+    struct vo_priv *p = vo->priv;
+    struct mpv_render_context *ctx = p->ctx;
+
+    if (ctx->last_presentation_time == 0) {
+        return;
+    }
+    info->last_queue_display_time = ctx->last_presentation_time;
+}
+
 const struct vo_driver video_out_libmpv = {
     .description = "render API for libmpv",
     .name = "libmpv",
@@ -766,6 +794,7 @@ const struct vo_driver video_out_libmpv = {
     .query_format = query_format,
     .reconfig = reconfig,
     .control = control,
+    .get_vsync = get_vsync,
     .get_image_ts = get_image,
     .draw_frame = draw_frame,
     .flip_page = flip_page,
