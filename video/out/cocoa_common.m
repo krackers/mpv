@@ -955,7 +955,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     // printf("Pending swap %d, output time %llu, interval %llu\n", s->pending_swaps, s->displayLinkOutputTime, s->vsync_interval );
     pthread_mutex_unlock(&s->sync_lock);
     // [s->nsgl_ctx flushBuffer];
-    if (s->pending_swaps > 2) {
+    if (s->pending_swaps > 1) {
         MP_WARN(vo, "Double/triple-buffering on system appears to be broken.\n");
     }
     return;
