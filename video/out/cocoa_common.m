@@ -938,7 +938,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // it seems system only ever gives a double-buffered one.
         // Vsync is broken on newer versions of osx. But we still have 2 buffers.
         // So instead of syncing to every vsync, we limit the number of buffer swaps in flight.
-        while(CVDisplayLinkIsRunning(s->link) && s->pending_swaps > 1) {
+        while(CVDisplayLinkIsRunning(s->link) && s->pending_swaps > (((s->swap_interval >> 2) & 1) ? 1 : 0)) {
             pthread_cond_wait(&s->sync_wakeup, &s->sync_lock);
         }
         pthread_mutex_unlock(&s->sync_lock);
@@ -955,8 +955,8 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     // printf("Pending swap %d, output time %llu, interval %llu\n", s->pending_swaps, s->displayLinkOutputTime, s->vsync_interval );
     pthread_mutex_unlock(&s->sync_lock);
     // [s->nsgl_ctx flushBuffer];
-    if (s->pending_swaps > 1) {
-        MP_WARN(vo, "Double/triple-buffering on system appears to be broken.\n");
+    if (s->pending_swaps > (((s->swap_interval >> 2) & 1) ? 1 : 0)) {
+        MP_WARN(vo, "Pending swaps exceeds specified. Got %d expected %d.\n", s->pending_swaps, (((s->swap_interval >> 2) & 1) ? 1 : 0));
     }
     return;
 }
@@ -1232,13 +1232,13 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     // Make vo.c not do video timing, which would slow down resizing.
     vo_event(self.vout, VO_EVENT_LIVE_RESIZING);
-    vo_cocoa_stop_displaylink(self.vout->cocoa);
+    //vo_cocoa_stop_displaylink(self.vout->cocoa);
 }
 
 - (void)windowDidEndLiveResize:(NSNotification *)notification
 {
     vo_query_and_reset_events(self.vout, VO_EVENT_LIVE_RESIZING);
-    vo_cocoa_start_displaylink(self.vout->cocoa);
+    // vo_cocoa_start_displaylink(self.vout->cocoa);
 }
 
 - (void)didChangeWindowedScreenProfile:(NSNotification *)notification
