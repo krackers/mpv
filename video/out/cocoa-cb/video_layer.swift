@@ -72,8 +72,7 @@ class VideoLayer: CAOpenGLLayer {
     let displayLock = NSLock()
     let cglContext: CGLContextObj
     let cglPixelFormat: CGLPixelFormatObj
-    var needsFlip: Bool = false
-    var forceDraw: Bool = false
+    var wantsUpdate: Bool = false
     var surfaceSize: NSSize = NSSize(width: 0, height: 0)
     var bufferDepth: GLint = 8
 
@@ -143,16 +142,18 @@ class VideoLayer: CAOpenGLLayer {
         if inLiveResize == false {
             isAsynchronous = false
         }
-        return cocoaCB.backendState == .initialized &&
-               (forceDraw || libmpv.isRenderUpdateFrame())
+        var shouldDraw = self.wantsUpdate
+        if (self.inLiveResize && self.libmpv.checkRenderUpdateFrame()) {
+            shouldDraw = true
+        }
+        return cocoaCB.backendState == .initialized && (shouldDraw)
     }
 
     override func draw(inCGLContext ctx: CGLContextObj,
                        pixelFormat pf: CGLPixelFormatObj,
                        forLayerTime t: CFTimeInterval,
                        displayTime ts: UnsafePointer<CVTimeStamp>?) {
-        needsFlip = false
-        forceDraw = false
+        wantsUpdate = false
 
         if draw.rawValue >= Draw.atomic.rawValue {
              if draw == .atomic {
@@ -211,25 +212,32 @@ class VideoLayer: CAOpenGLLayer {
         layer.update()
     }
 
+    // This can always be called by system, not necessarily due to a render-callback update
+    // Hence we use a lock to prevent multiple calls at once
+    // And have additional logic 
     override func display() {
         displayLock.lock()
-        let isUpdate = needsFlip
+        let wantedUpdate = wantsUpdate
+        // Must always call super.display() here
         super.display()
-        CATransaction.flush()
-        if isUpdate && needsFlip {
+
+        if wantedUpdate && self.wantsUpdate {
+            // display() did not end up drawing, possibly because no display was ready
             CGLSetCurrentContext(cglContext)
-            if libmpv.isRenderUpdateFrame() {
-                libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
-            }
+            libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+        } else if wantedUpdate && !self.wantsUpdate {
+            // We successfully drew a frame, and need to flush ourselves
+            CATransaction.flush()
         }
+        libmpv.reportRenderFlush()
+
         displayLock.unlock()
     }
 
     func update(force: Bool = false) {
-        if force { forceDraw = true }
         queue.async {
-            if self.forceDraw || !self.inLiveResize {
-                self.needsFlip = true
+            self.wantsUpdate = self.libmpv.checkRenderUpdateFrame() || force
+            if self.wantsUpdate && (force || !self.inLiveResize) {
                 self.display()
             }
         }

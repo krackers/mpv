@@ -112,7 +112,7 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_flush(mpvRenderContext)
     }
 
-    func isRenderUpdateFrame() -> Bool {
+    func checkRenderUpdateFrame() -> Bool {
         deinitLock.lock()
         if mpvRenderContext == nil {
             deinitLock.unlock()
@@ -153,7 +153,6 @@ class LibmpvHelper: LogHelper {
         }
 
         if !skip { CGLFlushDrawable(ctx) }
-        self.reportRenderFlush()
 
         deinitLock.unlock()
     }

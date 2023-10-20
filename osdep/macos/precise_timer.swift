@@ -95,11 +95,15 @@ class PreciseTimer {
         condition.signal()
         condition.unlock()
         pthread_kill(thread, SIGALRM)
-        pthread_join(thread, nil)
+        // pthread_join(thread, nil)
     }
 
     func scheduleAt(time: UInt64, closure: @escaping () -> ()) {
         condition.lock()
+        if (!isRunning ) {
+            condition.unlock()
+            return;
+        }
         let firstEventTime = events.first?.time ?? 0
         let lastEventTime = events.last?.time ?? 0
         events.append(Timing(time: time, closure: closure))
