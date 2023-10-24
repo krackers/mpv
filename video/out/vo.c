@@ -46,6 +46,9 @@
 #include "osdep/io.h"
 #include "osdep/threads.h"
 
+extern uint64_t mach_absolute_time(void);
+extern double mach_timebase_ratio;
+
 extern const struct vo_driver video_out_mediacodec_embed;
 extern const struct vo_driver video_out_x11;
 extern const struct vo_driver video_out_vdpau;
@@ -374,9 +377,12 @@ void vo_destroy(struct vo *vo)
     dealloc_vo(vo);
 }
 
+uint64_t last_core_wakeup = 0;
+
 // Wakeup the playloop to queue new video frames etc.
 static void wakeup_core(struct vo *vo)
 {
+    last_core_wakeup = mach_absolute_time();
     vo->extra.wakeup_cb(vo->extra.wakeup_ctx);
 }
 
@@ -523,10 +529,10 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
     // In its absence, we are conservative and only skip 1 frame. 
     // Since vsync_skip_detection uses a delay of 2/3 of a vsync as the threshold, this will trigger when
     // one vysnc is takes more than ((1+2/3)avg_vsync) 
-    in->current_frame->num_vsyncs = MPMAX(0, in->current_frame->num_vsyncs - skipped_vsyncs);
-    in->current_frame->vsync_offset += in->current_frame->vsync_interval * skipped_vsyncs;
+    // in->current_frame->num_vsyncs = MPMAX(0, in->current_frame->num_vsyncs - skipped_vsyncs);
+    // in->current_frame->vsync_offset += in->current_frame->vsync_interval * skipped_vsyncs;
     if (skipped_vsyncs > 0) {
-        printf("New num vsyncs %d\n", in->current_frame->num_vsyncs);
+        printf("Vsync skip detected, cur num vsyncs: %d\n", in->current_frame->num_vsyncs);
     }
 
 
@@ -754,6 +760,9 @@ void vo_wakeup(struct vo *vo)
     pthread_mutex_unlock(&in->lock);
 }
 
+uint64_t last_check_ready = 0;
+extern _Atomic uint64_t request_queue_time;
+
 // Whether vo_queue_frame() can be called. If the VO is not ready yet, the
 // function will return false, and the VO will call the wakeup callback once
 // it's ready.
@@ -764,6 +773,7 @@ void vo_wakeup(struct vo *vo)
 // possible.
 bool vo_is_ready_for_frame(struct vo *vo, int64_t next_pts)
 {
+    last_check_ready = mach_absolute_time();
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
     bool blocked = vo->driver->initially_blocked &&
@@ -791,6 +801,9 @@ bool vo_is_ready_for_frame(struct vo *vo, int64_t next_pts)
     return r;
 }
 
+uint64_t last_frame_queue_time_bef_lock = 0;
+uint64_t last_frame_queue_time_aft_lock = 0;
+
 // Direct the VO thread to put the currently queued image on the screen.
 // vo_is_ready_for_frame() must have returned true before this call.
 // Ownership of frame is handed to the vo.
@@ -805,7 +818,10 @@ void vo_queue_frame(struct vo *vo, struct vo_frame *frame)
     in->frame_queued = frame;
     in->wakeup_pts = frame->display_synced
                    ? 0 : frame->pts + MPMAX(frame->duration, 0);
+    last_frame_queue_time_bef_lock = mach_absolute_time();
     wakeup_locked(vo);
+    last_frame_queue_time_aft_lock = mach_absolute_time();
+    // holding lock prevents the vo thread from processing further, if it is indeed waiting
     pthread_mutex_unlock(&in->lock);
 }
 
@@ -836,8 +852,7 @@ static void wait_until(struct vo *vo, int64_t target)
     pthread_mutex_unlock(&in->lock);
 }
 
-extern uint64_t mach_absolute_time(void);
-extern double mach_timebase_ratio;
+_Atomic uint64_t request_queue_time = 0;
 
 bool vo_render_frame_external(struct vo *vo)
 {
@@ -895,8 +910,14 @@ bool vo_render_frame_external(struct vo *vo)
         in->current_frame->vsync_offset += in->current_frame->vsync_interval;
         in->dropped_frame |= in->current_frame->num_vsyncs < 1;
     }
-    if (in->current_frame->num_vsyncs > 0)
-        in->current_frame->num_vsyncs -= 1;
+    if (in->current_frame->num_vsyncs > 0) {
+        in->current_frame->num_vsyncs -= 1;   
+        if (in->current_frame->num_vsyncs == 0) {
+            request_queue_time = mach_absolute_time();
+        } else {
+            last_frame_queue_time_bef_lock = last_frame_queue_time_aft_lock = request_queue_time = 0;
+        }
+    }
 
     bool use_vsync = in->current_frame->display_synced && !in->paused;
     if (use_vsync && !in->expecting_vsync) // first DS frame in a row
@@ -914,6 +935,8 @@ bool vo_render_frame_external(struct vo *vo)
         in->hasframe_rendered = true;
         int64_t prev_drop_count = vo->in->drop_count;
         pthread_mutex_unlock(&in->lock);
+
+
         wakeup_core(vo); // core can queue new video now
 
         MP_STATS(vo, "start video-draw");
@@ -1094,20 +1117,60 @@ static void *vo_thread(void *ptr)
     update_display_fps(vo);
     vo_event(vo, VO_EVENT_WIN_STATE);
 
+    uint64_t before_render = 0;
+    uint64_t after_render = 0;
+    uint64_t before_process = 0;
+    uint64_t after_process = 0;
+    uint64_t before_wait = 0;
+    uint64_t after_wait = 0;
+    int last_wait_until = 0;
+
     while (1) {
+        before_process = mach_absolute_time();
         mp_dispatch_queue_process(vo->in->dispatch, 0);
         if (in->terminate)
             break;
         vo->driver->control(vo, VOCTRL_CHECK_EVENTS, NULL);
+
+
+        after_process = mach_absolute_time();
+        uint64_t l_last_frame_queue_time = last_frame_queue_time_bef_lock;
+        uint64_t l_last_frame_queue_time_aft = last_frame_queue_time_aft_lock;
+        uint64_t l_request_queue_time = request_queue_time;
+
+        uint64_t l_last_check_ready = last_check_ready;
+        uint64_t l_last_core_wakeup = last_core_wakeup;
+
+        before_render = after_process;
         bool working = false;
         if (!in->external_renderloop_drive || !in->hasframe_rendered)
             working = vo_render_frame_external(vo);
         else
             drop_unrendered_frame(vo);
-        int64_t now = mp_time_us();
-        int64_t wait_until = now + (working ? 0 : (int64_t)1e9);
+
+
+
+        uint64_t prev_after_render = after_render;
+        after_render = mach_absolute_time();
+
+        if (!in->paused && (after_render - prev_after_render)*mach_timebase_ratio*1e6 > 50000) {
+            printf("In vo_thread, total delay was %f / process time %f / vo_render time was %f / to wait %f / wait %f\n", (after_render - prev_after_render)*mach_timebase_ratio*1e6,
+                (after_process - before_process)*mach_timebase_ratio*1e6,
+                (after_render - before_render)*mach_timebase_ratio*1e6,
+                (before_wait - prev_after_render)*mach_timebase_ratio*1e6,
+                (after_wait - before_wait)*mach_timebase_ratio*1e6);
+            printf("\tLast wakeup core to check ready %d\n", (l_last_check_ready - l_last_core_wakeup) * mach_timebase_ratio * 1e6);
+            printf("\tLast wait until time %d\n", last_wait_until);
+            printf("\tRequest to queue delta %f\n", (l_request_queue_time > 0 && l_last_frame_queue_time > 0)  ? (l_last_frame_queue_time - l_request_queue_time) * mach_timebase_ratio * 1e6 : -1);
+            printf("\tQueue wakeup completion time %f\n", l_last_frame_queue_time_aft > 0 ? (l_last_frame_queue_time_aft - l_last_frame_queue_time) * mach_timebase_ratio * 1e6 : -1);
+            printf("\tqueue to wakeup delta %f\n", l_last_frame_queue_time > 0 ? (after_wait - l_last_frame_queue_time) * mach_timebase_ratio * 1e6 : -1);
+        }
+
 
         pthread_mutex_lock(&in->lock);
+        int64_t now = mp_time_us();
+        int64_t delay_time = in->paused ? (int64_t)1e9 : (int64_t)1e9;
+        int64_t wait_until = now + (working ? 0 : delay_time);
         if (in->wakeup_pts) {
             if (in->wakeup_pts > now) {
                 wait_until = MPMIN(wait_until, in->wakeup_pts);
@@ -1134,12 +1197,24 @@ static void *vo_thread(void *ptr)
             vo->driver->control(vo, vo_paused ? VOCTRL_PAUSE : VOCTRL_RESUME, NULL);
         if (wait_until > now && redraw) {
             do_redraw(vo); // now is a good time
+            after_wait = before_wait = mach_absolute_time();
+            last_wait_until = 0;
             continue;
         }
         if (vo->want_redraw) // might have been set by VOCTRLs
             wait_until = 0;
 
+        before_wait = mach_absolute_time();
+
+        if (wait_until <= now) {
+            after_wait = before_wait;
+            continue;
+        }
+
         wait_vo(vo, wait_until);
+        last_wait_until = wait_until - now;
+
+        after_wait = mach_absolute_time();
     }
     forget_frames(vo); // implicitly synchronized
     talloc_free(in->current_frame);

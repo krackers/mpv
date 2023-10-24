@@ -18,6 +18,7 @@
 import Cocoa
 import OpenGL.GL
 import OpenGL.GL3
+import Darwin.Mach.mach_time
 
 let glVersions: [CGLOpenGLProfile] = [
     kCGLOGLPVersion_3_2_Core,
@@ -112,6 +113,7 @@ class VideoLayer: CAOpenGLLayer {
 
         var i: GLint = 1
         CGLSetParameter(cglContext, kCGLCPSwapInterval, &i)
+        CGLEnable(cglContext, kCGLCEMPEngine)
         CGLSetCurrentContext(cglContext)
 
         libmpv.initRender()
@@ -142,11 +144,7 @@ class VideoLayer: CAOpenGLLayer {
         if inLiveResize == false {
             isAsynchronous = false
         }
-        var shouldDraw = self.wantsUpdate
-        if (self.inLiveResize && self.libmpv.checkRenderUpdateFrame()) {
-            shouldDraw = true
-        }
-        return cocoaCB.backendState == .initialized && (shouldDraw)
+        return cocoaCB.backendState == .initialized && self.wantsUpdate
     }
 
     override func draw(inCGLContext ctx: CGLContextObj,
@@ -219,17 +217,29 @@ class VideoLayer: CAOpenGLLayer {
         displayLock.lock()
         let wantedUpdate = wantsUpdate
         // Must always call super.display() here
+
+        let bef1 = (Double(mach_absolute_time()) * 125.0)/3.0
         super.display()
+        let aft1 = (Double(mach_absolute_time()) * 125.0)/3.0
+        if ((aft1 - bef1)/1e3 > 30_000) {
+                print(String(format: "Draw time %f\n", (aft1 - bef1)/1e3))
+        }
 
         if wantedUpdate && self.wantsUpdate {
             // display() did not end up drawing, possibly because no display was ready
             CGLSetCurrentContext(cglContext)
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+            self.wantsUpdate = false
         } else if wantedUpdate && !self.wantsUpdate {
             // We successfully drew a frame, and need to flush ourselves
+            let bef = (Double(mach_absolute_time()) * 125.0)/3.0
             CATransaction.flush()
+            let aft = (Double(mach_absolute_time()) * 125.0)/3.0
+            if ((aft - bef)/1e3 > 8_000) {
+                print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
+            }
         }
-        libmpv.reportRenderFlush()
+        libmpv.reportRenderPresent()
 
         displayLock.unlock()
     }
@@ -237,7 +247,7 @@ class VideoLayer: CAOpenGLLayer {
     func update(force: Bool = false) {
         queue.async {
             self.wantsUpdate = self.libmpv.checkRenderUpdateFrame() || force
-            if self.wantsUpdate && (force || !self.inLiveResize) {
+            if self.wantsUpdate {
                 self.display()
             }
         }

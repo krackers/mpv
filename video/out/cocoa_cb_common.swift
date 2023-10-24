@@ -190,9 +190,20 @@ class CocoaCB: NSObject {
                                  _ flagsIn: CVOptionFlags,
                                 _ flagsOut: UnsafeMutablePointer<CVOptionFlags>) -> CVReturn
     {
-        // self.libmpv.reportRenderFlip()
-        timer?.scheduleAt(time: inOutputTime.pointee.hostTime, closure: {
-            self.libmpv.reportRenderFlip()
+        // For reasons I don't understand, unblocking the render flip at inNow (0.5 into vsync)
+        // results in _lower_ frame timings. But if you do so, then there are also lots of skipped frames.
+        // If you unblock at exactly vsync, then there aren't any skipped frames but page timing is high.
+        // So we compromise and unblock at 0.25 vsync, which seems to give best of both worlds?
+        // To be honest it seems like the double-buffering implemented by caopengllayer seems to
+        // be misaligned with the vsync timings somehow. So things only get unblocked like 0.2-in or something,
+        // but if you wait until 0.5 then the compositor probably fires which causes issues.
+        // Then again the net result is that addition to gpu timing includes the cpu wait time anyhow (4k us => 25% vsync interval)
+        let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
+
+        let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
+
+        timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
+            self.libmpv.reportRenderFlip(time: scheduleTime)
         })
         return kCVReturnSuccess
     }
@@ -568,12 +579,16 @@ class CocoaCB: NSObject {
             window?.close()
         }
         if isShuttingDown { return }
-
         uninit()
         setCursorVisiblility(true)
         stopDisplaylink()
         uninitLightSensor()
         removeDisplayReconfigureObserver()
+
+        // Unblock any currently blocked VO thread
+        self.libmpv.reportRenderPresent()
+        self.libmpv.reportRenderFlip(time: 0)
+
         libmpv.deinitRender()
         libmpv.deinitMPV(destroy)
     }

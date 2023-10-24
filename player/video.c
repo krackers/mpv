@@ -44,7 +44,7 @@
 
 #include "core.h"
 #include "command.h"
-#include "screenshot.h"
+#include "screenshot.h"mach_timebase_ratio*1e6 > 50000
 
 enum {
     // update_video() - code also uses: <0 error, 0 eof, >0 progress
@@ -270,7 +270,6 @@ void reinit_video_chain_src(struct MPContext *mpctx, struct track *track)
     update_screensaver_state(mpctx);
 
     vo_set_paused(vo_c->vo, mpctx->paused);
-
     // If we switch on video again, ensure audio position matches up.
     if (mpctx->ao_chain)
         mpctx->audio_status = STATUS_SYNCING;
@@ -447,6 +446,11 @@ static bool have_new_frame(struct MPContext *mpctx, bool eof)
     return mpctx->num_next_frames >= get_req_frames(mpctx, eof);
 }
 
+extern _Atomic uint64_t request_queue_time;
+extern double mach_timebase_ratio;
+extern uint64_t mach_absolute_time(void);
+
+
 // Fill mpctx->next_frames[] with a newly filtered or decoded image.
 // returns VD_* code
 static int video_output_image(struct MPContext *mpctx)
@@ -462,6 +466,8 @@ static int video_output_image(struct MPContext *mpctx)
 
     if (have_new_frame(mpctx, false))
         return VD_NEW_FRAME;
+
+    uint64_t dec_bef = mach_absolute_time();
 
     // Get a new frame if we need one.
     int r = VD_PROGRESS;
@@ -523,6 +529,13 @@ static int video_output_image(struct MPContext *mpctx)
         mpctx->saved_frame = NULL;
         r = VD_PROGRESS;
     }
+
+    uint64_t dec_aft = mach_absolute_time();
+    double dec_time = (dec_aft - dec_bef) * mach_timebase_ratio * 1e6;
+    if (dec_time > 16000) {
+        printf("Dec time %f\n", dec_time);
+    }
+
 
     return have_new_frame(mpctx, r <= 0) ? VD_NEW_FRAME : r;
 }
@@ -969,8 +982,27 @@ static void calculate_frame_duration(struct MPContext *mpctx)
     MP_STATS(mpctx, "value %f frame-duration-approx", MPMAX(0, approx_duration));
 }
 
+uint64_t write_video_start = 0;
+uint64_t video_after_output_image = 0;
+uint64_t video_after_eof_check = 0;
+uint64_t video_after_params_check = 0;
+uint64_t video_after_ready_for_frame = 0;
+uint64_t video_after_schedule_frame = 0;
+uint64_t video_after_update_osd_msg = 0;
+uint64_t video_after_final_wakeup = 0;
+
 void write_video(struct MPContext *mpctx)
 {
+    write_video_start = video_after_output_image = video_after_eof_check = video_after_params_check = video_after_ready_for_frame = video_after_update_osd_msg = video_after_schedule_frame = video_after_final_wakeup = 0;
+    write_video_start = mach_absolute_time();
+
+    if (mpctx->paused) {
+        request_queue_time = 0;
+    }
+    if (request_queue_time > 0 && ((mach_absolute_time() - request_queue_time) * mach_timebase_ratio * 1e6) > 20000) {
+        printf("Request queue to write_video start %f\n", (mach_absolute_time() - request_queue_time) * mach_timebase_ratio * 1e6);
+    }
+
     struct MPOpts *opts = mpctx->opts;
 
     if (!mpctx->vo_chain)
@@ -993,12 +1025,17 @@ void write_video(struct MPContext *mpctx)
 
     int r = video_output_image(mpctx);
     MP_TRACE(mpctx, "video_output_image: %d\n", r);
+    video_after_output_image = mach_absolute_time();
 
     if (r < 0)
         goto error;
 
-    if (r == VD_WAIT) // Demuxer will wake us up for more packets to decode.
+    if (r == VD_WAIT) { // Demuxer will wake us up for more packets to decode.
+        if (request_queue_time > 0) {
+            printf("VD Wait\n");
+        }
         return;
+    }   
 
     if (r == VD_EOF) {
         if (check_for_hwdec_fallback(mpctx))
@@ -1046,10 +1083,15 @@ void write_video(struct MPContext *mpctx)
         return;
     }
 
+    video_after_eof_check = mach_absolute_time();
+
     if (mpctx->video_status > STATUS_PLAYING)
         mpctx->video_status = STATUS_PLAYING;
 
     if (r != VD_NEW_FRAME) {
+        if (request_queue_time > 0) {
+            printf("No new frame from decoder\n");
+        }
         mp_wakeup_core(mpctx); // Decode more in next iteration.
         return;
     }
@@ -1058,8 +1100,12 @@ void write_video(struct MPContext *mpctx)
     struct mp_image_params p = mpctx->next_frames[0]->params;
     if (!vo->params || !mp_image_params_equal(&p, vo->params)) {
         // Changing config deletes the current frame; wait until it's finished.
-        if (vo_still_displaying(vo))
+        if (vo_still_displaying(vo)) {
+            if (request_queue_time > 0) {
+                printf("VO Still displaying\n");
+            }
             return;
+        }
 
         const struct vo_driver *info = mpctx->video_out->driver;
         char extra[20] = {0};
@@ -1083,6 +1129,8 @@ void write_video(struct MPContext *mpctx)
         mp_notify(mpctx, MPV_EVENT_VIDEO_RECONFIG, NULL);
     }
 
+    video_after_params_check = mach_absolute_time();
+
     mpctx->time_frame -= get_relative_time(mpctx);
     update_avsync_before_frame(mpctx);
 
@@ -1090,6 +1138,7 @@ void write_video(struct MPContext *mpctx)
     osd_set_force_video_pts(mpctx->osd, MP_NOPTS_VALUE);
 
     if (!update_subtitles(mpctx, mpctx->next_frames[0]->pts)) {
+        printf("Video frame delayed due to waiting on subtitles.\n");
         MP_VERBOSE(mpctx, "Video frame delayed due to waiting on subtitles.\n");
         return;
     }
@@ -1100,8 +1149,14 @@ void write_video(struct MPContext *mpctx)
     // wait until VO wakes us up to get more frames
     // (NB: in theory, the 1st frame after display sync mode change uses the
     //      wrong waiting mode)
-    if (!vo_is_ready_for_frame(vo, mpctx->display_sync_active ? -1 : pts))
+    if (!vo_is_ready_for_frame(vo, mpctx->display_sync_active ? -1 : pts)) {
+        if (request_queue_time > 0) {
+            printf("Not ready for new frame\n");
+        }
         return;
+    }
+
+    video_after_ready_for_frame = mach_absolute_time();
 
     assert(mpctx->num_next_frames >= 1);
 
@@ -1149,10 +1204,20 @@ void write_video(struct MPContext *mpctx)
 
     schedule_frame(mpctx, frame);
 
+    video_after_schedule_frame = mach_absolute_time();
+
     mpctx->osd_force_update = true;
     update_osd_msg(mpctx);
 
+    video_after_update_osd_msg = mach_absolute_time();
+
+    uint64_t bef = mach_absolute_time();
     vo_queue_frame(vo, frame);
+    double ddelay = (mach_absolute_time() - request_queue_time) * mach_timebase_ratio*1e6;
+    if (request_queue_time > 0 && ddelay > 20000) {
+        printf("signal want to queueing delay %f | vo_queue_frame delay %f\n", ddelay, (mach_absolute_time() - bef) * mach_timebase_ratio * 1e6);
+    }
+    request_queue_time = 0;
 
     check_framedrop(mpctx, vo_c);
 
@@ -1189,6 +1254,7 @@ void write_video(struct MPContext *mpctx)
     }
 
     mp_wakeup_core(mpctx);
+    video_after_final_wakeup = mach_absolute_time();
     return;
 
 error:

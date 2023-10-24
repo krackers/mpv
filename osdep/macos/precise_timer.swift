@@ -72,8 +72,8 @@ class PreciseTimer {
         let period = periodSeconds * nanoPerSecond / machToNano
         var policy = thread_time_constraint_policy(
             period: UInt32(period),
-            computation: UInt32(0.75 * period),
-            constraint: UInt32(0.85 * period),
+            computation: UInt32(0.1 * period),
+            constraint: UInt32(period),
             preemptible: 1
         )
 
@@ -130,6 +130,7 @@ class PreciseTimer {
 
     func entry() {
         signal(SIGALRM, threadSignal)
+        pthread_setname_np("SwiftPreciseTimer")
 
         while isRunning {
             condition.lock()

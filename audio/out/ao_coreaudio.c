@@ -81,7 +81,13 @@ static OSStatus render_cb_lpcm(void *ctx, AudioUnitRenderActionFlags *aflags,
 
     int64_t end = mp_time_us();
     end += p->hw_latency_us + ca_get_latency(ts) + ca_frames_to_us(ao, frames);
-    ao_read_data(ao, planes, frames, end);
+    int samples = ao_read_data(ao, planes, frames, end);
+
+    if (samples == 0)
+        *aflags |= kAudioUnitRenderAction_OutputIsSilence;
+
+    for (int n = 0; n < buffer_list->mNumberBuffers; n++)
+        buffer_list->mBuffers[n].mDataByteSize = samples * ao->sstride;
     return noErr;
 }
 

@@ -409,7 +409,7 @@ void vo_cocoa_init(struct vo *vo)
     cocoa_add_screen_reconfiguration_observer(vo);
     cocoa_add_event_monitor(vo);
 
-    s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES];
+    s->precise_timer = [[TPPreciseTimer alloc] initWithSpinLock:0 spinLockSleepRatio: 0 highPrecision: YES log: vo->log];
     s->pending_swaps = 0;
 
     if (!s->embedded) {
@@ -842,45 +842,52 @@ static void vo_cocoa_resize_redraw(struct vo *vo, int width, int height)
 
 #include <mach/mach_time.h>
 #include <sched.h>
-
 #include <mach/mach_init.h>
 #include <mach/thread_policy.h>
 #include <pthread.h>
 
-int set_realtime(int period, int computation, int constraint) {
-    // struct thread_time_constraint_policy ttcpolicy;
-    int ret;
-    // thread_port_t threadport = pthread_mach_thread_np(pthread_self());
-
-    // struct sched_param param;
-    // param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    int err;
-    // if ((err = pthread_setschedparam(pthread_self(), SCHED_FIFO, &param)) != 0) {
-    //     printf("Failed to set fifo priority, got err %d\n");
-    // }
-
+int cocoa_set_qosClass(struct mp_log *log, unsigned int priority) {
     // Calls to interfaces such as pthread_setschedparam() that are
     // incompatible or in conflict with the QOS class system will unset the QOS
     // class requested with this interface and pthread_get_qos_class_np() will
     // return QOS_CLASS_UNSPECIFIED thereafter. A thread so modified is permanently
     // opted-out of the QOS class system and calls to this function to request a QOS
     // class for such a thread will fail and return EPERM.
-    
-    if ((err = pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0)) != 0) {
-        printf("Failed to set qos, got err %d\n", err);
+    char tname[20];
+    pthread_getname_np(pthread_self(), tname, 20);
+    mp_verbose(log, "Setting thread %s to QoS class %d\n", tname, priority);
+    int err;
+    if ((err = pthread_set_qos_class_self_np(priority, 0)) != 0) {
+        mp_warn(log, "Failed to set qos, got err %d\n", err);
+        return 0;
     }
+    return 1;
+}
 
-    // ttcpolicy.period=period; // HZ/160
-    // ttcpolicy.computation=computation; // HZ/3300;
-    // ttcpolicy.constraint=constraint; // HZ/2200;
-    // ttcpolicy.preemptible=1;
+int cocoa_set_realtime(struct mp_log *log, double periodFraction) {
+    char tname[20];
+    pthread_getname_np(pthread_self(), tname, 20);
+    mp_verbose(log, "Setting thread %s to realtime of fraction %f.\n", tname, periodFraction);
 
-    // if ((ret=thread_policy_set(threadport,
-    //     THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
-    //     THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
-    //         fprintf(stderr, "set_realtime() failed.\n");
-    //         return 0;
-    // }
+    double period = (1/(60.0*4)) * CVGetHostClockFrequency();
+    double computation = period * periodFraction;
+    double constraint = period;
+
+    struct thread_time_constraint_policy ttcpolicy;
+    int ret;
+    thread_port_t threadport = pthread_mach_thread_np(pthread_self());
+
+    ttcpolicy.period=period;
+    ttcpolicy.computation=computation;
+    ttcpolicy.constraint=constraint;
+    ttcpolicy.preemptible=1;
+
+    if ((ret=thread_policy_set(threadport,
+        THREAD_TIME_CONSTRAINT_POLICY, (thread_policy_t)&ttcpolicy,
+        THREAD_TIME_CONSTRAINT_POLICY_COUNT)) != KERN_SUCCESS) {
+            mp_warn(log, "Failed to set realtime policy, err %d.\n", ret);
+            return 0;
+    }
     return 1;
 }
 
@@ -909,12 +916,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
     // Fourth bit determines whether precise timer should be used.
     if ((s->swap_interval >> 3 & 1) && !realtime) {
         // See https://github.com/hooleyhoop/HooleyBits/blob/master/thread_time_constraint_policy/Thread_time_constraint_policy.m
-        realtime = 1;
-		double conv = 3.0/125.0;
-        // We set the period to be thrice what we need, to ensure we get called close to a vsync
-		double period = (1/(59.95)) * 1e9 * conv;
-        // Basically we want to be woken up as close as possible to swap
-		set_realtime(period, period * 0.75, period * 0.85);
+        cocoa_set_realtime(vo->log, 0.8);
     }
  
 
