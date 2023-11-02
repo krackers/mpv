@@ -576,9 +576,11 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
  *
  * @param ctx a valid render context
  */
-void mpv_render_context_report_swap(mpv_render_context *ctx);
+void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time);
 
 void mpv_render_context_report_flush(mpv_render_context *ctx);
+
+void mpv_render_context_report_present(mpv_render_context *ctx);
 
 /**
  * Destroy the mpv renderer state.
