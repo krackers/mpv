@@ -7,6 +7,7 @@
 //
 
 #import <Foundation/Foundation.h>
+#include "common/msg.h"
 
 @interface TPPreciseTimer : NSObject {
     double timebase_ratio;
@@ -17,7 +18,7 @@
     BOOL isRunning;
 }
 
-- (id)initWithSpinLock:(double)spinLock spinLockSleepRatio:(int)sleep highPrecision:(BOOL)pre;
+- (id)initWithSpinLock:(double)spinLock spinLockSleepRatio:(int)sleep highPrecision:(BOOL)pre log:(struct mp_log *)log;
 - (void)scheduleBlock:(void (^)(void))block atTime:(UInt64)time;
 - (int) terminate;
 

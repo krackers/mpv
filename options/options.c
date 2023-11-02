@@ -365,6 +365,16 @@ const m_option_t mp_opts[] = {
                 {"belownormal", BELOW_NORMAL_PRIORITY_CLASS},
                 {"idle",        IDLE_PRIORITY_CLASS})),
 #endif
+#ifdef __APPLE__
+    OPT_CHOICE("priority", w32_priority, UPDATE_PRIORITY,
+               ({"no",          0},
+                {"realtime",    -1},
+                {"high",        QOS_CLASS_USER_INTERACTIVE},
+                {"abovenormal", QOS_CLASS_USER_INITIATED},
+                {"normal",      0},
+                {"belownormal", 0},
+                {"idle",        0})),
+#endif
     OPT_FLAG("config", load_config, M_OPT_FIXED | CONF_PRE_PARSE),
     OPT_STRING("config-dir", force_configdir,
                M_OPT_FIXED | CONF_NOCFG | CONF_PRE_PARSE | M_OPT_FILE),

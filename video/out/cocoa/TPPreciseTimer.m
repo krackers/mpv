@@ -15,19 +15,25 @@
 static NSString *kTimeKey = @"time";
 static NSString *kBlockKey = @"block";
 
+extern int cocoa_set_realtime(struct mp_log *log, double periodFraction);
+
 @interface TPPreciseTimer () {
     double _spinLockTime;
     int _spinLockSleepRatio;
+    bool _precision;
+    struct mp_log *_log;
 }
 @end
 
 @implementation TPPreciseTimer
 
-- (id)initWithSpinLock:(double)spinLock spinLockSleepRatio:(int)sleep highPrecision:(BOOL)pre {
+- (id) initWithSpinLock:(double)spinLock spinLockSleepRatio:(int)sleep highPrecision:(BOOL)pre log:(struct mp_log *)log {
     if ( !(self = [super init]) ) return nil;
     
     _spinLockTime = spinLock;
     _spinLockSleepRatio = sleep;
+    _precision = pre;
+    _log = log;
 
     self->isRunning = YES;
 
@@ -40,34 +46,13 @@ static NSString *kBlockKey = @"block";
     
     pthread_attr_t attr;
     pthread_attr_init(&attr);
-    struct sched_param param;
-    param.sched_priority = sched_get_priority_max(SCHED_FIFO);
-    pthread_attr_setschedparam(&attr, &param);
-    pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
+    // This is unneeded since real-time already puts it into a fixed priority bucket.
+    // struct sched_param param;
+    // param.sched_priority = sched_get_priority_max(SCHED_FIFO);
+    // pthread_attr_setschedparam(&attr, &param);
+    // pthread_attr_setschedpolicy(&attr, SCHED_FIFO);
     pthread_create(&thread, &attr, thread_entry, (__bridge void*)self);
-    
-    if (pre) {
-        struct thread_time_constraint_policy ttcpolicy;
-        thread_port_t threadport = pthread_mach_thread_np(thread);
-        
-		double conv = 3.0/125.0;
-        // We set the period to be thrice what we need, to ensure we get called close to a vsync
-		double period = (1/(59.95)) * 1e9 * conv;
 
-        ttcpolicy.period=period;
-        ttcpolicy.computation=0.75*period;
-        ttcpolicy.constraint=0.85*period;
-        ttcpolicy.preemptible=1;
-        
-        int ret = thread_policy_set(threadport, THREAD_TIME_CONSTRAINT_POLICY,
-                                    (thread_policy_t)&ttcpolicy, THREAD_TIME_CONSTRAINT_POLICY_COUNT);
-        if (ret != KERN_SUCCESS) {
-            printf("highPrecision failed.\n");
-        } else {
-            printf("highPrecision success.\n");
-        }
-    }
-    
     return self;
 }
 
@@ -114,6 +99,11 @@ void thread_signal(int signal) {
 }
 
 - (void)thread {
+    pthread_setname_np("TPPreciseTimer");
+    if (_precision) {
+        cocoa_set_realtime(_log, 0.1);
+    }
+
     signal(SIGALRM, thread_signal);
     [condition lock];
 

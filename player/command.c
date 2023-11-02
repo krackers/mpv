@@ -6214,12 +6214,25 @@ void mp_notify(struct MPContext *mpctx, int event, void *arg)
     mp_client_broadcast_event(mpctx, event, arg);
 }
 
+#ifdef __APPLE__
+extern int cocoa_set_qosClass(struct mp_log *log, unsigned int priority);
+int cocoa_set_realtime(struct mp_log *log, double fraction);
+#endif
+
 static void update_priority(struct MPContext *mpctx)
 {
-#if HAVE_WIN32_DESKTOP
     struct MPOpts *opts = mpctx->opts;
+#if HAVE_WIN32_DESKTOP
     if (opts->w32_priority > 0)
         SetPriorityClass(GetCurrentProcess(), opts->w32_priority);
+#endif
+#ifdef __APPLE__
+    if (opts->w32_priority > 0) {
+        cocoa_set_qosClass(mpctx->log, opts->w32_priority);
+    } else if (opts->w32_priority == -1) {
+        // This includes decoding time which is usually about ~8000.
+        cocoa_set_realtime(mpctx->log, 0.5);
+    }
 #endif
 }
 
