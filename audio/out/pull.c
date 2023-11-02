@@ -153,8 +153,9 @@ int ao_read_data(struct ao *ao, void **data, int samples, int64_t out_time_us)
     int buffered_bytes = mp_ring_buffered(p->buffers[0]);
     bytes = MPMIN(buffered_bytes, full_bytes);
 
-    if (buffered_bytes < bytes && !atomic_load(&p->draining))
-        atomic_fetch_add(&p->underflow, (bytes - buffered_bytes) / ao->sstride);
+    // Fixed from https://github.com/mpv-player/mpv/commit/89c717559b4b162fecc581190774907922609e91
+    if (full_bytes > bytes && !atomic_load(&p->draining))
+        atomic_fetch_add(&p->underflow, (full_bytes - bytes) / ao->sstride);
 
     if (bytes > 0)
         atomic_store(&p->end_time_us, out_time_us);
