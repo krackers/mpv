@@ -80,10 +80,12 @@ struct mpv_render_context {
 
     // --- Protected by lock
     struct vo_frame *next_frame;    // next frame to draw
-    int64_t present_count;          // incremented when next frame can be shown
+    int64_t render_count;          // incremented when next frame can be shown
     int64_t flush_count;          // incremented when client does glFlush() for drawable
+    int64_t present_count;
     int64_t expected_flip_count;    // next vsync event for next_frame
     int64_t expected_flush_count;  
+    int64_t expected_present_count;
     int pending_swap_count;
     bool redrawing;                 // next_frame was a redraw request
     int64_t flip_count;
@@ -387,11 +389,11 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
     ctx->need_reset = false;
 
     struct vo_frame *frame = ctx->next_frame;
-    int64_t wait_present_count = ctx->present_count;
+    int64_t wait_render_count = ctx->render_count;
     if (frame) {
         ctx->next_frame = NULL;
         if (!(frame->redraw || !frame->current))
-            wait_present_count += 1;
+            wait_render_count += 1;
         pthread_cond_broadcast(&ctx->video_wait);
         talloc_free(ctx->cur_frame);
         ctx->cur_frame = vo_frame_ref(frame);
@@ -421,7 +423,7 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
                              int, 1))
     {
         pthread_mutex_lock(&ctx->lock);
-        while (wait_present_count > ctx->present_count)
+        while (wait_render_count > ctx->render_count)
             pthread_cond_wait(&ctx->video_wait, &ctx->lock);
         pthread_mutex_unlock(&ctx->lock);
     }
@@ -429,7 +431,7 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
     return err;
 }
 
-void mpv_render_context_report_swap(mpv_render_context *ctx)
+void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
 {
     MP_STATS(ctx, "glcb-reportflip");
 
@@ -437,16 +439,20 @@ void mpv_render_context_report_swap(mpv_render_context *ctx)
     ctx->flip_count += 1;
     ctx->pending_swap_count = MPMAX(ctx->pending_swap_count - 1, 0);
 
-    uint64_t now = mp_time_us();
+    uint64_t vsync_time = (time > 0 ? mp_time_us() - (mp_raw_time_us() - time) : mp_time_us());
 
     if (ctx->last_vsync_time > 0) {
-        ctx->vsync_interval = ctx->vsync_interval > 0 ? (now - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : now - ctx->last_vsync_time;
+        ctx->vsync_interval = ctx->vsync_interval > 0 ? (vsync_time - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : vsync_time - ctx->last_vsync_time;
+    }
+
+    if (vsync_time - ctx->last_vsync_time > 17000) {
+        printf("Report swap clock skew, got %llu\n", vsync_time - ctx->last_vsync_time);
     }
     
-    ctx->last_vsync_time = now;
-    
-    pthread_cond_broadcast(&ctx->video_wait);
+    ctx->last_vsync_time = vsync_time;
+
     pthread_mutex_unlock(&ctx->lock);
+    pthread_cond_broadcast(&ctx->video_wait);
 }
 
 void mpv_render_context_report_flush(mpv_render_context *ctx)
@@ -455,9 +461,20 @@ void mpv_render_context_report_flush(mpv_render_context *ctx)
 
     pthread_mutex_lock(&ctx->lock);
     ctx->flush_count += 1;
-    ctx->pending_swap_count += 1;
-    pthread_cond_broadcast(&ctx->video_wait);
     pthread_mutex_unlock(&ctx->lock);
+    pthread_cond_broadcast(&ctx->video_wait);
+
+}
+
+void mpv_render_context_report_present(mpv_render_context *ctx)
+{
+    MP_STATS(ctx, "glcb-reportpresent");
+
+    pthread_mutex_lock(&ctx->lock);
+    ctx->present_count += 1;
+    pthread_mutex_unlock(&ctx->lock);
+    pthread_cond_broadcast(&ctx->video_wait);
+
 }
 
 uint64_t mpv_render_context_update(mpv_render_context *ctx)
@@ -519,20 +536,23 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     ctx->next_frame = vo_frame_ref(frame);
     ctx->expected_flip_count = ctx->flip_count + 1;
     ctx->expected_flush_count = ctx->flush_count + 1;
+    ctx->expected_present_count = ctx->present_count + 1;
     ctx->redrawing = frame->redraw || !frame->current;
     pthread_mutex_unlock(&ctx->lock);
 
     update(ctx);
 }
 
+extern uint64_t mach_absolute_time(void);
+
 static void flip_page(struct vo *vo)
 {
     struct vo_priv *p = vo->priv;
     struct mpv_render_context *ctx = p->ctx;
-    struct timespec ts = mp_rel_time_to_timespec(0.2);
 
     pthread_mutex_lock(&ctx->lock);
 
+    struct timespec ts = mp_rel_time_to_timespec(0.2);
     // Wait until frame was rendered
     while (ctx->next_frame) {
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
@@ -545,14 +565,16 @@ static void flip_page(struct vo *vo)
     }
 
     // Unblock mpv_render_context_render().
-    ctx->present_count += 1;
+    ctx->render_count += 1;
     pthread_cond_broadcast(&ctx->video_wait);
 
     if (ctx->redrawing)
         goto done; // do not block for redrawing
 
-    
-    
+    uint64_t bef = ctx->last_presentation_time;
+    uint64_t befvsync = ctx->last_vsync_time;
+
+    uint64_t flush_bef = mach_absolute_time();
     while (ctx->expected_flush_count > ctx->flush_count) {
         if (!ctx->flush_count)
             break;
@@ -561,6 +583,20 @@ static void flip_page(struct vo *vo)
             goto done;
         }
     }
+    while (ctx->expected_present_count > ctx->present_count) {
+        if (!ctx->present_count)
+            break;
+        if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
+            printf("Bail on present\n");
+            MP_VERBOSE(vo, "mpv_render_report_present() not being called.\n");
+            goto done;
+        }
+    }
+    ctx->pending_swap_count += 1;
+
+    uint64_t flush_aft = mach_absolute_time();
+    uint64_t befvsync2 = ctx->last_vsync_time;
+    int pswap = ctx->pending_swap_count;
 
     // Wait for next vsync after flush
     // int64_t flp_count_before_flush = ctx->flip_count;
@@ -570,20 +606,29 @@ static void flip_page(struct vo *vo)
         if (!ctx->flip_count)
             break;
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
+            printf("Bail on swap\n");
             MP_VERBOSE(vo, "mpv_render_report_swap() not being called.\n");
             goto done;
         }
     }
+    uint64_t swap_aft = mach_absolute_time();
     ctx->last_presentation_time = ctx->last_vsync_time + ctx->pending_swap_count * ctx->vsync_interval;
+    uint64_t aft = ctx->last_presentation_time;
+    if ((aft - bef) > 17000) {
+        printf("vo_libmpv flip time %llu, aft %llu, bef %llu, vsync diff %llu, interval %llu\n", (aft - bef), aft, bef, ctx->last_vsync_time - befvsync, ctx->vsync_interval);
+        printf("\tvo: flush diff %.1f, swap diff (host time) %.1f, swap diff (vsync time) %llu\n", (flush_aft - flush_bef)*(125.0/3)/1e3, (swap_aft - flush_aft)*(125.0/3)/1e3, ctx->last_vsync_time - befvsync2);
+        printf("\t prev pending swap %d\n", pswap);
+    }
 
 done:
 
     // Cleanup after the API user is not reacting, or is being unusually slow.
     if (ctx->next_frame) {
+        printf("Render timeout\n");
         talloc_free(ctx->cur_frame);
         ctx->cur_frame = ctx->next_frame;
         ctx->next_frame = NULL;
-        ctx->present_count += 2;
+        ctx->render_count += 2;
         ctx->last_presentation_time = 0;
         pthread_cond_signal(&ctx->video_wait);
         vo_increment_drop_count(vo, 1);
@@ -749,6 +794,10 @@ static void uninit(struct vo *vo)
     pthread_mutex_unlock(&ctx->lock);
 }
 
+#import <pthread.h>
+
+extern int cocoa_set_realtime(struct mp_log *log, double fraction);
+
 static int preinit(struct vo *vo)
 {
     struct vo_priv *p = vo->priv;
@@ -771,6 +820,7 @@ static int preinit(struct vo *vo)
 
     vo->hwdec_devs = ctx->hwdec_devs;
     control(vo, VOCTRL_PREINIT, NULL);
+    cocoa_set_realtime(vo->log, 0.2);
 
     return 0;
 }

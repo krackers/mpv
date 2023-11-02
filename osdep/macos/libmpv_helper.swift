@@ -102,14 +102,19 @@ class LibmpvHelper: LogHelper {
         }
     }
 
-    func reportRenderFlip() {
+    func reportRenderFlip(time: UInt64) {
         if mpvRenderContext == nil { return }
-        mpv_render_context_report_swap(mpvRenderContext)
+        mpv_render_context_report_swap(mpvRenderContext, time)
     }
 
     func reportRenderFlush() {
         if mpvRenderContext == nil { return }
         mpv_render_context_report_flush(mpvRenderContext)
+    }
+
+    func reportRenderPresent() {
+        if mpvRenderContext == nil { return }
+        mpv_render_context_report_present(mpvRenderContext)
     }
 
     func checkRenderUpdateFrame() -> Bool {
@@ -153,6 +158,7 @@ class LibmpvHelper: LogHelper {
         }
 
         if !skip { CGLFlushDrawable(ctx) }
+        // self.reportRenderFlush()
 
         deinitLock.unlock()
     }
