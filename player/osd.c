@@ -477,9 +477,22 @@ static void add_seek_osd_messages(struct MPContext *mpctx)
     mpctx->add_osd_seek_info = 0;
 }
 
+uint64_t osd_before = 0;
+uint64_t osd_after_seek_messages = 0;
+uint64_t osd_after_set_text = 0;
+uint64_t osd_after_print = 0;
+uint64_t osd_after_term_updates = 0;
+uint64_t osd_end = 0;
+
+extern uint64_t mach_absolute_time(void);
+
 // Update the OSD text (both on VO and terminal status line).
 void update_osd_msg(struct MPContext *mpctx)
 {
+    osd_before = osd_after_seek_messages = osd_after_term_updates = osd_after_set_text = osd_after_print = osd_end = 0;
+
+    osd_before = mach_absolute_time();
+
     struct MPOpts *opts = mpctx->opts;
     struct osd_state *osd = mpctx->osd;
 
@@ -546,14 +559,24 @@ void update_osd_msg(struct MPContext *mpctx)
 
     add_seek_osd_messages(mpctx);
 
+    osd_after_seek_messages = mach_absolute_time();
+
     if (mpctx->osd_progbar.type == OSD_BAR_SEEK) {
         double pos = get_current_pos_ratio(mpctx, false);
         update_osd_bar(mpctx, OSD_BAR_SEEK, 0, 1, MPCLAMP(pos, 0, 1));
     }
 
     term_osd_set_text_lazy(mpctx, mpctx->osd_msg_text);
+
+    osd_after_set_text = mach_absolute_time();
+
     term_osd_print_status_lazy(mpctx);
+
+    osd_after_print = mach_absolute_time();
+
     term_osd_update(mpctx);
+
+    osd_after_term_updates = mach_absolute_time();
 
     if (!opts->video_osd)
         return;
@@ -570,4 +593,6 @@ void update_osd_msg(struct MPContext *mpctx)
     }
     osd_set_text(osd, text);
     talloc_free(text);
+
+    osd_end = mach_absolute_time();
 }

@@ -1108,12 +1108,51 @@ static void handle_eof(struct MPContext *mpctx)
     }
 }
 
+static uint64_t last_playloop_time = 0;
+extern uint64_t mach_absolute_time(void);
+extern double mach_timebase_ratio;
+extern _Atomic uint64_t request_queue_time;
+
+extern uint64_t write_video_start;
+extern uint64_t video_after_output_image;
+extern uint64_t video_after_eof_check;
+extern uint64_t video_after_params_check;
+extern uint64_t video_after_ready_for_frame;
+extern uint64_t video_after_schedule_frame;
+extern uint64_t video_after_update_osd_msg;
+extern uint64_t video_after_final_wakeup;
+
+extern uint64_t osd_before;
+extern uint64_t osd_after_seek_messages;
+extern uint64_t osd_after_set_text;
+extern uint64_t osd_after_print;
+extern uint64_t osd_after_term_updates;
+extern uint64_t osd_end;
+
+
+static int print_stats = 0;
 void run_playloop(struct MPContext *mpctx)
 {
+
+    uint64_t now = mach_absolute_time();
+    if (!mpctx->paused && (now - last_playloop_time)*mach_timebase_ratio*1e6 > 50000) {
+         printf("Playloop delta: %f\n", (now - last_playloop_time)*mach_timebase_ratio*1e6);   
+         print_stats = 1;
+    }
+    last_playloop_time = now;
+
+    uint64_t rr = request_queue_time;
+    if (!mpctx->paused && rr > 0 && now > rr && ((now - rr) * mach_timebase_ratio * 1e6) > 20000) {
+        printf("Request queue to playloop start %f\n", (now - rr) * mach_timebase_ratio * 1e6);
+        print_stats = 1;
+    }
+
     if (encode_lavc_didfail(mpctx->encode_lavc_ctx)) {
         mpctx->stop_play = PT_QUIT;
         return;
     }
+
+    uint64_t update_demux_bef = mach_absolute_time();
 
     update_demuxer_properties(mpctx);
 
@@ -1124,22 +1163,57 @@ void run_playloop(struct MPContext *mpctx)
     if (mpctx->lavfi && mp_filter_has_failed(mpctx->lavfi))
         mpctx->stop_play = AT_END_OF_FILE;
 
+    uint64_t handle_command_update_after = mach_absolute_time();
+
     fill_audio_out_buffers(mpctx);
+
+    uint64_t fill_audio_out_after = mach_absolute_time();
+
+    rr = request_queue_time;
+    if (!mpctx->paused && rr > 0 && (fill_audio_out_after > rr) && ((fill_audio_out_after - rr) * mach_timebase_ratio * 1e6) > 20000) {
+        printf("Request queue to after fill audio out buffer %f\n", (fill_audio_out_after - rr) * mach_timebase_ratio * 1e6);
+        print_stats = 1;
+    }
+
     write_video(mpctx);
+
+    uint64_t saved_osd_before = osd_before;
+    uint64_t saved_osd_after_seek_messages = osd_after_seek_messages;
+    uint64_t saved_osd_after_set_text = osd_after_set_text;
+    uint64_t saved_osd_after_print = osd_after_print;
+    uint64_t saved_osd_after_term_updates = osd_after_term_updates;
+    uint64_t saved_osd_end = osd_end;
+
+    uint64_t write_video_after = mach_absolute_time();
 
     handle_delayed_audio_seek(mpctx);
 
+    uint64_t handle_delayed_audio_seek_after = mach_absolute_time();
+
     handle_playback_restart(mpctx);
+
+    uint64_t handle_playback_restart_after = mach_absolute_time();
 
     handle_playback_time(mpctx);
 
+    uint64_t handle_playback_time_after = mach_absolute_time();
+
     handle_dummy_ticks(mpctx);
 
+    uint64_t handle_dummy_ticks_after = mach_absolute_time();
+
     update_osd_msg(mpctx);
+
+    uint64_t update_osd_msg_after = mach_absolute_time();
+
     if (mpctx->video_status == STATUS_EOF)
         update_subtitles(mpctx, mpctx->playback_pts);
 
+    uint64_t update_subtitles_after = mach_absolute_time();
+
     handle_eof(mpctx);
+
+    uint64_t handle_eof_after = mach_absolute_time();
 
     handle_loop_file(mpctx);
 
@@ -1147,26 +1221,76 @@ void run_playloop(struct MPContext *mpctx)
 
     handle_sstep(mpctx);
 
+    uint64_t handle_sstep_after = mach_absolute_time();
+
     update_core_idle_state(mpctx);
 
     if (mpctx->stop_play)
         return;
 
+    uint64_t update_core_idle_after = mach_absolute_time();
+
     handle_osd_redraw(mpctx);
+
+    uint64_t handle_osd_redraw_after = mach_absolute_time();
 
     if (mp_filter_run(mpctx->filter_root))
         mp_wakeup_core(mpctx);
     mp_wait_events(mpctx);
 
+    uint64_t handle_wait_events_after = mach_absolute_time();
+
     handle_pause_on_low_cache(mpctx);
 
+    uint64_t handle_pause_low_cache = mach_absolute_time();
+
     mp_process_input(mpctx);
+
+    uint64_t handle_process_input_after = mach_absolute_time();
 
     handle_chapter_change(mpctx);
 
     handle_force_window(mpctx, false);
 
     execute_queued_seek(mpctx);
+
+    uint64_t handle_queued_seek_after = mach_absolute_time();
+
+    rr = request_queue_time;
+    if (print_stats || 
+        (!mpctx->paused && (handle_queued_seek_after - last_playloop_time)*mach_timebase_ratio*1e6 > 50000) ||
+        (!mpctx->paused && rr > 0 && (handle_queued_seek_after > rr) && ((handle_queued_seek_after - rr) * mach_timebase_ratio * 1e6) > 20000)) {   
+         printf("\tUpdate demux time %f\n", (handle_command_update_after - update_demux_bef)*mach_timebase_ratio*1e6);   
+         printf("\tFill audio out time %f\n", (fill_audio_out_after - handle_command_update_after)*mach_timebase_ratio*1e6);   
+         printf("\tWrite video %f\n", (write_video_after - fill_audio_out_after)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter output %f\n", (video_after_output_image - write_video_start)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter eof check %f\n", (video_after_eof_check - video_after_output_image)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter params check %f\n", (video_after_params_check - video_after_eof_check)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter ready for frame %f\n", (video_after_ready_for_frame - video_after_params_check)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter schedule frame %f\n", (video_after_schedule_frame - video_after_ready_for_frame)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter update osd msg %f\n", (video_after_update_osd_msg - video_after_schedule_frame)*mach_timebase_ratio*1e6);   
+         printf("\t\t\tAfter osd seek messages %f\n", (saved_osd_after_seek_messages - saved_osd_before)*mach_timebase_ratio*1e6);   
+         printf("\t\t\tAfter osd set text %f\n", (saved_osd_after_set_text - saved_osd_after_seek_messages)*mach_timebase_ratio*1e6);   
+         printf("\t\t\tAfter osd print %f\n", (saved_osd_after_print - saved_osd_after_set_text)*mach_timebase_ratio*1e6);   
+         printf("\t\t\tAfter osd update %f\n", (saved_osd_after_term_updates - saved_osd_after_print)*mach_timebase_ratio*1e6);   
+         printf("\t\t\tTo OSD end %f\n", (saved_osd_end - saved_osd_after_term_updates)*mach_timebase_ratio*1e6);   
+         printf("\t\tAfter final wakeup %f\n", (video_after_final_wakeup - video_after_update_osd_msg)*mach_timebase_ratio*1e6);   
+         printf("\tHandle delayed audio seek %f\n", (handle_delayed_audio_seek_after - write_video_after)*mach_timebase_ratio*1e6);
+         printf("\tHandle playback restart %f\n", (handle_playback_restart_after - handle_delayed_audio_seek_after)*mach_timebase_ratio*1e6);
+         printf("\tHandle playback time %f\n", (handle_playback_time_after - handle_playback_restart_after)*mach_timebase_ratio*1e6);
+         printf("\tHandle dummy ticks %f\n", (handle_dummy_ticks_after - handle_playback_time_after)*mach_timebase_ratio*1e6);
+         printf("\tHandle osd msg %f\n", (update_osd_msg_after - handle_dummy_ticks_after)*mach_timebase_ratio*1e6);
+         printf("\tUpdate subtitles %f\n", (update_subtitles_after - update_osd_msg_after)*mach_timebase_ratio*1e6);
+         printf("\tHandle eof %f\n", (handle_eof_after - update_subtitles_after)*mach_timebase_ratio*1e6);   
+         printf("\tHandle sstep %f\n", (handle_sstep_after - handle_eof_after)*mach_timebase_ratio*1e6);   
+         printf("\tUpdate core idle %f\n", (update_core_idle_after - handle_sstep_after)*mach_timebase_ratio*1e6);   
+         printf("\tHandle osd redraw %f\n", (handle_osd_redraw_after - update_core_idle_after)*mach_timebase_ratio*1e6);   
+         printf("\tWait events %f\n", (handle_wait_events_after - handle_osd_redraw_after)*mach_timebase_ratio*1e6);   
+         printf("\tPause low cache after %f\n", (handle_pause_low_cache - handle_wait_events_after)*mach_timebase_ratio*1e6);   
+         printf("\tProcess input after %f\n", (handle_process_input_after - handle_pause_low_cache)*mach_timebase_ratio*1e6);   
+         printf("\tQueued seek after %f\n", (handle_queued_seek_after - handle_process_input_after)*mach_timebase_ratio*1e6);   
+         print_stats = 0;
+    }
 }
 
 void mp_idle(struct MPContext *mpctx)
