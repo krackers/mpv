@@ -70,7 +70,6 @@ class VideoLayer: CAOpenGLLayer {
     unowned var cocoaCB: CocoaCB
     var libmpv: LibmpvHelper { get { return cocoaCB.libmpv } }
 
-    let displayLock = NSLock()
     let cglContext: CGLContextObj
     let cglPixelFormat: CGLPixelFormatObj
     var wantsUpdate: Bool = false
@@ -151,6 +150,8 @@ class VideoLayer: CAOpenGLLayer {
                        pixelFormat pf: CGLPixelFormatObj,
                        forLayerTime t: CFTimeInterval,
                        displayTime ts: UnsafePointer<CVTimeStamp>?) {
+        let wasInLiveResize = self.inLiveResize
+        CGLLockContext(ctx)
         wantsUpdate = false
 
         if draw.rawValue >= Draw.atomic.rawValue {
@@ -167,6 +168,13 @@ class VideoLayer: CAOpenGLLayer {
         if needsICCUpdate {
             needsICCUpdate = false
             cocoaCB.updateICCProfile()
+        }
+        CGLUnlockContext(ctx)
+        // Live Resize status may have possibly changed in between the calls, so we query status at beginning
+        // The CGL lock here maintains strict correctness, the report here is only to avoid visual jarringness
+        // Since we always queue a present on live resize end though, there shouldn't be any issue.
+        if (wasInLiveResize) {
+            libmpv.reportRenderPresent()
         }
     }
 
@@ -214,7 +222,6 @@ class VideoLayer: CAOpenGLLayer {
     // Hence we use a lock to prevent multiple calls at once
     // And have additional logic 
     override func display() {
-        displayLock.lock()
         let wantedUpdate = wantsUpdate
         // Must always call super.display() here
 
@@ -240,14 +247,12 @@ class VideoLayer: CAOpenGLLayer {
             }
         }
         libmpv.reportRenderPresent()
-
-        displayLock.unlock()
     }
 
     func update(force: Bool = false) {
         queue.async {
             self.wantsUpdate = self.libmpv.checkRenderUpdateFrame() || force
-            if self.wantsUpdate {
+            if self.wantsUpdate && (force || !self.inLiveResize) {
                 self.display()
             }
         }

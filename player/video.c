@@ -44,7 +44,7 @@
 
 #include "core.h"
 #include "command.h"
-#include "screenshot.h"mach_timebase_ratio*1e6 > 50000
+#include "screenshot.h"
 
 enum {
     // update_video() - code also uses: <0 error, 0 eof, >0 progress
@@ -1206,8 +1206,7 @@ void write_video(struct MPContext *mpctx)
 
     video_after_schedule_frame = mach_absolute_time();
 
-    mpctx->osd_force_update = true;
-    update_osd_msg(mpctx);
+    update_vo_osd_msg(mpctx);
 
     video_after_update_osd_msg = mach_absolute_time();
 
