@@ -23,6 +23,7 @@
 #include <assert.h>
 #include <pthread.h>
 #include <stdint.h>
+#include <dispatch/dispatch.h>
 
 #include "mpv_talloc.h"
 
@@ -70,6 +71,9 @@ struct mp_log_root {
     atomic_ulong reload_counter;
     // --- protected by mp_msg_lock
     bstr buffer;
+
+    // Created once at init, thread-safe usage
+    dispatch_queue_t terminal_output_queue;
 };
 
 struct mp_log {
@@ -456,6 +460,9 @@ void mp_msg_init(struct mpv_global *global)
         .reload_counter = ATOMIC_VAR_INIT(1),
     };
 
+    root->terminal_output_queue = dispatch_queue_create("term/osd", DISPATCH_QUEUE_SERIAL);
+    dispatch_set_target_queue(root->terminal_output_queue, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0));
+
     struct mp_log dummy = { .root = root };
     struct mp_log *log = mp_log_new(root, &dummy, "");
 
@@ -558,6 +565,10 @@ bool mp_msg_has_log_file(struct mpv_global *global)
 void mp_msg_uninit(struct mpv_global *global)
 {
     struct mp_log_root *root = global->log->root;
+    dispatch_queue_t queue = root->terminal_output_queue;
+    dispatch_sync(queue, ^{root->terminal_output_queue = NULL;});
+    dispatch_release(queue);
+
     if (root->stats_file)
         fclose(root->stats_file);
     talloc_free(root->stats_path);
@@ -687,4 +698,9 @@ int mp_msg_find_level(const char *s)
             return n;
     }
     return -1;
+}
+
+// Currently we just have one serial dispatch queue for all terminal-related logging
+void mp_msg_queue_async(struct mp_log *log, dispatch_block_t block) {
+    dispatch_async(log->root->terminal_output_queue, block);
 }

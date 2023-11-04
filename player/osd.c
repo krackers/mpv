@@ -85,15 +85,17 @@ static void term_osd_update(struct MPContext *mpctx)
 
     char *s = join_lines(mpctx, parts, num_parts);
 
-    if (strcmp(mpctx->term_osd_contents, s) == 0 &&
-        mp_msg_has_status_line(mpctx->global))
-    {
-        talloc_free(s);
-    } else {
-        talloc_free(mpctx->term_osd_contents);
-        mpctx->term_osd_contents = s;
-        mp_msg(mpctx->statusline, MSGL_STATUS, "%s", s);
-    }
+    mp_msg_queue_async(mpctx->statusline, ^{
+        if (strcmp(mpctx->term_osd_contents, s) == 0 && 
+            mp_msg_has_status_line(mpctx->global))
+        {
+            talloc_free(s);
+        } else {
+            talloc_free(mpctx->term_osd_contents);
+            mpctx->term_osd_contents = s;
+            mp_msg(mpctx->statusline, MSGL_STATUS, "%s", s);
+        }
+    });
 }
 
 void term_osd_set_subs(struct MPContext *mpctx, const char *text)
@@ -487,7 +489,7 @@ uint64_t osd_end = 0;
 extern uint64_t mach_absolute_time(void);
 
 // Update the OSD text (both on VO and terminal status line).
-void update_osd_msg(struct MPContext *mpctx)
+void update_term_osd_msg(struct MPContext *mpctx)
 {
     osd_before = osd_after_seek_messages = osd_after_term_updates = osd_after_set_text = osd_after_print = osd_end = 0;
 
@@ -503,7 +505,7 @@ void update_osd_msg(struct MPContext *mpctx)
         if (!mpctx->osd_idle_update)
             return;
 
-        double delay = 0.050; // update the OSD at most this often
+        double delay = 0.5; // update the OSD at most this often
         double diff = now - mpctx->osd_last_update;
         if (diff < delay) {
             mp_set_timeout(mpctx, delay - diff);
@@ -577,6 +579,11 @@ void update_osd_msg(struct MPContext *mpctx)
     term_osd_update(mpctx);
 
     osd_after_term_updates = mach_absolute_time();
+}
+
+void update_vo_osd_msg(struct MPContext *mpctx) {
+    struct MPOpts *opts = mpctx->opts;
+    struct osd_state *osd = mpctx->osd;
 
     if (!opts->video_osd)
         return;

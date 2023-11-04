@@ -417,6 +417,7 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
                 enum seek_precision exact, int flags)
 {
     struct seek_params *seek = &mpctx->seek;
+    mpctx->osd_force_update = true;
 
     mp_wakeup_core(mpctx);
 
@@ -1202,7 +1203,12 @@ void run_playloop(struct MPContext *mpctx)
 
     uint64_t handle_dummy_ticks_after = mach_absolute_time();
 
-    update_osd_msg(mpctx);
+    update_term_osd_msg(mpctx);
+
+    // If not paused, this is done along with video playback.
+    if (mpctx->paused) {
+        update_vo_osd_msg(mpctx);
+    }
 
     uint64_t update_osd_msg_after = mach_absolute_time();
 
@@ -1301,7 +1307,8 @@ void mp_idle(struct MPContext *mpctx)
     handle_command_updates(mpctx);
     handle_cursor_autohide(mpctx);
     handle_vo_events(mpctx);
-    update_osd_msg(mpctx);
+    update_term_osd_msg(mpctx);
+    update_vo_osd_msg(mpctx);
     handle_osd_redraw(mpctx);
 }
 

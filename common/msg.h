@@ -54,6 +54,8 @@ void mp_msg_va(struct mp_log *log, int lev, const char *format, va_list va);
 
 bool mp_msg_test(struct mp_log *log, int lev);
 
+void mp_msg_queue_async(struct mp_log *log, void (^block)(void));
+
 // Convenience macros.
 #define mp_fatal(log, ...)      mp_msg(log, MSGL_FATAL, __VA_ARGS__)
 #define mp_err(log, ...)        mp_msg(log, MSGL_ERR, __VA_ARGS__)
