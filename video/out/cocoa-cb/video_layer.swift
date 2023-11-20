@@ -168,9 +168,12 @@ class VideoLayer: CAOpenGLLayer {
             needsICCUpdate = false
             cocoaCB.updateICCProfile()
         }
-        // Live Resize status may have possibly changed in between the calls, so we query status at beginning
-        // The CGL lock here maintains strict correctness, the report here is only to avoid visual jarringness
-        // Since we always queue a present on live resize end though, there shouldn't be any issue.
+
+        // In async mode we cannot know when the CATransaction flush happens, so we just resort to reporting after the
+        // glFlush instead. Note that the live resize status may have possibly changed between the trigger and the
+        // beginning of this function, so this is technically a bit racy. However the implicit CGL lock maintains correctness,
+        // and the report here is only to avoid visual jarringness. It's OK if we report too many times.
+        // It's also OK if we underreport since we always queue a present on live resize which forces a present.
         if (wasInLiveResize) {
             libmpv.reportRenderPresent()
         }
@@ -216,12 +219,13 @@ class VideoLayer: CAOpenGLLayer {
         layer.update()
     }
 
-    // This can always be called by system, not necessarily due to a render-callback update
-    // Hence we use a lock to prevent multiple calls at once
-    // And have additional logic 
+
+    // Note that in async mode, display is not called and the system
+    // triggers canDraw -> draw directly.
     override func display() {
-        let wantedUpdate = wantsUpdate
-        // Must always call super.display() here
+        if (!self.wantsUpdate) {
+            return;
+        }
 
         let bef1 = (Double(mach_absolute_time()) * 125.0)/3.0
         super.display()
@@ -230,12 +234,15 @@ class VideoLayer: CAOpenGLLayer {
                 print(String(format: "Draw time %f\n", (aft1 - bef1)/1e3))
         }
 
-        if wantedUpdate && self.wantsUpdate {
+        // If we still need an update...
+        if self.wantsUpdate {
             // display() did not end up drawing, possibly because no display was ready
+            CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+            CGLUnlockContext(cglContext)
             self.wantsUpdate = false
-        } else if wantedUpdate && !self.wantsUpdate {
+        } else if !self.wantsUpdate {
             // We successfully drew a frame, and need to flush ourselves
             let bef = (Double(mach_absolute_time()) * 125.0)/3.0
             CATransaction.flush()
@@ -249,7 +256,17 @@ class VideoLayer: CAOpenGLLayer {
 
     func update(force: Bool = false) {
         queue.async {
-            self.wantsUpdate = self.libmpv.checkRenderUpdateFrame() || force
+            let updateFlags = self.libmpv.checkRenderUpdateFrame()
+            if (updateFlags & UInt64(MPV_RENDER_SCREENSHOT_FRAME.rawValue) > 0) {
+                CGLLockContext(self.cglContext)
+                CGLSetCurrentContext(self.cglContext)
+                self.libmpv.processQueue()
+                CGLUnlockContext(self.cglContext)
+            } else {
+                self.libmpv.processQueue()
+            }
+
+            self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || force
             if self.wantsUpdate && (force || !self.inLiveResize) {
                 self.display()
             }
