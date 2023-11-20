@@ -27,7 +27,7 @@ class LibmpvHelper: LogHelper {
     var mpvRenderContext: OpaquePointer?
     var macOpts: macos_opts = macos_opts()
     var fbo: GLint = 1
-    let deinitLock = NSLock()
+    let renderContextLock = NSLock()
 
     init(_ mpv: OpaquePointer, _ name: String) {
         let newlog = mp_log_new(UnsafeMutablePointer<MPContext>(mpv), mp_client_get_log(mpv), name)
@@ -117,19 +117,27 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_present(mpvRenderContext)
     }
 
-    func checkRenderUpdateFrame() -> Bool {
-        deinitLock.lock()
+    func checkRenderUpdateFrame() -> UInt64 {
+        renderContextLock.lock()
         if mpvRenderContext == nil {
-            deinitLock.unlock()
-            return false
+            renderContextLock.unlock()
+            return 0
         }
         let flags: UInt64 = mpv_render_context_update(mpvRenderContext)
-        deinitLock.unlock()
-        return flags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0
+        renderContextLock.unlock()
+        return flags
+    }
+
+    func processQueue() {
+        renderContextLock.lock()
+        if (mpvRenderContext != nil) {
+            mpv_render_context_process_queue(mpvRenderContext);   
+        }
+        renderContextLock.unlock()
     }
 
     func drawRender(_ surface: NSSize, _ depth: GLint, _ ctx: CGLContextObj, skip: Bool = false) {
-        deinitLock.lock()
+        renderContextLock.lock()
         if mpvRenderContext != nil {
             var i: GLint = 0
             var flip: CInt = 1
@@ -160,7 +168,7 @@ class LibmpvHelper: LogHelper {
         if !skip { CGLFlushDrawable(ctx) }
         // self.reportRenderFlush()
 
-        deinitLock.unlock()
+        renderContextLock.unlock()
     }
 
     func setRenderICCProfile(_ profile: NSColorSpace) {
@@ -235,10 +243,10 @@ class LibmpvHelper: LogHelper {
     func deinitRender() {
         mpv_render_context_set_update_callback(mpvRenderContext, nil, nil)
         mp_render_context_set_control_callback(mpvRenderContext, nil, nil)
-        deinitLock.lock()
+        renderContextLock.lock()
         mpv_render_context_free(mpvRenderContext)
         mpvRenderContext = nil
-        deinitLock.unlock()
+        renderContextLock.unlock()
     }
 
     func deinitMPV(_ destroy: Bool = false) {

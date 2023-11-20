@@ -516,6 +516,7 @@ void mpv_render_context_set_update_callback(mpv_render_context *ctx,
  *         to be done.
  */
 uint64_t mpv_render_context_update(mpv_render_context *ctx);
+void mpv_render_context_process_queue(mpv_render_context *ctx);
 
 /**
  * Flags returned by mpv_render_context_update(). Each value represents a bit
@@ -527,6 +528,7 @@ typedef enum mpv_render_update_flag {
      * called.
      */
     MPV_RENDER_UPDATE_FRAME         = 1 << 0,
+    MPV_RENDER_SCREENSHOT_FRAME      = 1 << 1,
 } mpv_render_context_flag;
 
 /**
