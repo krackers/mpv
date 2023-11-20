@@ -170,6 +170,11 @@ struct ra_tex_upload_params {
     const void *src;    // Address of data
     // For 2D textures only:
     struct mp_rect *rc; // Region to upload. NULL means entire image
+                        // Note some GPUs may not support partial row uploads with a PBO.
+                        // In such cases, if invalidate is passed then the entire
+                        // row will be uploaded instead (which is conformant given
+                        // that pixels outside the uploaded region are in an "undefined"
+                        // state), else upload will be done via non-pbo.
     ptrdiff_t stride;   // The size of a horizontal line in bytes (*not* texels!)
 };
 

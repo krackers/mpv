@@ -99,12 +99,33 @@ struct ra_buf *ra_buf_pool_get(struct ra *ra, struct ra_buf_pool *pool,
 bool ra_tex_upload_pbo(struct ra *ra, struct ra_buf_pool *pbo,
                        const struct ra_tex_upload_params *params)
 {
+    static bool warned = false;
     if (params->buf)
         return ra->fns->tex_upload(ra, params);
 
     struct ra_tex *tex = params->tex;
     size_t row_size = tex->params.dimensions == 2 ? params->stride :
                       tex->params.w * tex->params.format->pixel_size;
+
+    struct ra_tex_upload_params newparams = *params;
+    #if defined(__arm64__) && defined(__APPLE__)
+    if (newparams.rc && mp_rect_w(*newparams.rc) != row_size) {
+        if (!warned) {
+            mp_verbose(ra->log, "GPU does not support partial-row upload with PBO\n");
+            warned = true;
+        }
+        if (newparams.invalidate) {
+            newparams.rc->x0 = 0;
+            newparams.rc->x1 = row_size;
+        } else {
+            ra->use_pbo = false;
+            bool ret = ra->fns->tex_upload(ra, params);
+            ra->use_pbo = true;
+            return ret;
+        }
+
+    }
+    #endif
 
     int height = tex->params.h;
     if (tex->params.dimensions == 2 && params->rc)
@@ -122,7 +143,6 @@ bool ra_tex_upload_pbo(struct ra *ra, struct ra_buf_pool *pbo,
 
     ra->fns->buf_update(ra, buf, 0, params->src, bufparams.size);
 
-    struct ra_tex_upload_params newparams = *params;
     newparams.buf = buf;
     newparams.src = NULL;
 
