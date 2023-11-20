@@ -601,10 +601,6 @@ static void flip_page(struct vo *vo)
     // Wait for next vsync after flush
     // int64_t flp_count_before_flush = ctx->flip_count;
     while (ctx->pending_swap_count > 1) {
-        // mpv_render_report_swap() is declared as optional API.
-        // Assume the user calls it consistently _if_ it's called at all.
-        if (!ctx->flip_count)
-            break;
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             printf("Bail on swap\n");
             MP_VERBOSE(vo, "mpv_render_report_swap() not being called.\n");
