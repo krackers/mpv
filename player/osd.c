@@ -494,10 +494,6 @@ void update_term_osd_msg(struct MPContext *mpctx)
     osd_before = osd_after_seek_messages = osd_after_term_updates = osd_after_set_text = osd_after_print = osd_end = 0;
 
     osd_before = mach_absolute_time();
-
-    struct MPOpts *opts = mpctx->opts;
-    struct osd_state *osd = mpctx->osd;
-
     double now = mp_time_sec();
 
     if (!mpctx->osd_force_update) {
@@ -584,7 +580,6 @@ void update_term_osd_msg(struct MPContext *mpctx)
 void update_vo_osd_msg(struct MPContext *mpctx) {
     struct MPOpts *opts = mpctx->opts;
     struct osd_state *osd = mpctx->osd;
-
     if (!opts->video_osd)
         return;
 
