@@ -48,4 +48,12 @@
     [[NSColor blackColor] setFill];
     NSRectFill(rect);
 }
+
+-(BOOL)isOpaque {
+    return YES;
+}
+-(BOOL)mouseDownCanMoveWindow{
+    return YES;
+}
+
 @end
