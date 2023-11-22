@@ -89,12 +89,12 @@ extern int cocoa_set_realtime(struct mp_log *log, double periodFraction);
     }
 }
 
-void *thread_entry(void* argument) {
+static void *thread_entry(void* argument) {
     [(__bridge TPPreciseTimer*)argument thread];
     return NULL;
 }
 
-void thread_signal(int signal) {
+static void thread_signal(int signal) {
     // Ignore
 }
 

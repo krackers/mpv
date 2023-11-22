@@ -61,12 +61,12 @@ typedef struct mp_vo_opts {
 
 struct mp_cache_opts {
     int size;
-    int def_size;
-    int initial;
-    int seek_min;
-    int back_buffer;
+    int64_t def_size;
+    int64_t initial;
+    int64_t seek_min;
+    int64_t back_buffer;
     char *file;
-    int file_max;
+    int64_t file_max;
 };
 
 // Subtitle options needed by the subtitle decoders/renderers.

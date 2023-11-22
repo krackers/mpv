@@ -171,7 +171,6 @@ extern uint64_t mach_absolute_time(void);
 
 static void cocoa_swap_buffers(struct ra_ctx *ctx)
 {
-    struct priv *p = ctx->priv;
     vo_cocoa_swap_buffers(ctx->vo);
 
     // uint64_t bef = mach_absolute_time();
@@ -183,7 +182,6 @@ static void cocoa_swap_buffers(struct ra_ctx *ctx)
 
 static void cocoa_get_vsync(struct ra_ctx *ctx, struct vo_vsync_info *info)
 {
-    struct priv *p = ctx->priv;
     vo_cocoa_get_vsync(ctx->vo, info);
 }
 

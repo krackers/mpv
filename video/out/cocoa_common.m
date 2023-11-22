@@ -443,8 +443,7 @@ static int vo_cocoa_update_cursor_visibility(struct vo *vo, bool forceVisible)
 void vo_cocoa_uninit(struct vo *vo)
 {
     struct vo_cocoa_state *s = vo->cocoa;
-    int term = [s->precise_timer terminate];
-    // printf("Timer terminated with code %d\n", term);
+    [s->precise_timer terminate];
 
     pthread_mutex_lock(&s->lock);
     s->vo_ready = false;
@@ -498,8 +497,6 @@ void vo_cocoa_uninit(struct vo *vo)
 static void vo_cocoa_update_displaylink(struct vo *vo)
 {
     struct vo_cocoa_state *s = vo->cocoa;
-
-    bool running = CVDisplayLinkIsRunning(s->link);
 
     vo_cocoa_uninit_displaylink(s);
     vo_cocoa_init_displaylink(vo);
@@ -935,7 +932,6 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // This is kind of racy. We assume that a CGLFlush will not span across a vsync boundary.
         // If that happens it's not clear whether or not it actually displayed, so be conservative and wait for the next if we need to.
         s->pending_swaps += 1;
-        uint64_t old_counter = s->sync_counter;
         // Even though we tried to get triple-buffered context
         // it seems system only ever gives a double-buffered one.
         // Vsync is broken on newer versions of osx. But we still have 2 buffers.
@@ -1234,7 +1230,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     // Make vo.c not do video timing, which would slow down resizing.
     vo_event(self.vout, VO_EVENT_LIVE_RESIZING);
-    //vo_cocoa_stop_displaylink(self.vout->cocoa);
+    // vo_cocoa_stop_displaylink(self.vout->cocoa);
 }
 
 - (void)windowDidEndLiveResize:(NSNotification *)notification
