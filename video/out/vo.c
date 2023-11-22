@@ -1159,7 +1159,7 @@ static void *vo_thread(void *ptr)
                 (after_render - before_render)*mach_timebase_ratio*1e6,
                 (before_wait - prev_after_render)*mach_timebase_ratio*1e6,
                 (after_wait - before_wait)*mach_timebase_ratio*1e6);
-            printf("\tLast wakeup core to check ready %d\n", (l_last_check_ready - l_last_core_wakeup) * mach_timebase_ratio * 1e6);
+            printf("\tLast wakeup core to check ready %f\n", (l_last_check_ready - l_last_core_wakeup) * mach_timebase_ratio * 1e6);
             printf("\tLast wait until time %d\n", last_wait_until);
             printf("\tRequest to queue delta %f\n", (l_request_queue_time > 0 && l_last_frame_queue_time > 0)  ? (l_last_frame_queue_time - l_request_queue_time) * mach_timebase_ratio * 1e6 : -1);
             printf("\tQueue wakeup completion time %f\n", l_last_frame_queue_time_aft > 0 ? (l_last_frame_queue_time_aft - l_last_frame_queue_time) * mach_timebase_ratio * 1e6 : -1);
