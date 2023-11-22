@@ -163,6 +163,13 @@
     return [NSArray arrayWithObject:window];
 }
 
+- (void)setFrame:(NSRect)frameRect display:(BOOL)flag;
+{
+    NSRect frame = [self frame];
+    if (!NSEqualRects(frameRect, frame))
+        [super setFrame:frameRect display:flag];
+}
+
 // we still need to keep those around or it will use the standard animation
 - (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {}
 
