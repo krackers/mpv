@@ -26,7 +26,9 @@ class EventsView: NSView {
     var hasMouseDown: Bool = false
 
     override var isFlipped: Bool { return true }
+    override var isOpaque: Bool { return true }
     override var acceptsFirstResponder: Bool { return true }
+    override var mouseDownCanMoveWindow: Bool {return true }
 
 
     init(cocoaCB ccb: CocoaCB) {
