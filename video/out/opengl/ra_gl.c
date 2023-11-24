@@ -1074,6 +1074,7 @@ static void gl_renderpass_run(struct ra *ra,
 
 struct gl_timer {
     GLuint query[GL_QUERY_OBJECT_NUM];
+    bool query_valid[GL_QUERY_OBJECT_NUM];
     int idx;
     uint64_t result;
     bool active;
@@ -1117,13 +1118,13 @@ static void gl_timer_start(struct ra *ra, ra_timer *ratimer)
 
     // If this query object already contains a result, we need to retrieve it
     timer->result = 0;
-    if (gl->IsQuery(timer->query[timer->idx])) {
+    if (timer->query_valid[timer->idx]) {
         gl->GetQueryObjectui64v(timer->query[timer->idx], GL_QUERY_RESULT,
                                 &timer->result);
     }
-
-    gl->BeginQuery(GL_TIME_ELAPSED, timer->query[timer->idx++]);
-    timer->idx %= GL_QUERY_OBJECT_NUM;
+    gl->BeginQuery(GL_TIME_ELAPSED, timer->query[timer->idx]);
+    timer->query_valid[timer->idx] = true;
+    timer->idx = (timer->idx + 1) % GL_QUERY_OBJECT_NUM;
 
     p->timer_active = timer->active = true;
 }
