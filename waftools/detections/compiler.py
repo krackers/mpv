@@ -28,13 +28,23 @@ def __add_generic_flags__(ctx):
     if ctx.is_debug_build():
         ctx.env.CFLAGS += ['-g']
 
-    __test_and_add_flags__(ctx, ["-Werror=implicit-function-declaration",
+    __test_and_add_flags__(ctx, ["-Werror",
+                                 "-Werror=implicit-function-declaration",
+                                 "-Werror=pointer-sign",
+                                 "-Werror=format",
+                                 "-Werror=incompatible-pointer-types",
+                                 "-Werror=int-conversion",
                                  "-Wno-error=deprecated-declarations",
+                                 "-Wno-error=vla",
+                                 "-Wno-error=unused-variable",
+                                 "-Wno-error=unused-label",
                                  "-Wno-error=unused-function",
+                                 "-Wno-error=missing-prototypes",
                                  "-Wempty-body",
                                  "-Wdisabled-optimization",
                                  "-Wstrict-prototypes",
                                  "-Wno-format-zero-length",
+                                 "-Wno-deprecated-declarations",
                                  "-Werror=format-security",
                                  "-Wno-redundant-decls",
                                  "-Wvla"])
