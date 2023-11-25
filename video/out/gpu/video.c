@@ -3052,16 +3052,15 @@ void gl_video_render_frame(struct gl_video *p, struct vo_frame *frame,
 
     bool has_frame = !!frame->current;
 
-    if (!has_frame || !mp_rect_equals(&p->dst_rect, &target_rc)) {
-        struct m_color c = p->clear_color;
-        float color[4] = {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0};
-        p->ra->fns->clear(p->ra, fbo.tex, color, &target_rc);
-    }
+
+    struct m_color c = p->clear_color;
+    float color[4] = {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0};
+    p->ra->fns->clear(p->ra, fbo.tex, color, &target_rc);
 
     if (p->hwdec_overlay) {
         if (has_frame) {
-            float *color = p->hwdec_overlay->overlay_colorkey;
-            p->ra->fns->clear(p->ra, fbo.tex, color, &p->dst_rect);
+            float *overlayColor = p->hwdec_overlay->overlay_colorkey;
+            p->ra->fns->clear(p->ra, fbo.tex, overlayColor, &p->dst_rect);
         }
 
         p->hwdec_overlay->driver->overlay_frame(p->hwdec_overlay, frame->current,
@@ -3167,8 +3166,8 @@ done:
     if (p->broken_frame) {
         // Make the screen solid blue to make it visually clear that an
         // error has occurred
-        float color[4] = {0.0, 0.05, 0.5, 1.0};
-        p->ra->fns->clear(p->ra, fbo.tex, color, &target_rc);
+        float error_color[4] = {0.0, 0.05, 0.5, 1.0};
+        p->ra->fns->clear(p->ra, fbo.tex, error_color, &target_rc);
     }
 
     p->frames_rendered++;
