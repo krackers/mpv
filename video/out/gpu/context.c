@@ -113,6 +113,9 @@ static const struct ra_ctx_fns *contexts[] = {
 #if HAVE_VK_KHR_DISPLAY
     &ra_ctx_vulkan_display,
 #endif
+#if HAVE_COCOA && HAVE_SWIFT
+    &ra_ctx_vulkan_mac,
+#endif
 #endif
 
 /* No API contexts: */
