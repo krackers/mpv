@@ -809,9 +809,10 @@ video_output_features = [
                                    use='libplacebo'),
     }, {
         'name': '--vulkan',
-        'desc':  'Vulkan context support',
-        'deps': 'libplacebo',
-        'func': check_pkg_config('vulkan'),
+        'desc': 'Vulkan context support',
+        'deps': 'shaderc',
+        # Lowest version tested, Ubuntu 16.04's
+        'func': check_pkg_config('vulkan >= 1.0.61'),
     }, {
         'name': 'vk-khr-display',
         'desc': "VK_KHR_display extension",

@@ -17,6 +17,8 @@
 
 #include "video/out/gpu/context.h"
 #include "osdep/macOS_swift.h"
+#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_metal.h>
 
 #include "common.h"
 #include "context.h"
@@ -66,8 +68,8 @@ static bool mac_vk_init(struct ra_ctx *ctx)
         .swap_buffers = mac_vk_swap_buffers,
     };
 
-    VkInstance inst = vk->vkinst->instance;
-    VkResult res = vkCreateMetalSurfaceEXT(inst, &mac_info, NULL, &vk->surface);
+    VkInstance inst = vk->inst;
+    VkResult res = vkCreateMetalSurfaceEXT(inst, &mac_info, NULL, &vk->surf);
     if (res != VK_SUCCESS) {
         MP_MSG(ctx, msgl, "Failed creating metal surface\n");
         goto error;

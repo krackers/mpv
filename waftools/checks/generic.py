@@ -135,6 +135,7 @@ def _check_pkg_config(_dyn_libs, _pkgc_args, *args, **kw_ext):
         # added only at its first occurrence.
         original_append_unique  = ConfigSet.append_unique
         ConfigSet.append_unique = ConfigSet.append_value
+        print(opts)
         result = ctx.check_cfg(**opts)
         ConfigSet.append_unique = original_append_unique
 
