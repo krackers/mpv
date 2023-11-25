@@ -376,8 +376,8 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
     // that for us means we don't need to perform the actual transition
     if (need_trans && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
         if (event) {
-            vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
-                            stage, 0, NULL, 0, NULL, 1, &imgBarrier);
+            // vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
+            //                 stage, 0, NULL, 0, NULL, 1, &imgBarrier);
         } else {
             // If we're not using an event, then the source stage is irrelevant
             // because we're coming from a different queue anyway, so we can

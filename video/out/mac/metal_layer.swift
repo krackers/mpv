@@ -26,6 +26,7 @@ class MetalLayer: CAMetalLayer {
 
         pixelFormat = .rgba16Float
         backgroundColor = NSColor.black.cgColor
+        self.contentsScale = 2
     }
 
     // necessary for when the layer containing window changes the screen
@@ -35,6 +36,7 @@ class MetalLayer: CAMetalLayer {
         }
         common = oldLayer.common
         super.init()
+        self.contentsScale = 2
     }
 
     required init?(coder: NSCoder) {
