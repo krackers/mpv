@@ -92,8 +92,7 @@ static void vk_destroy_ra(struct ra *ra)
     struct mpvk_ctx *vk = ra_vk_get(ra);
 
     vk_submit(ra);
-    mpvk_flush_commands(vk);
-    mpvk_poll_commands(vk, UINT64_MAX);
+    mpvk_wait_idle(vk);
     ra_tex_free(ra, &p->clear_tex);
 
     talloc_free(ra);

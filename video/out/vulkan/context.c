@@ -276,7 +276,7 @@ void ra_vk_ctx_uninit(struct ra_ctx *ctx)
         struct mpvk_ctx *vk = p->vk;
 
         mpvk_flush_commands(vk);
-        mpvk_poll_commands(vk, UINT64_MAX);
+        mpvk_wait_idle(vk);
 
         for (int i = 0; i < p->num_images; i++)
             ra_tex_free(ctx->ra, &p->images[i]);

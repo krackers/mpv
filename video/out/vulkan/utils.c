@@ -743,8 +743,12 @@ error:
     return NULL;
 }
 
-void mpvk_poll_commands(struct mpvk_ctx *vk, uint64_t timeout)
+bool mpvk_poll_commands(struct mpvk_ctx *vk, uint64_t timeout)
 {
+    if (timeout && vk->num_cmds_queued)
+        mpvk_flush_commands(vk);
+
+    bool ret = false;
     while (vk->num_cmds_pending > 0) {
         struct vk_cmd *cmd = vk->cmds_pending[0];
         struct vk_cmdpool *pool = cmd->pool;
@@ -754,7 +758,21 @@ void mpvk_poll_commands(struct mpvk_ctx *vk, uint64_t timeout)
         vk_cmd_reset(vk, cmd);
         MP_TARRAY_REMOVE_AT(vk->cmds_pending, vk->num_cmds_pending, 0);
         MP_TARRAY_APPEND(pool, pool->cmds, pool->num_cmds, cmd);
+        ret = true;
+
+        // If we've successfully spent some time waiting for at least one
+        // command, disable the timeout. This has the dual purpose of both
+        // making sure we don't over-wait due to repeat timeout applicaiton,
+        // but also makes sure we don't block on future commands if we've
+        // already spend time waiting for one.
+        timeout = 0;
     }
+    return ret;
+}
+
+void mpvk_wait_idle(struct mpvk_ctx *vk)
+{
+    while (mpvk_poll_commands(vk, UINT64_MAX)) ;
 }
 
 bool mpvk_flush_commands(struct mpvk_ctx *vk)
