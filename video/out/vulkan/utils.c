@@ -865,7 +865,6 @@ void vk_signal_destroy(struct mpvk_ctx *vk, struct vk_signal **sig)
         return;
 
     vkDestroySemaphore(vk->dev, (*sig)->semaphore, MPVK_ALLOCATOR);
-    vkDestroyEvent(vk->dev, (*sig)->event, MPVK_ALLOCATOR);
     talloc_free(*sig);
     *sig = NULL;
 }
@@ -885,22 +884,12 @@ struct vk_signal *vk_cmd_signal(struct mpvk_ctx *vk, struct vk_cmd *cmd,
 
     VK(vkCreateSemaphore(vk->dev, &sinfo, MPVK_ALLOCATOR, &sig->semaphore));
 
-    static const VkEventCreateInfo einfo = {
-        .sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO,
-    };
-
-    VK(vkCreateEvent(vk->dev, &einfo, MPVK_ALLOCATOR, &sig->event));
-
 done:
     // Signal both the semaphore and the event if possible. (We will only
     // end up using one or the other)
     vk_cmd_sig(cmd, sig->semaphore);
-
-    VkQueueFlags req = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-    if (cmd->pool->props.queueFlags & req) {
-        vkCmdSetEvent(cmd->buf, sig->event, stage);
-        sig->event_source = cmd->queue;
-    }
+    sig->type = VK_WAIT_NONE;
+    sig->source = cmd->queue;
 
     return sig;
 
@@ -939,40 +928,32 @@ static bool unsignal(struct mpvk_ctx *vk, struct vk_cmd *cmd, VkSemaphore sem)
 
 static void release_signal(struct mpvk_ctx *vk, struct vk_signal *sig)
 {
-    // The semaphore never needs to be recreated, because it's either
-    // unsignaled while still queued, or unsignaled as a result of a device
-    // wait. But the event *may* need to be reset, so just always reset it.
-    if (sig->event_source)
-        vkResetEvent(vk->dev, sig->event);
-    sig->event_source = NULL;
+    sig->source = NULL;
     MP_TARRAY_APPEND(NULL, vk->signals, vk->num_signals, sig);
 }
 
-void vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
-                 struct vk_signal **sigptr, VkPipelineStageFlags stage,
-                 VkEvent *out_event)
+enum vk_wait_type vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
+                 struct vk_signal **sigptr, VkPipelineStageFlags stage)
 {
     struct vk_signal *sig = *sigptr;
     if (!sig)
-        return;
+        return VK_WAIT_NONE;
 
-    if (out_event && sig->event && sig->event_source == cmd->queue &&
-        unsignal(vk, cmd, sig->semaphore))
+    if (sig->source == cmd->queue && unsignal(vk, cmd, sig->semaphore))
     {
-        // If we can remove the semaphore signal operation from the history and
-        // pretend it never happened, then we get to use the VkEvent. This also
-        // requires that the VkEvent was signalled from the same VkQueue.
-        *out_event = sig->event;
-    } else if (sig->semaphore) {
+        sig->type = VK_WAIT_BARRIER;
+    } else {
         // Otherwise, we use the semaphore. (This also unsignals it as a result
         // of the command execution)
         vk_cmd_dep(cmd, sig->semaphore, stage);
+        sig->type = VK_WAIT_NONE;
     }
 
     // In either case, once the command completes, we can release the signal
     // resource back to the pool.
     vk_cmd_callback(cmd, (vk_cb) release_signal, vk, sig);
     *sigptr = NULL;
+    return sig->type;
 }
 
 const VkImageSubresourceRange vk_range = {

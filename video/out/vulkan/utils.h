@@ -135,13 +135,16 @@ void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
 // after the command completes.
 void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig);
 
-// Signal abstraction: represents an abstract synchronization mechanism.
-// Internally, this may either resolve as a semaphore or an event depending
-// on whether the appropriate conditions are met.
+
+enum vk_wait_type {
+    VK_WAIT_NONE,    // no synchronization needed
+    VK_WAIT_BARRIER, // synchronization via pipeline barriers
+};
+
 struct vk_signal {
     VkSemaphore semaphore;
-    VkEvent event;
-    VkQueue event_source;
+    enum vk_wait_type type; // last signal type
+    VkQueue source;         // last signal source
 };
 
 // Generates a signal after the execution of all previous commands matching the
@@ -156,9 +159,8 @@ struct vk_signal *vk_cmd_signal(struct mpvk_ctx *vk, struct vk_cmd *cmd,
 // MAY be set to a VkEvent which the caller MUST manually wait on in the most
 // appropriate way. This function takes over ownership of the signal (and the
 // signal will be released/reused automatically)
-void vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
-                 struct vk_signal **sigptr, VkPipelineStageFlags stage,
-                 VkEvent *out_event);
+enum vk_wait_type vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
+                 struct vk_signal **sigptr, VkPipelineStageFlags stage);
 
 // Destroys a currently pending signal, for example if the resource is no
 // longer relevant.

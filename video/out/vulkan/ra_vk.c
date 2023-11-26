@@ -3,6 +3,7 @@
 
 #include "ra_vk.h"
 #include "malloc.h"
+#include "utils.h"
 
 #if HAVE_WIN32_DESKTOP
 #include <versionhelpers.h>
@@ -366,8 +367,7 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
         imgBarrier.srcAccessMask = 0;
     }
 
-    VkEvent event = NULL;
-    vk_cmd_wait(vk, cmd, &tex_vk->sig, stage, &event);
+    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage);
 
     bool need_trans = tex_vk->current_layout != newLayout ||
                       tex_vk->current_access != newAccess;
@@ -375,16 +375,19 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
     // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
     // that for us means we don't need to perform the actual transition
     if (need_trans && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-        if (event) {
-            // vkCmdWaitEvents(cmd->buf, 1, &event, tex_vk->sig_stage,
-            //                 stage, 0, NULL, 0, NULL, 1, &imgBarrier);
-        } else {
-            // If we're not using an event, then the source stage is irrelevant
-            // because we're coming from a different queue anyway, so we can
-            // safely set it to TOP_OF_PIPE.
-            imgBarrier.srcAccessMask = 0;
-            vkCmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                 stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
+        switch (type) {
+            case VK_WAIT_NONE:
+                // No synchronization required, so we can safely transition out of
+                // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
+                imgBarrier.srcAccessMask = 0;
+                vkCmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                                    stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
+                break;
+            case VK_WAIT_BARRIER:
+                // Regular pipeline barrier is required
+                vkCmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
+                                    0, NULL, 1, &imgBarrier);
+                break;
         }
     }
 
