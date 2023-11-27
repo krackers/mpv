@@ -104,6 +104,11 @@ char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 
         (idxvar)++;                                 \
     } while (0)
 
+#define MP_TARRAY_RESERVE(ctx, p, cnt)       \
+        do {                                 \
+            MP_TARRAY_GROW(ctx, p, cnt - 1); \
+        } while (0)
+
 #define MP_TARRAY_INSERT_AT(ctx, p, idxvar, at, ...)\
     do {                                            \
         size_t at_ = (at);                          \
