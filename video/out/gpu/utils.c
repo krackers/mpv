@@ -41,11 +41,29 @@ void gl_transform_ortho_fbo(struct gl_transform *t, struct ra_fbo fbo)
 
 void ra_buf_pool_uninit(struct ra *ra, struct ra_buf_pool *pool)
 {
+    int originalRequestedSize = pool->initial_size;
     for (int i = 0; i < pool->num_buffers; i++)
         ra_buf_free(ra, &pool->buffers[i]);
 
     talloc_free(pool->buffers);
     *pool = (struct ra_buf_pool){0};
+    pool->initial_size = originalRequestedSize;
+}
+
+static bool ra_buf_pool_init(struct ra *ra, struct ra_buf_pool *pool, int numBuffers) {
+    numBuffers = MPMAX(1, numBuffers);
+    MP_TARRAY_RESERVE(NULL, pool->buffers, numBuffers);
+    pool->num_buffers = numBuffers;
+    for (int i = 0; i < numBuffers; i++) {
+        struct ra_buf *buf = ra_buf_create(ra, &pool->current_params);
+        if (!buf) {
+            return false;
+        }
+        pool->buffers[i] = buf;
+    }
+    MP_VERBOSE(ra, "Initialized buffer pool of type %u to size %d\n",
+                pool->current_params.type, pool->num_buffers);
+    return true;
 }
 
 static bool ra_buf_params_compatible(const struct ra_buf_params *new,
@@ -80,7 +98,7 @@ struct ra_buf *ra_buf_pool_get(struct ra *ra, struct ra_buf_pool *pool,
     }
 
     // Make sure we have at least one buffer available
-    if (!pool->buffers && !ra_buf_pool_grow(ra, pool))
+    if (!pool->buffers && !ra_buf_pool_init(ra, pool, pool->initial_size))
         return NULL;
 
     // Make sure the next buffer is available for use
