@@ -39,6 +39,10 @@ struct ra {
     // RA_CAP_DIRECT_UPLOAD is supported. This is basically only relevant for
     // OpenGL. Set by the RA user.
     bool use_pbo;
+    // If 0, let the implementation decide. (For OpenGL we orphan/splat to a single PBO and
+    // hope that the driver just allocates a new one internally instead of blocking).
+    // Otherwise, round-robin between the specified number of buffers.
+    int num_pbo_buffers;
 
     // Array of native resources. For the most part an "escape" mechanism, and
     // usually does not contain parameters required for basic functionality.

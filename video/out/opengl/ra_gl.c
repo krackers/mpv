@@ -258,6 +258,8 @@ static struct ra_tex *gl_tex_create_blank(struct ra *ra,
     tex->params.initial_data = NULL;
     struct ra_tex_gl *tex_gl = tex->priv = talloc_zero(NULL, struct ra_tex_gl);
 
+    tex_gl->pbo.initial_size = ra->num_pbo_buffers;
+
     const struct gl_format *fmt = params->format->priv;
     tex_gl->internal_format = fmt->internal_format;
     tex_gl->format = fmt->format;
@@ -423,7 +425,6 @@ struct ra_tex *ra_create_wrapped_fb(struct ra *ra, GLuint gl_fbo, int w, int h)
         .format = GL_RGBA,
         .type = 0,
     };
-
     return tex;
 }
 
@@ -510,10 +511,15 @@ static bool gl_tex_upload(struct ra *ra,
 
     if (buf) {
         gl->BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        // Make sure the buffer is not reused until GL is done with it. If a
+        // previous operation is pending, "update" it by creating a new
+        // fence that will cover the previous operation as well.
+
+        // Note that for the non-DR PBO upload case, we will either 
+        // round-robin between a given number of buffers, or re-use the same buffer
+        // by orphaning and internally trusting that the GL implementation/driver will allocate
+        // a new buffer for us instead of blocking. In both cases we don't need synchronization.
         if (buf->params.host_mapped) {
-            // Make sure the PBO is not reused until GL is done with it. If a
-            // previous operation is pending, "update" it by creating a new
-            // fence that will cover the previous operation as well.
             gl->DeleteSync(buf_gl->fence);
             buf_gl->fence = gl->FenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         }
@@ -626,11 +632,6 @@ static void gl_buf_update(struct ra *ra, struct ra_buf *buf, ptrdiff_t offset,
 
 static bool gl_buf_poll(struct ra *ra, struct ra_buf *buf)
 {
-    // Non-persistently mapped buffers are always implicitly reusable in OpenGL,
-    // the implementation will create more buffers under the hood if needed.
-    if (!buf->data)
-        return true;
-
     GL *gl = ra_gl_get(ra);
     struct ra_buf_gl *buf_gl = buf->priv;
 

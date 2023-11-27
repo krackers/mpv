@@ -367,6 +367,7 @@ const struct m_sub_options gl_video_conf = {
         OPT_FLOAT("tone-mapping-desaturate", tone_mapping_desat, 0),
         OPT_FLAG("gamut-warning", gamut_warning, 0),
         OPT_FLAG("opengl-pbo", pbo, 0),
+        OPT_INTRANGE("opengl-pbo-num-buffers", num_pbo_buffers, 0, 0, 3),
         SCALER_OPTS("scale",  SCALER_SCALE),
         SCALER_OPTS("dscale", SCALER_DSCALE),
         SCALER_OPTS("cscale", SCALER_CSCALE),
@@ -3610,6 +3611,7 @@ static void check_gl_features(struct gl_video *p)
             .gamma = p->opts.gamma,
             .gamma_auto = p->opts.gamma_auto,
             .pbo = p->opts.pbo,
+            .num_pbo_buffers = p->opts.num_pbo_buffers,
             .fbo_format = p->opts.fbo_format,
             .alpha_mode = p->opts.alpha_mode,
             .use_rectangle = p->opts.use_rectangle,
@@ -3868,6 +3870,7 @@ static void reinit_from_options(struct gl_video *p)
     uninit_rendering(p);
     gl_sc_set_cache_dir(p->sc, p->opts.shader_cache_dir);
     p->ra->use_pbo = p->opts.pbo;
+    p->ra->num_pbo_buffers = p->opts.num_pbo_buffers;
     gl_video_setup_hooks(p);
     reinit_osd(p);
 
