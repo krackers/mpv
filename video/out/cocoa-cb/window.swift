@@ -34,6 +34,8 @@ class Window: NSWindow, NSWindowDelegate {
     var isMoving: Bool = false
     var forceTargetScreen: Bool = false
 
+    var inputMonitor: Any?
+
     var keepAspect: Bool = true {
         didSet {
             if let contentViewFrame = contentView?.frame, !isInFullscreen {
@@ -105,6 +107,16 @@ class Window: NSWindow, NSWindowDelegate {
             app.menuBar.register(#selector(setDoubleWindowSize), for: MPM_D_SIZE)
             app.menuBar.register(#selector(performMiniaturize(_:)), for: MPM_MINIMIZE)
             app.menuBar.register(#selector(performZoom(_:)), for: MPM_ZOOM)
+        }
+
+        // We need to do this (and not simply listen for mouseUp on the view) because
+        // the mouseup event at end of drag doesn't always seem to fire. For instance
+        // if the app is dragged while backgrounded. 
+        // Also the windowDidMove event fires during the move as well, not just at
+        // the end, so can't be relied upon.
+        inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseUp]) { event -> NSEvent? in
+            self.isMoving = false
+            return event
         }
     }
 
@@ -481,6 +493,10 @@ class Window: NSWindow, NSWindowDelegate {
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         cocoa_put_key(SWIFT_KEY_CLOSE_WIN)
+        if (inputMonitor != nil) {
+            NSEvent.removeMonitor(inputMonitor)
+            inputMonitor = nil
+        }
         return false
     }
 
