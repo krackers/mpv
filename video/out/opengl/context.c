@@ -309,7 +309,7 @@ void ra_gl_ctx_swap_buffers(struct ra_swapchain *sw)
     }
 
     while (p->num_vsync_fences >= sw->ctx->opts.swapchain_depth) {
-        gl->ClientWaitSync(p->vsync_fences[0], GL_SYNC_FLUSH_COMMANDS_BIT, 1e9);
+        gl->ClientWaitSync(p->vsync_fences[0], 0, 5e9);
         gl->DeleteSync(p->vsync_fences[0]);
         MP_TARRAY_REMOVE_AT(p->vsync_fences, p->num_vsync_fences, 0);
     }
