@@ -345,7 +345,7 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
     struct ra_tex_vk *tex_vk = tex->priv;
 
     if (tex_vk->ext_dep) {
-        vk_cmd_dep(cmd, tex_vk->ext_dep, stage);
+        vk_cmd_dep(cmd, stage, (pl_vulkan_sem){ tex_vk->ext_dep });
         tex_vk->ext_dep = NULL;
     }
 

@@ -686,18 +686,24 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback, void *p, void *arg)
     });
 }
 
-void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage)
+void vk_cmd_dep(struct vk_cmd *cmd, VkPipelineStageFlags stage, pl_vulkan_sem dep)
 {
     int idx = cmd->num_deps++;
     MP_TARRAY_GROW(cmd, cmd->deps, idx);
     MP_TARRAY_GROW(cmd, cmd->depstages, idx);
-    cmd->deps[idx] = dep;
+    MP_TARRAY_GROW(cmd, cmd->depvalues, idx);
+    cmd->deps[idx] = dep.sem;
+    cmd->depvalues[idx] = dep.value;
     cmd->depstages[idx] = stage;
 }
 
-void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig)
+void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig)
 {
-    MP_TARRAY_APPEND(cmd, cmd->sigs, cmd->num_sigs, sig);
+    int idx = cmd->num_sigs++;
+    MP_TARRAY_GROW(cmd, cmd->sigs, idx);
+    MP_TARRAY_GROW(cmd, cmd->sigvalues, idx);
+    cmd->sigs[idx] = sig.sem;
+    cmd->sigvalues[idx] = sig.value;
 }
 
 static void vk_cmdpool_destroy(struct mpvk_ctx *vk, struct vk_cmdpool *pool)
@@ -783,8 +789,18 @@ bool mpvk_flush_commands(struct mpvk_ctx *vk)
         struct vk_cmd *cmd = vk->cmds_queued[i];
         struct vk_cmdpool *pool = cmd->pool;
 
+
+        VkTimelineSemaphoreSubmitInfo tinfo = {
+            .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+            .waitSemaphoreValueCount = cmd->num_deps,
+            .pWaitSemaphoreValues = cmd->depvalues,
+            .signalSemaphoreValueCount = cmd->num_sigs,
+            .pSignalSemaphoreValues = cmd->sigvalues,
+        };
+
         VkSubmitInfo sinfo = {
             .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = &tinfo,
             .commandBufferCount = 1,
             .pCommandBuffers = &cmd->buf,
             .waitSemaphoreCount = cmd->num_deps,
@@ -801,9 +817,9 @@ bool mpvk_flush_commands(struct mpvk_ctx *vk)
             MP_TRACE(vk, "Submitted command on queue %p (QF %d):\n",
                      (void *)cmd->queue, pool->qf);
             for (int n = 0; n < cmd->num_deps; n++)
-                MP_TRACE(vk, "    waits on semaphore %p\n", (void *)cmd->deps[n]);
+                MP_TRACE(vk, "    waits on semaphore %p = %llu\n", (void *)cmd->deps[n], cmd->depvalues[n]);
             for (int n = 0; n < cmd->num_sigs; n++)
-                MP_TRACE(vk, "    signals semaphore %p\n", (void *)cmd->sigs[n]);
+                MP_TRACE(vk, "    signals semaphore %p = %llu\n", (void *)cmd->sigs[n], cmd->depvalues[n]);
         }
         continue;
 
@@ -900,12 +916,15 @@ struct vk_signal *vk_cmd_signal(struct mpvk_ctx *vk, struct vk_cmd *cmd,
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
     };
 
-    VK(vkCreateSemaphore(vk->dev, &sinfo, MPVK_ALLOCATOR, &sig->semaphore));
+    // We can skip creating the semaphores if there's only one queue
+    if (vk->num_pools > 1 || vk->pools[0]->num_queues > 1) {
+        VK(vkCreateSemaphore(vk->dev, &sinfo, MPVK_ALLOCATOR, &sig->semaphore));
+    }
 
 done:
     // Signal both the semaphore and the event if possible. (We will only
     // end up using one or the other)
-    vk_cmd_sig(cmd, sig->semaphore);
+    vk_cmd_sig(cmd, (pl_vulkan_sem){ sig->semaphore });
     sig->type = VK_WAIT_NONE;
     sig->source = cmd->queue;
 
@@ -963,7 +982,7 @@ enum vk_wait_type vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
     } else {
         // Otherwise, we use the semaphore. (This also unsignals it as a result
         // of the command execution)
-        vk_cmd_dep(cmd, sig->semaphore, stage);
+        vk_cmd_dep(cmd, stage, (pl_vulkan_sem){ sig->semaphore });
         sig->type = VK_WAIT_NONE;
     }
 

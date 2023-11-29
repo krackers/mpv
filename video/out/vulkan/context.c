@@ -546,7 +546,7 @@ static bool submit_frame(struct ra_swapchain *sw, const struct vo_frame *frame)
 
     VkSemaphore sem_out = p->sems_out[p->idx_sems++];
     p->idx_sems %= p->num_sems;
-    vk_cmd_sig(cmd, sem_out);
+    vk_cmd_sig(cmd, (pl_vulkan_sem){ sem_out });
 
     p->frames_in_flight++;
     vk_cmd_callback(cmd, (vk_cb) present_cb, p, NULL);

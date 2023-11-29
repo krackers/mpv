@@ -35,6 +35,15 @@ const char* vk_err(VkResult res);
         VK_ASSERT(res ## __LINE__, #cmd);                 \
     } while (0)
 
+
+// Represents a vulkan semaphore/value pair (for compatibility with timeline
+// semaphores). When using normal, binary semaphores, `value` may be ignored.
+typedef struct pl_vulkan_sem {
+    VkSemaphore sem;
+    uint64_t value;
+} pl_vulkan_sem;
+
+
 // Uninits everything in the correct order
 void mpvk_uninit(struct mpvk_ctx *vk);
 
@@ -114,11 +123,13 @@ struct vk_cmd {
     // The semaphores represent dependencies that need to complete before
     // this command can be executed. These are *not* owned by the vk_cmd
     VkSemaphore *deps;
+    uint64_t *depvalues;
     VkPipelineStageFlags *depstages;
     int num_deps;
     // The signals represent semaphores that fire once the command finishes
     // executing. These are also not owned by the vk_cmd
     VkSemaphore *sigs;
+    uint64_t *sigvalues;
     int num_sigs;
     // Since VkFences are useless, we have to manually track "callbacks"
     // to fire once the VkFence completes. These are used for multiple purposes,
@@ -133,11 +144,11 @@ void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback, void *p, void *arg);
 
 // Associate a raw dependency for the current command. This semaphore must
 // signal by the corresponding stage before the command may execute.
-void vk_cmd_dep(struct vk_cmd *cmd, VkSemaphore dep, VkPipelineStageFlags stage);
+void vk_cmd_dep(struct vk_cmd *cmd,  VkPipelineStageFlags stage, pl_vulkan_sem dep);
 
 // Associate a raw signal with the current command. This semaphore will signal
 // after the command completes.
-void vk_cmd_sig(struct vk_cmd *cmd, VkSemaphore sig);
+void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
 
 
 enum vk_wait_type {
