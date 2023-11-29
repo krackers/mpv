@@ -320,11 +320,10 @@ struct ra_tex_vk {
     // for uploading
     struct ra_buf_pool pbo;
     // "current" metadata, can change during the course of execution
-    VkImageLayout current_layout;
-    VkAccessFlags current_access;
-    // the signal guards reuse, and can be NULL
-    struct vk_signal *sig;
-    VkPipelineStageFlags sig_stage;
+    VkImageLayout layout;
+
+    struct vk_sem sem;
+
     VkSemaphore ext_dep; // external semaphore, not owned by the ra_tex
 };
 
@@ -338,8 +337,8 @@ void ra_tex_vk_external_dep(struct ra *ra, struct ra_tex *tex, VkSemaphore dep)
 // Small helper to ease image barrier creation. if `discard` is set, the contents
 // of the image will be undefined after the barrier
 static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
-                        VkPipelineStageFlags stage, VkAccessFlags newAccess,
-                        VkImageLayout newLayout, bool discard)
+                        VkPipelineStageFlags stage, VkAccessFlags access,
+                        VkImageLayout layout, bool discard)
 {
     struct mpvk_ctx *vk = ra_vk_get(ra);
     struct ra_tex_vk *tex_vk = tex->priv;
@@ -349,61 +348,48 @@ static void tex_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
         tex_vk->ext_dep = NULL;
     }
 
-    VkImageMemoryBarrier imgBarrier = {
+    // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation for
+    // render passes, which means that we don't actually need to perform
+    // any image layout transition
+    if (layout == VK_IMAGE_LAYOUT_UNDEFINED)
+        layout = tex_vk->layout;
+
+    struct vk_sync_scope last;
+    bool is_trans = layout != tex_vk->layout;
+    last = vk_sem_barrier(vk, cmd, &tex_vk->sem, stage, access, is_trans);
+
+    // CONCURRENT images require transitioning to/from IGNORED, EXCLUSIVE
+    // images require transitioning to/from the concrete QF index
+    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+    VkImageMemoryBarrier barr = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .oldLayout = tex_vk->current_layout,
-        .newLayout = newLayout,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .srcAccessMask = tex_vk->current_access,
-        .dstAccessMask = newAccess,
+        .oldLayout = tex_vk->layout,
+        .newLayout = layout,
+        .srcQueueFamilyIndex = qf,
+        .dstQueueFamilyIndex = qf,
+        .srcAccessMask = last.access,
+        .dstAccessMask = access,
         .image = tex_vk->img,
-        .subresourceRange = vk_range,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .levelCount = 1,
+            .layerCount = 1,
+        },
     };
 
     if (discard) {
-        imgBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imgBarrier.srcAccessMask = 0;
+        barr.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     }
 
-    enum vk_wait_type type = vk_cmd_wait(vk, cmd, &tex_vk->sig, stage);
-
-    bool need_trans = tex_vk->current_layout != newLayout ||
-                      tex_vk->current_access != newAccess;
-
-    // Transitioning to VK_IMAGE_LAYOUT_UNDEFINED is a pseudo-operation
-    // that for us means we don't need to perform the actual transition
-    if (need_trans && newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
-        switch (type) {
-            case VK_WAIT_NONE:
-                // No synchronization required, so we can safely transition out of
-                // VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT
-                imgBarrier.srcAccessMask = 0;
-                vkCmdPipelineBarrier(cmd->buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                                    stage, 0, 0, NULL, 0, NULL, 1, &imgBarrier);
-                break;
-            case VK_WAIT_BARRIER:
-                // Regular pipeline barrier is required
-                vkCmdPipelineBarrier(cmd->buf, tex_vk->sig_stage, stage, 0, 0, NULL,
-                                    0, NULL, 1, &imgBarrier);
-                break;
-        }
+    bool is_xfer = barr.srcQueueFamilyIndex != barr.dstQueueFamilyIndex;
+    if (last.access || is_trans || is_xfer) {
+        vkCmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
+                               0, NULL, 1, &barr);
     }
 
-    tex_vk->current_layout = newLayout;
-    tex_vk->current_access = newAccess;
+    tex_vk->layout = layout;
 }
 
-static void tex_signal(struct ra *ra, struct vk_cmd *cmd, struct ra_tex *tex,
-                       VkPipelineStageFlags stage)
-{
-    struct ra_tex_vk *tex_vk = tex->priv;
-    struct mpvk_ctx *vk = ra_vk_get(ra);
-    assert(!tex_vk->sig);
-
-    tex_vk->sig = vk_cmd_signal(vk, cmd, stage);
-    tex_vk->sig_stage = stage;
-}
 
 static void vk_tex_destroy(struct ra *ra, struct ra_tex *tex)
 {
@@ -414,7 +400,8 @@ static void vk_tex_destroy(struct ra *ra, struct ra_tex *tex)
     struct ra_tex_vk *tex_vk = tex->priv;
 
     ra_buf_pool_uninit(ra, &tex_vk->pbo);
-    vk_signal_destroy(vk, &tex_vk->sig);
+    vk_sem_uninit(vk, &tex_vk->sem);
+
     vkDestroyFramebuffer(vk->dev, tex_vk->framebuffer, MPVK_ALLOCATOR);
     vkDestroyRenderPass(vk->dev, tex_vk->dummyPass, MPVK_ALLOCATOR);
     vkDestroySampler(vk->dev, tex_vk->sampler, MPVK_ALLOCATOR);
@@ -438,8 +425,9 @@ static bool vk_init_image(struct ra *ra, struct ra_tex *tex)
     struct ra_tex_vk *tex_vk = tex->priv;
     assert(tex_vk->img);
 
-    tex_vk->current_layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    tex_vk->current_access = 0;
+    if (!vk_sem_init(vk, &tex_vk->sem))
+        return false;
+    tex_vk->layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
     if (params->render_src || params->render_dst) {
         static const VkImageViewType viewType[] = {
@@ -693,8 +681,7 @@ struct ra_buf_vk {
     bool needsflush;
     enum queue_type update_queue;
     // "current" metadata, can change during course of execution
-    VkPipelineStageFlags current_stage;
-    VkAccessFlags current_access;
+    struct vk_sem sem;
     // Arbitrary user data for the creator of a buffer
     void *user_data;
 };
@@ -724,35 +711,50 @@ static void vk_buf_deref(struct ra *ra, struct ra_buf *buf)
 }
 
 static void buf_barrier(struct ra *ra, struct vk_cmd *cmd, struct ra_buf *buf,
-                        VkPipelineStageFlags newStage,
-                        VkAccessFlags newAccess, int offset, size_t size)
+                        VkPipelineStageFlags stage,
+                        VkAccessFlags access, size_t offset, size_t size)
 {
     struct ra_buf_vk *buf_vk = buf->priv;
+    struct mpvk_ctx *vk = ra_vk_get(ra);
 
-    VkBufferMemoryBarrier buffBarrier = {
+    bool needs_flush = buf_vk->needsflush || buf->params.host_mapped;
+    bool noncoherent = buf->params.host_mapped; // Currently only host map coherently
+
+    if (needs_flush && noncoherent) {
+        buf_vk->needsflush = false;
+        VK(vkFlushMappedMemoryRanges(vk->dev, 1, &(struct VkMappedMemoryRange) {
+            .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+            .memory = buf_vk->slice.mem.vkmem,
+            .offset = buf_vk->slice.mem.offset,
+            .size = buf_vk->slice.mem.size,
+        }));
+
+        // Just ignore errors, not much we can do about them other than
+        // logging them and moving on...
+    error: ;
+    }
+
+    struct vk_sync_scope last;
+    last = vk_sem_barrier(vk, cmd, &buf_vk->sem, stage, access, false);
+
+    // CONCURRENT buffers require transitioning to/from IGNORED, EXCLUSIVE
+    // buffers require transitioning to/from the concrete QF index
+    uint32_t qf = vk->num_pools > 1 ? VK_QUEUE_FAMILY_IGNORED : cmd->pool->qf;
+    VkBufferMemoryBarrier barr = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-        .srcAccessMask = buf_vk->current_access,
-        .dstAccessMask = newAccess,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .srcQueueFamilyIndex = qf,
+        .dstQueueFamilyIndex = qf,
+        .srcAccessMask = last.access,
+        .dstAccessMask = access,
         .buffer = buf_vk->slice.buf,
-        .offset = offset,
+        .offset = buf_vk->slice.mem.offset + offset,
         .size = size,
     };
 
-    if (buf_vk->needsflush || buf->params.host_mapped) {
-        buffBarrier.srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-        buf_vk->current_stage = VK_PIPELINE_STAGE_HOST_BIT;
-        buf_vk->needsflush = false;
+    if (last.access || barr.srcQueueFamilyIndex != barr.dstQueueFamilyIndex) {
+        vkCmdPipelineBarrier(cmd->buf, last.stage, stage, 0, 0, NULL,
+                               1, &barr, 0, NULL);
     }
-
-    if (buffBarrier.srcAccessMask != buffBarrier.dstAccessMask) {
-        vkCmdPipelineBarrier(cmd->buf, buf_vk->current_stage, newStage, 0,
-                             0, NULL, 1, &buffBarrier, 0, NULL);
-    }
-
-    buf_vk->current_stage = newStage;
-    buf_vk->current_access = newAccess;
     buf_vk->refcount++;
     vk_cmd_callback(cmd, (vk_cb) vk_buf_deref, ra, buf);
 }
@@ -798,9 +800,9 @@ static struct ra_buf *vk_buf_create(struct ra *ra,
     buf->params = *params;
 
     struct ra_buf_vk *buf_vk = buf->priv = talloc_zero(buf, struct ra_buf_vk);
-    buf_vk->current_stage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-    buf_vk->current_access = 0;
     buf_vk->refcount = 1;
+    if (!vk_sem_init(vk, &buf_vk->sem))
+        goto error;
 
     VkBufferUsageFlags bufFlags = 0;
     VkMemoryPropertyFlags memFlags = 0;
@@ -930,9 +932,8 @@ static bool vk_tex_upload(struct ra *ra,
                 params->invalidate);
 
     vkCmdCopyBufferToImage(cmd->buf, buf_vk->slice.buf, tex_vk->img,
-                           tex_vk->current_layout, 1, &region);
+                           tex_vk->layout, 1, &region);
 
-    tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
     return true;
 
@@ -1544,7 +1545,7 @@ static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
         *iinfo = (VkDescriptorImageInfo) {
             .sampler = tex_vk->sampler,
             .imageView = tex_vk->view,
-            .imageLayout = tex_vk->current_layout,
+            .imageLayout = tex_vk->layout,
         };
 
         wds->pImageInfo = iinfo;
@@ -1562,7 +1563,7 @@ static void vk_update_descriptor(struct ra *ra, struct vk_cmd *cmd,
         VkDescriptorImageInfo *iinfo = &pass_vk->dsiinfo[idx];
         *iinfo = (VkDescriptorImageInfo) {
             .imageView = tex_vk->view,
-            .imageLayout = tex_vk->current_layout,
+            .imageLayout = tex_vk->layout,
         };
 
         wds->pImageInfo = iinfo;
@@ -1603,7 +1604,6 @@ static void vk_release_descriptor(struct ra *ra, struct vk_cmd *cmd,
     case RA_VARTYPE_IMG_W:
     case RA_VARTYPE_TEX: {
         struct ra_tex *tex = *(struct ra_tex **)val.data;
-        tex_signal(ra, cmd, tex, passStages[pass->params.type]);
         break;
     }
     }
@@ -1717,9 +1717,7 @@ static void vk_renderpass_run(struct ra *ra,
         vkCmdEndRenderPass(cmd->buf);
 
         // The renderPass implicitly transitions the texture to this layout
-        tex_vk->current_layout = pass_vk->finalLayout;
-        tex_vk->current_access = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
+        tex_vk->layout = pass_vk->finalLayout;
         break;
     }
     default: abort();
@@ -1780,8 +1778,8 @@ static void vk_blit(struct ra *ra, struct ra_tex *dst, struct ra_tex *src,
             .extent = {mp_rect_w(*src_rc), mp_rect_h(*src_rc), 1},
         };
 
-        vkCmdCopyImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region);
+        vkCmdCopyImage(cmd->buf, src_vk->img, src_vk->layout,
+                       dst_vk->img, dst_vk->layout, 1, &region);
     } else {
         VkImageBlit region = {
             .srcSubresource = vk_layers,
@@ -1792,13 +1790,10 @@ static void vk_blit(struct ra *ra, struct ra_tex *dst, struct ra_tex *src,
                            {dst_rc->x1, dst_rc->y1, 1}},
         };
 
-        vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->current_layout,
-                       dst_vk->img, dst_vk->current_layout, 1, &region,
+        vkCmdBlitImage(cmd->buf, src_vk->img, src_vk->layout,
+                       dst_vk->img, dst_vk->layout, 1, &region,
                        VK_FILTER_NEAREST);
     }
-
-    tex_signal(ra, cmd, src, VK_PIPELINE_STAGE_TRANSFER_BIT);
-    tex_signal(ra, cmd, dst, VK_PIPELINE_STAGE_TRANSFER_BIT);
 }
 
 static void vk_clear(struct ra *ra, struct ra_tex *tex, float color[4],
@@ -1823,10 +1818,9 @@ static void vk_clear(struct ra *ra, struct ra_tex *tex, float color[4],
         for (int c = 0; c < 4; c++)
             clearColor.float32[c] = color[c];
 
-        vkCmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->current_layout,
+        vkCmdClearColorImage(cmd->buf, tex_vk->img, tex_vk->layout,
                              &clearColor, 1, &vk_range);
 
-        tex_signal(ra, cmd, tex, VK_PIPELINE_STAGE_TRANSFER_BIT);
     } else {
         // To simulate per-region clearing, we blit from a 1x1 texture instead
         struct ra_tex_upload_params ul_params = {

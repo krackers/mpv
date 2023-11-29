@@ -70,10 +70,6 @@ struct mpvk_ctx {
     struct vk_cmdpool *pool_compute;  // optional
     struct vk_cmdpool *pool_transfer; // optional
 
-    // Common pool of signals, to avoid having to re-create these objects often
-    struct vk_signal **signals;
-    int num_signals;
-
     // Cached capabilities
     VkPhysicalDeviceLimits limits;
     VkPhysicalDeviceFeatures features;

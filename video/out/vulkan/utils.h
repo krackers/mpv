@@ -138,6 +138,33 @@ struct vk_cmd {
     int num_callbacks;
 };
 
+// Synchronization scope
+struct vk_sync_scope {
+    uint64_t value;             // last timeline semaphore value
+    VkQueue queue;              // source queue of last access
+    VkPipelineStageFlags stage; // stage bitmask of last access
+    VkAccessFlags access;       // access type bitmask
+};
+
+// Synchronization primitive
+struct vk_sem {
+    // timeline semaphores, together with a pair of structs respectively
+    // describing the last read and write access, separately
+    VkSemaphore semaphore;
+    struct vk_sync_scope read, write;
+};
+
+bool vk_sem_init(struct mpvk_ctx *vk, struct vk_sem *sem);
+void vk_sem_uninit(struct mpvk_ctx *vk, struct vk_sem *sem);
+
+// Updates the `vk_sem` state for a given access. If `is_trans` is set, this
+// access is treated as a write (since it alters the resource's state).
+// Returns a struct describing the previous access to a resource. A pipeline
+// barrier is only required if the previous access scope is nonzero.
+struct vk_sync_scope vk_sem_barrier(struct mpvk_ctx *vk, struct vk_cmd *cmd,
+                                    struct vk_sem *sem, VkPipelineStageFlags stage,
+                                    VkAccessFlags access, bool is_trans);
+
 // Associate a callback with the completion of the current command. This
 // bool will be set to `true` once the command completes, or shortly thereafter.
 void vk_cmd_callback(struct vk_cmd *cmd, vk_cb callback, void *p, void *arg);
@@ -149,37 +176,6 @@ void vk_cmd_dep(struct vk_cmd *cmd,  VkPipelineStageFlags stage, pl_vulkan_sem d
 // Associate a raw signal with the current command. This semaphore will signal
 // after the command completes.
 void vk_cmd_sig(struct vk_cmd *cmd, pl_vulkan_sem sig);
-
-
-enum vk_wait_type {
-    VK_WAIT_NONE,    // no synchronization needed
-    VK_WAIT_BARRIER, // synchronization via pipeline barriers
-};
-
-struct vk_signal {
-    VkSemaphore semaphore;
-    enum vk_wait_type type; // last signal type
-    VkQueue source;         // last signal source
-};
-
-// Generates a signal after the execution of all previous commands matching the
-// given the pipeline stage. The signal is owned by the caller, and must be
-// consumed eith vk_cmd_wait or released with vk_signal_cancel in order to
-// free the resources.
-struct vk_signal *vk_cmd_signal(struct mpvk_ctx *vk, struct vk_cmd *cmd,
-                                VkPipelineStageFlags stage);
-
-// Consumes a previously generated signal. This signal must fire by the
-// indicated stage before the command can run. If *event is not NULL, then it
-// MAY be set to a VkEvent which the caller MUST manually wait on in the most
-// appropriate way. This function takes over ownership of the signal (and the
-// signal will be released/reused automatically)
-enum vk_wait_type vk_cmd_wait(struct mpvk_ctx *vk, struct vk_cmd *cmd,
-                 struct vk_signal **sigptr, VkPipelineStageFlags stage);
-
-// Destroys a currently pending signal, for example if the resource is no
-// longer relevant.
-void vk_signal_destroy(struct mpvk_ctx *vk, struct vk_signal **sig);
 
 // Command pool / queue family hybrid abstraction
 struct vk_cmdpool {
