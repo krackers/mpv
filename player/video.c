@@ -1140,6 +1140,8 @@ void write_video(struct MPContext *mpctx)
     if (!update_subtitles(mpctx, mpctx->next_frames[0]->pts)) {
         printf("Video frame delayed due to waiting on subtitles.\n");
         MP_VERBOSE(mpctx, "Video frame delayed due to waiting on subtitles.\n");
+        // Note that this is due to packet not ready.
+        // The demuxer packet callback will wakeup playloop when it's time.
         return;
     }
 
