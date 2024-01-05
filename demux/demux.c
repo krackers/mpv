@@ -125,6 +125,9 @@ const struct m_sub_options demux_conf = {
     },
 };
 
+// Note that different streams can share the same internal demux state
+// For instance if you're demuxing an mp4 with 1 video, 1 audio, and 1 sub stream
+// All three would share the same internal state (because there's 1 demuxer demuxing packets for each)
 struct demux_internal {
     struct mp_log *log;
 
@@ -187,7 +190,7 @@ struct demux_internal {
     // (fields for debugging)
     double seeking_in_progress; // low level seek state
     int low_level_seeks;        // number of started low level seeks
-    double demux_ts;            // last demuxed DTS or PTS
+    double demux_ts;            // last demuxed DTS or PTS. (across all streams handled by the demuxer!)
 
     double ts_offset;           // timestamp offset to apply to everything
 
@@ -293,6 +296,8 @@ struct demux_stream {
     bool still_image;       // stream has still video images
     bool refreshing;        // finding old position after track switches
     bool eof;               // end of demuxed stream? (true if no more packets)
+                            // Note that unlike upstream mpv this will be false even for "lazy"
+                            // streams unless we can truly never expect to see any more packets.
 
     bool global_correct_dts;// all observed so far
     bool global_correct_pos;
@@ -310,6 +315,8 @@ struct demux_stream {
     bool skip_to_keyframe;
     bool attached_picture_added;
     bool need_wakeup;       // call wakeup_cb on next reader_head state change
+    double force_read_until;// eager=false streams (subs): force read-ahead
+
 
     // for refresh seeks: pos/dts of last packet returned to reader
     int64_t last_ret_pos;
@@ -586,6 +593,7 @@ static void ds_clear_reader_state(struct demux_stream *ds)
     ds->attached_picture_added = false;
     ds->last_ret_pos = -1;
     ds->last_ret_dts = MP_NOPTS_VALUE;
+    ds->force_read_until = MP_NOPTS_VALUE;
 }
 
 // Call if the observed reader state on this stream somehow changes. The wakeup
@@ -1346,6 +1354,16 @@ static void mark_stream_eof(struct demux_stream *ds)
     }
 }
 
+static bool lazy_stream_needs_wait(struct demux_stream *ds)
+{
+    struct demux_internal *in = ds->in;
+    // Attempt to read until force_read_until was reached, or reading has
+    // stopped for some reason (true EOF, queue overflow).
+    return !ds->eager &&
+           !in->last_eof && ds->force_read_until != MP_NOPTS_VALUE &&
+           (ds->queue->last_ts == MP_NOPTS_VALUE ||
+            ds->queue->last_ts <= ds->force_read_until);
+}
 
 // Returns true if there was "progress" (lock was released temporarily).
 static bool read_packet(struct demux_internal *in)
@@ -1363,7 +1381,13 @@ static bool read_packet(struct demux_internal *in)
     uint64_t total_fw_bytes = 0;
     for (int n = 0; n < in->num_streams; n++) {
         struct demux_stream *ds = in->streams[n]->ds;
-        read_more |= ds->eager && !ds->reader_head;
+        if (ds->eager) {
+            read_more |= !ds->reader_head;
+        } else {
+            if (lazy_stream_needs_wait(ds)) {
+                read_more = true;
+            }
+        }
         refresh_more |= ds->refreshing;
         if (ds->eager && ds->queue->last_ts != MP_NOPTS_VALUE &&
             in->min_secs > 0 && ds->base_ts != MP_NOPTS_VALUE &&
@@ -1628,7 +1652,8 @@ static void *demux_thread(void *pctx)
     return NULL;
 }
 
-static struct demux_packet *dequeue_packet(struct demux_stream *ds)
+
+static struct demux_packet *dequeue_packet(struct demux_stream *ds, double min_pts)
 {
     if (ds->sh->attached_picture) {
         ds->eof = true;
@@ -1641,10 +1666,12 @@ static struct demux_packet *dequeue_packet(struct demux_stream *ds)
         pkt->stream = ds->sh->index;
         return pkt;
     }
+    ds->force_read_until = min_pts;
     if (!ds->reader_head || ds->in->blocked)
         return NULL;
     struct demux_packet *pkt = ds->reader_head;
     ds->reader_head = pkt->next;
+
 
     ds->last_ret_pos = pkt->pos;
     ds->last_ret_dts = pkt->dts;
@@ -1706,19 +1733,36 @@ static struct demux_packet *dequeue_packet(struct demux_stream *ds)
 // Read a packet from the given stream. The returned packet belongs to the
 // caller, who has to free it with talloc_free(). Might block. Returns NULL
 // on EOF.
-struct demux_packet *demux_read_packet(struct sh_stream *sh)
+/**
+This version returns a packet if one already exists, otherwise blocks until a new packet is ready.
+Unlike the async version it doesn't trigger a readahead after the packet is ready.
+*/
+struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts)
 {
     struct demux_stream *ds = sh ? sh->ds : NULL;
     if (!ds)
         return NULL;
     struct demux_internal *in = ds->in;
     pthread_mutex_lock(&in->lock);
-    if (ds->eager) {
+    struct demux_packet *pkt = dequeue_packet(ds, min_pts);
+    if (pkt) {
+        goto ret;
+    }
+    if (in->demux_ts > min_pts) {
+        printf("ASDF\n");
+    }
+    printf("Lazy? %d\n", !ds->eager);
+    bool lazy_need_wait = lazy_stream_needs_wait(ds);
+    printf("Called demux read packet (min_pts %f, demux_ts %f queue_ts %f): needs wait %d\n", min_pts, in->demux_ts, ds->queue->last_ts, lazy_need_wait);
+    if (ds->eager || lazy_need_wait) {
         const char *t = stream_type_name(ds->type);
+        printf("Reading packet for %s\n", t);
         MP_DBG(in, "reading packet for %s\n", t);
         in->eof = false; // force retry
         ds->need_wakeup = true;
+        printf("Trying to read packet: state %d %d %d\n", ds->selected, !ds->reader_head, !in->blocked);
         while (ds->selected && !ds->reader_head && !in->blocked) {
+            printf("looping in demux read packet, needs wait %d\n", lazy_stream_needs_wait(ds));
             in->reading = true;
             // Note: the following code marks EOF if it can't continue
             if (in->threading) {
@@ -1728,13 +1772,26 @@ struct demux_packet *demux_read_packet(struct sh_stream *sh)
             } else {
                 thread_work(in);
             }
-            if (ds->eof)
+            // As an extra precaution we also break if we no longer need to poll for lazy streams.
+            // This guards against a scenario where we have no packet ready in a sparse stream
+            // and keep looping endlessly.
+            if (ds->eof || (!ds->eager && !lazy_stream_needs_wait(ds)))
                 break;
+
+            printf("Selected %d, !reader head %d, !blocked %d\n", ds->selected, !ds->reader_head, !in->blocked);
         }
     }
-    struct demux_packet *pkt = dequeue_packet(ds);
+    printf("End (min_pts %f, demux_ts %f), !last eof %d\n", min_pts, in->demux_ts, !in->last_eof);
+    printf("Eof %d, Selected %d, !reader head %d, !blocked %d\n", ds->eof, ds->selected, !ds->reader_head, !in->blocked);
+    pkt = dequeue_packet(ds, min_pts);
+
+ret:
     pthread_cond_signal(&in->wakeup); // possibly read more
     pthread_mutex_unlock(&in->lock);
+    printf("Pkt %d\n", !!pkt);
+        if (pkt) {
+        printf("Pkt pts %f\n", pkt->pts);
+    }
     return pkt;
 }
 
@@ -1752,33 +1809,67 @@ struct demux_packet *demux_read_packet(struct sh_stream *sh)
 // minutes away). In this situation, this function will just return -1.
 int demux_read_packet_async(struct sh_stream *sh, struct demux_packet **out_pkt)
 {
+    return demux_read_packet_async_until(sh, MP_NOPTS_VALUE, out_pkt);
+}
+
+
+int demux_read_packet_async_until(struct sh_stream *sh, double min_pts, struct demux_packet **out_pkt)
+{
     struct demux_stream *ds = sh ? sh->ds : NULL;
     int r = -1;
     *out_pkt = NULL;
     if (!ds)
         return r;
-    if (ds->in->threading) {
-        pthread_mutex_lock(&ds->in->lock);
-        *out_pkt = dequeue_packet(ds);
-        if (ds->eager) {
-            r = *out_pkt ? 1 : (ds->eof ? -1 : 0);
-            ds->in->reading = true; // enable readahead
-            ds->in->eof = false; // force retry
-            pthread_cond_signal(&ds->in->wakeup); // possibly read more
-        } else {
-            r = *out_pkt ? 1 : -1;
-        }
-        ds->need_wakeup = r != 1;
-        pthread_mutex_unlock(&ds->in->lock);
-    } else {
-        if (ds->in->blocked) {
-            r = 0;
-        } else {
-            *out_pkt = demux_read_packet(sh);
-            r = *out_pkt ? 1 : -1;
-        }
-        ds->need_wakeup = r != 1;
+    if (!ds->in->threading) {
+        return demux_read_packet_sync_until(sh, min_pts, out_pkt);
     }
+
+    pthread_mutex_lock(&ds->in->lock);
+    *out_pkt = dequeue_packet(ds, min_pts);
+    // True iff lazy stream & min_pts doesn't satisfy so should read-ahead
+    // Basically we treat lazy-wait as effectively eager.
+    bool continue_reading = ds->eager || lazy_stream_needs_wait(ds);
+
+    // If we expect a packet to be ready later (eager, or lazy-wait) ask user to check back later.
+    // Otherwise we're done for now.
+    //
+    // Note that lazy-wait condition is based on timestamp of last (demuxed) packet in stream queue.
+    // demux_add_packet takes a lock on in->lock, so lazy_stream_needs_wait cannot have changed 
+    // within this critical section. I.e. it's not possible that in-between the time we
+    // dequeued a packet and determined the return code, the demux thread added a new packet
+    // to the queue causing stream_needs_wait to erroneously return false us us returning -1 instead 
+    // of 0 (retry).
+    r = *out_pkt ? 1 : (ds->eof  || !continue_reading ? -1 : 0);
+
+    // Effectively eager stream should continue reading to make forward progress
+    if (continue_reading) {
+        ds->in->reading = true; // enable readahead
+        ds->in->eof = false; // force retry
+        pthread_cond_signal(&ds->in->wakeup); // possibly read more
+    }
+    ds->need_wakeup = r != 1;
+    pthread_mutex_unlock(&ds->in->lock);
+    
+    return r;
+}
+
+/**
+  Unlike async version, this will never return 0 (try again later)
+*/
+int demux_read_packet_sync_until(struct sh_stream *sh, double min_pts, struct demux_packet **out_pkt) {
+    struct demux_stream *ds = sh ? sh->ds : NULL;
+    int r = -1;
+    *out_pkt = NULL;
+    if (!ds)
+        return r;
+    if (ds->in->blocked) {
+        r = 0;
+    } else {
+        *out_pkt = demux_read_packet(sh, min_pts);
+        printf("Final result of demux read packet, need wait %d\n", lazy_stream_needs_wait(ds));
+        r = *out_pkt ? 1 : -1;
+    }
+    ds->need_wakeup = r != 1;
     return r;
 }
 
@@ -1803,7 +1894,7 @@ struct demux_packet *demux_read_any_packet(struct demuxer *demuxer)
     while (read_more && !in->blocked) {
         for (int n = 0; n < in->num_streams; n++) {
             in->reading = true; // force read_packet() to read
-            struct demux_packet *pkt = dequeue_packet(in->streams[n]->ds);
+            struct demux_packet *pkt = dequeue_packet(in->streams[n]->ds, MP_NOPTS_VALUE);
             if (pkt)
                 return pkt;
         }
