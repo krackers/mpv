@@ -1210,10 +1210,11 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
         queue->is_eof = false;
     }
 
-    if (queue->is_eof != prev_eof)
+    // Adding a sparse packet never changes the seek range.
+    if (queue->is_eof != prev_eof && ds->eager)
         update_seek_ranges(queue->range);
 
-    if (attempt_range_join)
+    if (attempt_range_join && ds->eager)
         attempt_range_joining(ds->in);
 }
 
