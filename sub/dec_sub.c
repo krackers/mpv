@@ -256,7 +256,8 @@ static bool is_new_segment(struct dec_sub *sub, struct demux_packet *p)
 // Read packets from the demuxer stream passed to sub_create(). Return true if
 // enough packets were read, false if the player should wait until the demuxer
 // signals new packets available (and then should retry).
-bool sub_read_packets(struct dec_sub *sub, double video_pts)
+// If force is set, block until necessary subtitle packet is ready.
+bool sub_read_packets(struct dec_sub *sub, double video_pts, bool force)
 {
     bool r = true;
     pthread_mutex_lock(&sub->lock);
@@ -277,22 +278,28 @@ bool sub_read_packets(struct dec_sub *sub, double video_pts)
         if (sub->new_segment)
             break;
 
+        // Extend read-ahead by as much as needed. Note that video_pts has been
+        // adjusted at beginning of this function to take into account sub-delay.
+        // (Use this mechanism only if sub_delay matters to avoid corner cases,
+        //  or if we explicitly requested blocking behavior.)
+        double min_pts = sub->opts->sub_delay < 0 || force ? video_pts : MP_NOPTS_VALUE;
+
         struct demux_packet *pkt;
-        int st = demux_read_packet_async(sub->sh, &pkt);
+        int st = force ? demux_read_packet_sync_until(sub->sh, min_pts, &pkt) : demux_read_packet_async_until(sub->sh, min_pts, &pkt);
         // Note: "wait" (st==0) happens with non-interleaved streams only, and
         // then we should stop the playloop until a new enough packet has been
-        // seen (or the subtitle decoder's queue is full). This does not happen
-        // for interleaved subtitle streams, which never return "wait" when
-        // reading.
+        // seen (or the subtitle decoder's queue is full). This usually does not
+        // happen for interleaved subtitle streams, which never return "wait"
+        // when reading, unless min_pts is set.
         if (st <= 0) {
             r = st < 0 || (sub->last_pkt_pts != MP_NOPTS_VALUE &&
                            sub->last_pkt_pts > video_pts);
             break;
         }
-
+        
         if (sub->recorder_sink)
             mp_recorder_feed_packet(sub->recorder_sink, pkt);
-
+    
         sub->last_pkt_pts = pkt->pts;
 
         if (is_new_segment(sub, pkt)) {
