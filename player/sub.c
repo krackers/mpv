@@ -102,7 +102,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
         sub_preload(dec_sub);
     }
 
-    if (!sub_read_packets(dec_sub, video_pts))
+    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused))
         return false;
 
     // Handle displaying subtitles on terminal; never done for secondary subs
@@ -196,8 +196,13 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     osd_set_sub(mpctx->osd, order, track->d_sub);
     sub_control(track->d_sub, SD_CTRL_SET_TOP, &(bool){!!order});
 
-    if (mpctx->playback_initialized)
-        update_subtitles(mpctx, mpctx->playback_pts);
+    // When paused we have to wait for packets to be available.
+    // So just retry until we get a packet in this case.
+    if (mpctx->playback_initialized) {
+        while (!update_subtitles(mpctx, mpctx->playback_pts) &&
+               mpctx->paused && !mpctx->paused_for_cache);
+    }
+  
 }
 
 void reinit_sub_all(struct MPContext *mpctx)
