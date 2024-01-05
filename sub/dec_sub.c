@@ -237,7 +237,7 @@ void sub_preload(struct dec_sub *sub)
     sub->preload_attempted = true;
 
     for (;;) {
-        struct demux_packet *pkt = demux_read_packet(sub->sh);
+        struct demux_packet *pkt = demux_read_packet(sub->sh, /*min_pts=*/ MP_NOPTS_VALUE);
         if (!pkt)
             break;
         sub->sd->driver->decode(sub->sd, pkt);
