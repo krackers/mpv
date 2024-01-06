@@ -292,7 +292,10 @@ struct demux_stream {
     bool selected;          // user wants packets from this stream
     bool eager;             // try to keep at least 1 packet queued
                             // if false, this stream is disabled, or passively
-                            // read (like subtitles)
+                            // read (like subtitles). Note that subtitles
+                            // are treated as sparse since they are "sparse" streams
+                            // and if we tried to keep at least 1 packet queued
+                            // we'd end up needing to queu a lot of av packets.
     bool still_image;       // stream has still video images
     bool refreshing;        // finding old position after track switches
     bool eof;               // end of demuxed stream? (true if no more packets)
@@ -1361,6 +1364,8 @@ static void mark_stream_eof(struct demux_stream *ds)
  forward byte limit. This occurs whether or not caching is used.
  In effect, it's like we "dynamically" extend the forward-readahead/packet caching range.
 */
+// We assume that sub packet will be within 10 sec of video packet (which is probably a fair assumption)
+#define LAZY_WAIT_READAHEAD_PTS 10.0
 static bool lazy_stream_needs_wait(struct demux_stream *ds)
 {
     struct demux_internal *in = ds->in;
@@ -1368,8 +1373,10 @@ static bool lazy_stream_needs_wait(struct demux_stream *ds)
     // stopped for some reason (true EOF, queue overflow).
     return !ds->eager &&
            !in->last_eof && ds->force_read_until != MP_NOPTS_VALUE &&
-           (ds->queue->last_ts == MP_NOPTS_VALUE ||
-            ds->queue->last_ts <= ds->force_read_until);
+           // A bit of a hack to avoid infinite readahead.
+           (in->demux_ts == MP_NOPTS_VALUE || in->demux_ts <= ds->force_read_until + LAZY_WAIT_READAHEAD_PTS) &&
+           // Stream queue lacks demuxed packet satisfying timestamp condition
+           (ds->queue->last_ts == MP_NOPTS_VALUE || ds->queue->last_ts <= ds->force_read_until);
 }
 
 // Returns true if there was "progress" (lock was released temporarily).
@@ -1404,6 +1411,7 @@ static bool read_packet(struct demux_internal *in)
     }
     MP_TRACE(in, "bytes=%zd, read_more=%d prefetch_more=%d, refresh_more=%d\n",
              (size_t) total_fw_bytes, read_more, prefetch_more, refresh_more);
+
     if (total_fw_bytes >= in->max_bytes) {
         // if we hit the limit just by prefetching, simply stop prefetching
         if (!read_more)
