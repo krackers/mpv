@@ -1354,6 +1354,13 @@ static void mark_stream_eof(struct demux_stream *ds)
     }
 }
 
+/**
+ Mechanism to read-ahead packets (for lazy streams) until packet with force_read_until pts is reached.
+ Note that if this mechanism is used with a forced pts far into the future, the demuxer will need to
+ end up queueing all those intermediary bytes (the video/audio information), which can hit the demux
+ forward byte limit. This occurs whether or not caching is used.
+ In effect, it's like we "dynamically" extend the forward-readahead/packet caching range.
+*/
 static bool lazy_stream_needs_wait(struct demux_stream *ds)
 {
     struct demux_internal *in = ds->in;
