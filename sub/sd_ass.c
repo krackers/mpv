@@ -43,6 +43,7 @@ struct sd_ass_priv {
     struct ass_track *shadow_track; // for --sub-ass=no rendering
     bool is_converted;
     bool ass_configured;
+    bool reinited;
     struct lavc_conv *converter;
     bool on_top;
     struct mp_ass_packer *packer;
@@ -137,6 +138,16 @@ static void enable_output(struct sd *sd, bool enable)
     struct sd_ass_priv *ctx = sd->priv;
     if (enable == !!ctx->ass_renderer)
         return;
+
+    // Must reconfigure after enabling.
+    ctx->ass_configured = false;
+    // This is used to "bust" the packer cache.
+    // From libass perspective, if it is inited then the next
+    // sub is empty, it signals that there is no change.
+    // Of course from the client perspective there could
+    // well have been something before the reinit, so
+    // we need to bypass the packer cache.
+    ctx->reinited = true;
     if (ctx->ass_renderer) {
         ass_renderer_done(ctx->ass_renderer);
         ctx->ass_renderer = NULL;
@@ -478,7 +489,8 @@ static void get_bitmaps(struct sd *sd, struct mp_osd_res dim, int format,
 
     int changed;
     ASS_Image *imgs = ass_render_frame(renderer, track, ts, &changed);
-    mp_ass_packer_pack(ctx->packer, &imgs, 1, changed, format, res);
+    mp_ass_packer_pack(ctx->packer, &imgs, 1, changed || ctx->reinited, format, res);
+    ctx->reinited = false;
 
     if (!converted && res->num_parts > 0) {
         // mangle_colors() modifies the color field, so copy the thing.
