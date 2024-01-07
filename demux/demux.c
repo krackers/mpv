@@ -2791,9 +2791,14 @@ static void initiate_refresh_seek(struct demux_internal *in,
     struct demuxer *demux = in->d_thread;
     bool seekable = demux->desc->seek && demux->seekable &&
                     !demux->partially_seekable;
-
     bool normal_seek = true;
     bool refresh_possible = true;
+    
+    // Prefetch subtitles on track switch a bit more.
+    if (stream->type == STREAM_SUB) {
+        start_ts -= 10.0;
+    }
+
     for (int n = 0; n < in->num_streams; n++) {
         struct demux_stream *ds = in->streams[n]->ds;
 
