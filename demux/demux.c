@@ -1364,8 +1364,9 @@ static void mark_stream_eof(struct demux_stream *ds)
  forward byte limit. This occurs whether or not caching is used.
  In effect, it's like we "dynamically" extend the forward-readahead/packet caching range.
 */
-// We assume that sub packet will be within 10 sec of video packet (which is probably a fair assumption)
-#define LAZY_WAIT_READAHEAD_PTS 10.0
+// Read ahead at most 2 extra secs from desired pts, to simulate normal demux
+// readahead behavior.
+#define LAZY_WAIT_READAHEAD_PTS 2.0
 static bool lazy_stream_needs_wait(struct demux_stream *ds)
 {
     struct demux_internal *in = ds->in;
