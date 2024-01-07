@@ -84,18 +84,21 @@ static void term_osd_update(struct MPContext *mpctx)
         parts[num_parts++] = mpctx->term_osd_status;
 
     char *s = join_lines(mpctx, parts, num_parts);
+    if (strcmp(mpctx->term_osd_contents, s) == 0 &&
+        mp_msg_has_status_line(mpctx->global))
+    {
+        talloc_free(s);
+    } else {
+        talloc_free(mpctx->term_osd_contents);
+        mpctx->term_osd_contents = s;
 
-    mp_msg_queue_async(mpctx->statusline, ^{
-        if (strcmp(mpctx->term_osd_contents, s) == 0 && 
-            mp_msg_has_status_line(mpctx->global))
-        {
-            talloc_free(s);
-        } else {
-            talloc_free(mpctx->term_osd_contents);
-            mpctx->term_osd_contents = s;
+        // Passed across thread boundary, so can't share context.
+        s = talloc_strdup(NULL, s);
+        mp_msg_queue_async(mpctx->statusline, ^{
             mp_msg(mpctx->statusline, MSGL_STATUS, "%s", s);
-        }
-    });
+            talloc_free(s);
+        });
+    }
 }
 
 void term_osd_set_subs(struct MPContext *mpctx, const char *text)
