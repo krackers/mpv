@@ -86,7 +86,7 @@ static void uninit_demuxer(struct MPContext *mpctx)
         mp_remove_track(mpctx, mpctx->tracks[n]);
     }
     for (int i = 0; i < mpctx->num_tracks; i++) {
-        assert(!mpctx->tracks[i]->d_sub);
+        sub_destroy(mpctx->tracks[i]->d_sub);
         talloc_free(mpctx->tracks[i]);
     }
     mpctx->num_tracks = 0;
@@ -551,6 +551,8 @@ bool mp_remove_track(struct MPContext *mpctx, struct track *track)
         return false;
 
     struct demuxer *d = track->demuxer;
+
+    sub_destroy(track->d_sub);
 
     if (mpctx->seek_slave == track)
         mpctx->seek_slave = NULL;

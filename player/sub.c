@@ -70,8 +70,6 @@ void uninit_sub(struct MPContext *mpctx, struct track *track)
         sub_select(track->d_sub, false);
         int order = get_order(mpctx, track);
         osd_set_sub(mpctx->osd, order, NULL);
-        sub_destroy(track->d_sub);
-        track->d_sub = NULL;
     }
 }
 
@@ -184,9 +182,7 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     if (!track || !track->stream || track->stream->type != STREAM_SUB)
         return;
 
-    assert(!track->d_sub);
-
-    if (!init_subdec(mpctx, track)) {
+    if (!track->d_sub && !init_subdec(mpctx, track)) {
         error_on_track(mpctx, track);
         return;
     }
