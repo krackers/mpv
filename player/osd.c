@@ -45,58 +45,51 @@
 #include "core.h"
 #include "command.h"
 
-#define saddf(var, ...) (*(var) = talloc_asprintf_append((*var), __VA_ARGS__))
+#define sadd(str, append) bstr_xappend0(NULL, str, append)
+#define saddf(str, ...) bstr_xappend_asprintf(NULL, (str), __VA_ARGS__)
 
 // append time in the hh:mm:ss format (plus fractions if wanted)
-static void sadd_hhmmssff(char **buf, double time, bool fractions)
+static void sadd_hhmmssff(bstr *buf, double time, bool fractions)
 {
     char *s = mp_format_time(time, fractions);
-    *buf = talloc_strdup_append(*buf, s);
+    sadd(buf, s);
     talloc_free(s);
 }
 
-static void sadd_percentage(char **buf, int percent) {
+static void sadd_percentage(bstr *buf, int percent) {
     if (percent >= 0)
-        *buf = talloc_asprintf_append(*buf, " (%d%%)", percent);
-}
-
-static char *join_lines(void *ta_ctx, char **parts, int num_parts)
-{
-    char *res = talloc_strdup(ta_ctx, "");
-    for (int n = 0; n < num_parts; n++)
-        res = talloc_asprintf_append(res, "%s%s", n ? "\n" : "", parts[n]);
-    return res;
+        saddf(buf, " (%d%%)", percent);
 }
 
 static void term_osd_update(struct MPContext *mpctx)
 {
     int num_parts = 0;
-    char *parts[3] = {0};
+    bstr parts[3] = {0};
 
     if (!mpctx->opts->use_terminal)
         return;
 
-    if (mpctx->term_osd_subs && mpctx->term_osd_subs[0])
+    if (mpctx->term_osd_subs.len)
         parts[num_parts++] = mpctx->term_osd_subs;
-    if (mpctx->term_osd_text && mpctx->term_osd_text[0])
+    if (mpctx->term_osd_text.len)
         parts[num_parts++] = mpctx->term_osd_text;
-    if (mpctx->term_osd_status && mpctx->term_osd_status[0])
+    if (mpctx->term_osd_status.len)
         parts[num_parts++] = mpctx->term_osd_status;
 
-    char *s = join_lines(mpctx, parts, num_parts);
-    if (strcmp(mpctx->term_osd_contents, s) == 0 &&
+    bstr s = bstr_join_lines(mpctx, parts, num_parts, '\n');
+    if (bstr_equals(mpctx->term_osd_contents, s) &&
         mp_msg_has_status_line(mpctx->global))
     {
-        talloc_free(s);
+        talloc_free(s.start);
     } else {
-        talloc_free(mpctx->term_osd_contents);
+        talloc_free(mpctx->term_osd_contents.start);
         mpctx->term_osd_contents = s;
 
         // Passed across thread boundary, so can't share context.
-        s = talloc_strdup(NULL, s);
+        s = bstrdup(NULL, s);
         mp_msg_queue_async(mpctx->statusline, ^{
-            mp_msg(mpctx->statusline, MSGL_STATUS, "%s", s);
-            talloc_free(s);
+            mp_msg(mpctx->statusline, MSGL_STATUS, "%s", s.start);
+            talloc_free(s.start);
         });
     }
 }
@@ -105,34 +98,39 @@ void term_osd_set_subs(struct MPContext *mpctx, const char *text)
 {
     if (mpctx->video_out || !text)
         text = ""; // disable
-    if (strcmp(mpctx->term_osd_subs ? mpctx->term_osd_subs : "", text) == 0)
+    if (strcmp(mpctx->term_osd_subs.len ? (char *)mpctx->term_osd_subs.start : "", text) == 0)
         return;
-    talloc_free(mpctx->term_osd_subs);
-    mpctx->term_osd_subs = talloc_strdup(mpctx, text);
+    talloc_free(mpctx->term_osd_subs.start);
+    mpctx->term_osd_subs = bstrdupfrom0(mpctx, text);
     term_osd_update(mpctx);
 }
 
-static void term_osd_set_text_lazy(struct MPContext *mpctx, const char *text)
+static void term_osd_set_text_lazy(struct MPContext *mpctx, bstr text)
 {
     bool video_osd = mpctx->video_out && mpctx->opts->video_osd;
-    if ((video_osd && mpctx->opts->term_osd != 1) || !text)
-        text = ""; // disable
-    talloc_free(mpctx->term_osd_text);
-    mpctx->term_osd_text = talloc_strdup(mpctx, text);
+    if ((video_osd && mpctx->opts->term_osd != 1) || !text.len)
+        text = bstr0(""); // disable
+    bstr_free(&mpctx->term_osd_text);
+    mpctx->term_osd_text = bstrdup(mpctx, text);
 }
 
-static void term_osd_set_status_lazy(struct MPContext *mpctx, const char *text)
+// Takes ownership of passed in bstr
+// The bstr passed in must be a valid talloc context
+static void term_osd_set_status_lazy__releasing(struct MPContext *mpctx, bstr text)
 {
-    talloc_free(mpctx->term_osd_status);
-    mpctx->term_osd_status = talloc_strdup(mpctx, text);
+    bstr_free(&mpctx->term_osd_status);
+    mpctx->term_osd_status = text;
 
     int w = 80, h = 24;
     terminal_get_size(&w, &h);
-    if (strlen(mpctx->term_osd_status) > w && !strchr(mpctx->term_osd_status, '\n'))
-        mpctx->term_osd_status[w] = '\0';
+    if (mpctx->term_osd_status.len > w && !strchr(mpctx->term_osd_status.start, '\n')) {
+        // Not strictly necessary to null-out, but better for safety...
+        mpctx->term_osd_status.start[w] = '\0';
+        mpctx->term_osd_status.len = w;
+    }
 }
 
-static void add_term_osd_bar(struct MPContext *mpctx, char **line, int width)
+static void add_term_osd_bar(struct MPContext *mpctx, bstr *line, int width)
 {
     struct MPOpts *opts = mpctx->opts;
 
@@ -147,13 +145,14 @@ static void add_term_osd_bar(struct MPContext *mpctx, char **line, int width)
     for (int n = 0; n < 5; n++)
         parts[n] = bstr_split_utf8(chars, &chars);
 
-    saddf(line, "\r%.*s", BSTR_P(parts[0]));
+    sadd(line, "\r");
+    bstr_xappend(NULL, line, parts[0]);
     for (int n = 0; n < pos; n++)
-        saddf(line, "%.*s", BSTR_P(parts[1]));
-    saddf(line, "%.*s", BSTR_P(parts[2]));
+        bstr_xappend(NULL, line, parts[1]);
+    bstr_xappend(NULL, line, parts[2]);
     for (int n = 0; n < width - 3 - pos; n++)
-        saddf(line, "%.*s", BSTR_P(parts[3]));
-    saddf(line, "%.*s", BSTR_P(parts[4]));
+        bstr_xappend(NULL, line, parts[3]);
+    bstr_xappend(NULL, line, parts[4]);
 }
 
 static bool is_busy(struct MPContext *mpctx)
@@ -161,33 +160,35 @@ static bool is_busy(struct MPContext *mpctx)
     return !mpctx->restart_complete && mp_time_sec() - mpctx->start_timestamp > 0.3;
 }
 
-static char *get_term_status_msg(struct MPContext *mpctx)
+// Return bstr allocated with mpctx context.
+static bstr get_term_status_msg(struct MPContext *mpctx)
 {
     struct MPOpts *opts = mpctx->opts;
 
+    // Underlying talloc allocated string ownership passed directly to bstr
     if (opts->status_msg)
-        return mp_property_expand_escaped_string(mpctx, opts->status_msg);
+        return bstr0(mp_property_expand_escaped_string(mpctx, opts->status_msg));
 
-    char *line = NULL;
+    bstr line = newbstr(mpctx);
 
     // Playback status
     if (is_busy(mpctx)) {
-        saddf(&line, "(...) ");
+        sadd(&line, "(...) ");
     } else if (mpctx->paused_for_cache && !opts->pause) {
-        saddf(&line, "(Buffering) ");
+        sadd(&line, "(Buffering) ");
     } else if (mpctx->paused) {
-        saddf(&line, "(Paused) ");
+        sadd(&line, "(Paused) ");
     }
 
     if (mpctx->ao_chain)
-        saddf(&line, "A");
+        sadd(&line, "A");
     if (mpctx->vo_chain)
-        saddf(&line, "V");
-    saddf(&line, ": ");
+        sadd(&line, "V");
+    sadd(&line, ": ");
 
     // Playback position
     sadd_hhmmssff(&line, get_playback_time(mpctx), opts->osd_fractions);
-    saddf(&line, " / ");
+    sadd(&line, " / ");
     sadd_hhmmssff(&line, get_time_length(mpctx), opts->osd_fractions);
 
     sadd_percentage(&line, get_percent_pos(mpctx));
@@ -238,13 +239,13 @@ static char *get_term_status_msg(struct MPContext *mpctx)
         struct stream_cache_info info = {0};
         demux_stream_control(mpctx->demuxer, STREAM_CTRL_GET_CACHE_INFO, &info);
         if (info.size > 0 || mpctx->demuxer->is_network) {
-            saddf(&line, " Cache: ");
+            sadd(&line, " Cache: ");
 
             struct demux_ctrl_reader_state s = {.ts_duration = -1};
             demux_control(mpctx->demuxer, DEMUXER_CTRL_GET_READER_STATE, &s);
 
             if (s.ts_duration < 0) {
-                saddf(&line, "???");
+                sadd(&line, "???");
             } else {
                 saddf(&line, "%2ds", (int)s.ts_duration);
             }
@@ -274,21 +275,20 @@ static void term_osd_print_status_lazy(struct MPContext *mpctx)
 
     if (opts->quiet || !mpctx->playback_initialized || !mpctx->playing_msg_shown)
     {
-        term_osd_set_status_lazy(mpctx, "");
+        term_osd_set_status_lazy__releasing(mpctx, bstrdupfrom0(mpctx, ""));
         return;
     }
 
-    char *line = get_term_status_msg(mpctx);
+    bstr line = get_term_status_msg(mpctx);
 
     if (opts->term_osd_bar) {
-        saddf(&line, "\n");
+        sadd(&line, "\n");
         int w = 80, h = 24;
         terminal_get_size(&w, &h);
         add_term_osd_bar(mpctx, &line, w);
     }
 
-    term_osd_set_status_lazy(mpctx, line);
-    talloc_free(line);
+    term_osd_set_status_lazy__releasing(mpctx, line);
 }
 
 static bool set_osd_msg_va(struct MPContext *mpctx, int level, int time,
@@ -297,8 +297,9 @@ static bool set_osd_msg_va(struct MPContext *mpctx, int level, int time,
     if (level > mpctx->opts->osd_level)
         return false;
 
-    talloc_free(mpctx->osd_msg_text);
-    mpctx->osd_msg_text = talloc_vasprintf(mpctx, fmt, ap);
+    bstr_free(&mpctx->osd_msg_text);
+    bstr_xappend_vasprintf(mpctx, &mpctx->osd_msg_text, fmt, ap);
+    
     mpctx->osd_show_pos = false;
     mpctx->osd_msg_next_duration = time / 1000.0;
     mpctx->osd_force_update = true;
@@ -418,7 +419,7 @@ void get_current_osd_sym(struct MPContext *mpctx, char *buf, size_t buf_size)
     osd_get_function_sym(buf, buf_size, sym);
 }
 
-static void sadd_osd_status(char **buffer, struct MPContext *mpctx, int level)
+static void sadd_osd_status(bstr *buffer, struct MPContext *mpctx, int level)
 {
     assert(level >= 0 && level <= 3);
     if (level == 0)
@@ -427,7 +428,7 @@ static void sadd_osd_status(char **buffer, struct MPContext *mpctx, int level)
 
     if (msg && msg[0]) {
         char *text = mp_property_expand_escaped_string(mpctx, msg);
-        *buffer = talloc_strdup_append(*buffer, text);
+        sadd(buffer, text);
         talloc_free(text);
     } else if (level >= 2) {
         bool fractions = mpctx->opts->osd_fractions;
@@ -437,12 +438,12 @@ static void sadd_osd_status(char **buffer, struct MPContext *mpctx, int level)
         char *custom_msg = mpctx->opts->osd_status_msg;
         if (custom_msg && level == 3) {
             char *text = mp_property_expand_escaped_string(mpctx, custom_msg);
-            *buffer = talloc_strdup_append(*buffer, text);
+            sadd(buffer, text);
             talloc_free(text);
         } else {
             sadd_hhmmssff(buffer, get_playback_time(mpctx), fractions);
             if (level == 3) {
-                saddf(buffer, " / ");
+                sadd(buffer, " / ");
                 sadd_hhmmssff(buffer, get_time_length(mpctx), fractions);
                 sadd_percentage(buffer, get_percent_pos(mpctx));
             }
@@ -551,8 +552,7 @@ void update_term_osd_msg(struct MPContext *mpctx)
             mp_set_timeout(mpctx, sleep);
             mpctx->osd_idle_update = true;
         } else {
-            talloc_free(mpctx->osd_msg_text);
-            mpctx->osd_msg_text = NULL;
+            bstr_free(&mpctx->osd_msg_text);
             mpctx->osd_msg_visible = 0;
             mpctx->osd_show_pos = false;
         }
@@ -590,14 +590,16 @@ void update_vo_osd_msg(struct MPContext *mpctx) {
     if (mpctx->osd_show_pos)
         osd_level = 3;
 
-    char *text = NULL;
+    bstr text = newbstr(NULL);
     sadd_osd_status(&text, mpctx, osd_level);
-    if (mpctx->osd_msg_text && mpctx->osd_msg_text[0]) {
-        text = talloc_asprintf_append(text, "%s%s", text ? "\n" : "",
-                                      mpctx->osd_msg_text);
+    if (mpctx->osd_msg_text.len) {
+        if (text.len) {
+            sadd(&text, "\n");
+        }
+        bstr_xappend(NULL, &text, mpctx->osd_msg_text);
     }
-    osd_set_text(osd, text);
-    talloc_free(text);
+    osd_set_text(osd, text.start);
+    talloc_free(text.start);
 
     osd_end = mach_absolute_time();
 }
