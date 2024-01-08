@@ -281,7 +281,7 @@ struct MPContext *mp_create(void)
     struct MPContext *mpctx = talloc(NULL, MPContext);
     *mpctx = (struct MPContext){
         .last_chapter = -2,
-        .term_osd_contents = talloc_strdup(mpctx, ""),
+        .term_osd_contents = newbstr(mpctx),
         .osd_progbar = { .type = -1 },
         .playlist = talloc_struct(mpctx, struct playlist, {0}),
         .dispatch = mp_dispatch_create(mpctx),
