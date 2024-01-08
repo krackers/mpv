@@ -150,7 +150,7 @@ bool mp_msg_test(struct mp_log *log, int lev)
 // Reposition cursor and clear lines for outputting the status line. In certain
 // cases, like term OSD and subtitle display, the status can consist of
 // multiple lines.
-static void prepare_status_line(struct mp_log_root *root, bstr new_status, bstr *term_msg)
+static void prepare_status_line(void *talloc_ctx, struct mp_log_root *root, bstr new_status, bstr *term_msg)
 {
     size_t old_lines = root->status_lines;
     if (new_status.len == 0 && old_lines == 0)
@@ -169,15 +169,15 @@ static void prepare_status_line(struct mp_log_root *root, bstr new_status, bstr 
     size_t clear_lines = MPMIN(MPMAX(new_lines, old_lines), root->blank_lines);
 
     // clear the status line itself
-    bstr_xappend(root, term_msg, bstr0("\r\033[K"));
+    bstr_xappend0(talloc_ctx, term_msg, "\r\033[K");
     // and clear all previous old lines
     bstr up_clear_escape = bstr0("\033[A\r\033[K");
     for (size_t n = 1; n < clear_lines; n++)
-        bstr_xappend(root, term_msg, up_clear_escape);
+        bstr_xappend(talloc_ctx, term_msg, up_clear_escape);
     // skip "unused" blank lines, so that status is aligned to term bottom
     bstr new_line = bstr0("\n");
     for (size_t n = new_lines; n < clear_lines; n++)
-        bstr_xappend(root, term_msg, new_line);
+        bstr_xappend(talloc_ctx, term_msg, new_line);
 
     root->status_lines = new_lines;
     root->blank_lines = MPMAX(root->blank_lines, new_lines);
@@ -198,7 +198,9 @@ void mp_msg_flush_status_line(struct mp_log *log)
 {
     pthread_mutex_lock(&mp_msg_lock);
     if (log->root && flush_status_line(log->root)) {
-        fprintf(stderr, "\n");
+        mp_msg_queue_async(log, ^{
+            fprintf(stderr, "\n");
+        });
     }
     pthread_mutex_unlock(&mp_msg_lock);
 }
@@ -213,7 +215,7 @@ bool mp_msg_has_status_line(struct mpv_global *global)
 
 static void set_term_color(void *talloc_ctx, bstr *text, int c)
 {
-    return c == -1 ? bstr_xappend(talloc_ctx, text, bstr0("\033[0m"))
+    return c == -1 ? bstr_xappend0(talloc_ctx, text, "\033[0m")
                    : bstr_xappend_asprintf(talloc_ctx, text,
                                            "\033[%d;3%dm", c >> 3, c & 7);
 }
@@ -225,7 +227,7 @@ static void set_msg_color(void *talloc_ctx, bstr *text, int lev)
     set_term_color(talloc_ctx, text, v_colors[lev]);
 }
 
-static void pretty_print_module(struct mp_log_root *root, bstr *text, const char *prefix, int lev)
+static void pretty_print_module(void *talloc_ctx, struct mp_log_root *root, bstr *text, const char *prefix, int lev)
 {
     // Use random color based on the name of the module
     if (root->color) {
@@ -233,15 +235,15 @@ static void pretty_print_module(struct mp_log_root *root, bstr *text, const char
         unsigned int mod = 0;
         for (int i = 0; i < prefix_len; ++i)
             mod = mod * 33 + prefix[i];
-        set_term_color(root, text, (mod + 1) % 15 + 1);
+        set_term_color(talloc_ctx, text, (mod + 1) % 15 + 1);
     }
 
-    bstr_xappend_asprintf(root, text, "%10s", prefix);
+    bstr_xappend_asprintf(talloc_ctx, text, "%10s", prefix);
     if (root->color)
-        set_term_color(root, text, -1);
-    bstr_xappend(root, text, bstr0(": "));
+        set_term_color(talloc_ctx, text, -1);
+    bstr_xappend0(talloc_ctx, text, ": ");
     if (root->color)
-        set_msg_color(root, text, lev);
+        set_msg_color(talloc_ctx, text, lev);
 }
 
 static bool test_terminal_level(struct mp_log *log, int lev)
@@ -250,41 +252,46 @@ static bool test_terminal_level(struct mp_log *log, int lev)
            !(lev == MSGL_STATUS && terminal_in_background());
 }
 
-static void print_terminal_line(struct mp_log *log, int lev, bstr text, bstr trail, bstr *term_msg, 
-                                bool *flush_statusline, bool *flush)
+#define FLUSH_STATUSLINE 1
+#define FLUSH_STREAM 0
+
+static int append_terminal_line(void *talloc_ctx, struct mp_log *log, int lev, bstr text, char* trail, bstr *term_msg)
 {
     struct mp_log_root *root = log->root;
     if (!test_terminal_level(log, lev))
-        return;
+        return 0;
 
+    bool need_statusline_flush = false;
+    bool need_flush = false;
     if (lev != MSGL_STATUS)
-         *flush_statusline = *flush_statusline || flush_status_line(root);
+         need_statusline_flush = flush_status_line(root);
 
     if (root->color)
-        set_msg_color(root, term_msg, lev);
+        set_msg_color(talloc_ctx, term_msg, lev);
 
     if (root->show_time)
-        bstr_xappend_asprintf(root, term_msg, "[%" PRId64 "] ", mp_time_us());
+        bstr_xappend_asprintf(talloc_ctx, term_msg, "[%" PRId64 "] ", mp_time_us());
 
     const char *prefix = (lev >= MSGL_V) || root->verbose || root->module
                                 ? log->verbose_prefix : log->prefix;
 
     if (prefix) {
         if (root->module) {
-            pretty_print_module(root, term_msg, prefix, lev);
+            pretty_print_module(talloc_ctx, root, term_msg, prefix, lev);
         } else {
-            bstr_xappend_asprintf(root, term_msg, "[%s] ", prefix);
+            bstr_xappend_asprintf(talloc_ctx, term_msg, "[%s] ", prefix);
         }
     }
 
-    bstr_xappend(root, term_msg, text);
-    bstr_xappend(root, term_msg, trail);
+    bstr_xappend(talloc_ctx, term_msg, text);
+    bstr_xappend(talloc_ctx, term_msg, bstr0(trail));
 
     if (root->color)
-        set_term_color(root, term_msg, -1);
+        set_term_color(talloc_ctx, term_msg, -1);
     if (!bstr_endswith0(*term_msg, "\n")) {
-        *flush = true;
+        need_flush = true;
     }
+    return (need_statusline_flush << FLUSH_STATUSLINE) | (need_flush << FLUSH_STREAM);
 }
 
 static void write_log_file(struct mp_log *log, int lev, bstr text)
@@ -293,12 +300,18 @@ static void write_log_file(struct mp_log *log, int lev, bstr text)
 
     if (!root->log_file || lev > MPMAX(MSGL_DEBUG, log->terminal_level))
         return;
+    
+    bstr duped = bstrdup(NULL, text);
+    // Assume that root->log_file doesn't change in-between...
+    mp_msg_queue_async(log, ^{
+        fprintf(root->log_file, "[%8.3f][%c][%s] %.*s",
+                (mp_time_us() - MP_START_TIME) / 1e6,
+                mp_log_levels[lev][0],
+                log->verbose_prefix, BSTR_P(duped));
+        fflush(root->log_file);
+        talloc_free(duped.start);
+    });
 
-    fprintf(root->log_file, "[%8.3f][%c][%s] %.*s",
-            (mp_time_us() - MP_START_TIME) / 1e6,
-            mp_log_levels[lev][0],
-            log->verbose_prefix, BSTR_P(text));
-    fflush(root->log_file);
 }
 
 static void write_msg_to_buffers(struct mp_log *log, int lev, bstr text)
@@ -343,6 +356,23 @@ static void dump_stats(struct mp_log *log, int lev, char *text)
         fprintf(root->stats_file, "%"PRId64" %s\n", mp_time_us(), text);
 }
 
+static void release_terminal_line(struct mp_log *log, int lev, int flush_mask, bstr term_msg) {
+    FILE *stream = (log->root->force_stderr || lev == MSGL_STATUS) ? stderr : stdout;
+    mp_msg_queue_async(log, ^{
+        if (flush_mask & (1 << FLUSH_STATUSLINE)) {
+            fprintf(stderr, "\n");
+        }
+        if (term_msg.len) {
+            fprintf(stream, "%.*s", BSTR_P(term_msg));
+        }
+        // assume stderr non-buffered by default
+        if ((flush_mask & (1 << FLUSH_STREAM)) && stream != stderr) {
+            fflush(stream);
+        }
+        talloc_free(term_msg.start);
+    });
+}
+
 void mp_msg_va(struct mp_log *log, int lev, const char *format, va_list va)
 {
     if (!mp_msg_test(log, lev))
@@ -365,14 +395,11 @@ void mp_msg_va(struct mp_log *log, int lev, const char *format, va_list va)
     } else if (lev == MSGL_STATUS && !test_terminal_level(log, lev)) {
         /* discard */
     } else {
-        FILE *stream = (root->force_stderr || lev == MSGL_STATUS) ? stderr : stdout;
-        root->term_msg.len = 0;
-
+        bstr term_msg = {0};
         if (lev == MSGL_STATUS && root->termosd)
-            prepare_status_line(log->root, root->buffer, &root->term_msg);
+            prepare_status_line(NULL, root, root->buffer, &term_msg);
 
-        bool flush_statusline = false;
-        bool flush = false;
+        int flush_mask = 0;
 
         // Split away each line. Normally we require full lines; buffer partial
         // lines if they happen.
@@ -384,31 +411,23 @@ void mp_msg_va(struct mp_log *log, int lev, const char *format, va_list va)
                 str = line;
                 break;
             }
-            print_terminal_line(log, lev, line, bstr0(""), &root->term_msg, &flush_statusline, &flush);
+            flush_mask = flush_mask | append_terminal_line(NULL, log, lev, line, "", &term_msg);
+
             write_log_file(log, lev, line);
             write_msg_to_buffers(log, lev, line);
         }
 
         if (lev == MSGL_STATUS) {
-            if (str.len)
-                print_terminal_line(log, lev, str, root->termosd ? bstr0("\r") : bstr0("\n"), &root->term_msg, &flush_statusline, &flush);
+            if (str.len) {
+                flush_mask = flush_mask | append_terminal_line(NULL, log, lev, str, root->termosd ? "\r" : "\n", &term_msg);
+            }
         } else if (str.len) {
             int size = str.len + 1;
             if (talloc_get_size(log->partial) < size)
                 log->partial = talloc_realloc(NULL, log->partial, char, size);
             memcpy(log->partial, str.start, size);
         }
-
-        if (flush_statusline) {
-            fprintf(stderr, "\n");
-        }
-        if (root->term_msg.len) {
-            fprintf(stream, "%.*s", BSTR_P(root->term_msg));
-        }
-        // assume stderr non-buffered by default
-        if (flush && stream != stderr) {
-            fflush(stream);
-        }
+        release_terminal_line(log, lev, flush_mask, term_msg);
     }
 
     pthread_mutex_unlock(&mp_msg_lock);
