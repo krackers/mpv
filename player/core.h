@@ -245,10 +245,13 @@ typedef struct MPContext {
 
     struct mp_log *statusline;
     struct osd_state *osd;
-    char *term_osd_text;
-    char *term_osd_status;
-    char *term_osd_subs;
-    char *term_osd_contents;
+    
+    bstr term_osd_text;
+    bstr term_osd_status;
+    bstr term_osd_subs;
+
+    bstr term_osd_contents;
+
     char *last_window_title;
     struct voctrl_playback_state vo_playback_state;
 
@@ -260,7 +263,7 @@ typedef struct MPContext {
     double osd_msg_next_duration;
     double osd_last_update;
     bool osd_force_update, osd_idle_update;
-    char *osd_msg_text;
+    bstr osd_msg_text;
     bool osd_show_pos;
     struct osd_progbar_state osd_progbar;
 
