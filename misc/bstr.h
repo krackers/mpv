@@ -31,34 +31,64 @@
  * that input size has been sanity checked and len fits in an int.
  */
 typedef struct bstr {
-    unsigned char *start;
-    size_t len;
+    unsigned char *start; // Note that this may not necessarily be null-terminated
+                          // Unless guaranteed by the generating functions.
+    size_t len; // size (equivalent to strlen, so not including null-term)
 } bstr;
 
+// Returns _copy_ of contents of bstr, allocated on talloc ctx
 // If str.start is NULL, return NULL.
 static inline char *bstrdup0(void *talloc_ctx, struct bstr str)
 {
     return talloc_strndup(talloc_ctx, (char *)str.start, str.len);
 }
 
-// Like bstrdup0(), but always return a valid C-string.
+// Returns _copy_ of contents of bstr, allocated on talloc ctx.
+// Unlike bstrdup0() this will always return a valid C-string (null-terminated).
 static inline char *bstrto0(void *talloc_ctx, struct bstr str)
 {
     return str.start ? bstrdup0(talloc_ctx, str) : talloc_strdup(talloc_ctx, "");
 }
 
 // Return start = NULL iff that is true for the original.
+// Creates a copy of a given bstr, with the new copy allocated on talloc_ctx.
+// The underlying bstr is created with a null-terminated string.
 static inline struct bstr bstrdup(void *talloc_ctx, struct bstr str)
 {
     struct bstr r = { NULL, str.len };
-    if (str.start)
-        r.start = (unsigned char *)talloc_memdup(talloc_ctx, str.start, str.len);
+    if (str.start) {
+        r.start = talloc_size(talloc_ctx, (sizeof(unsigned char) * (str.len + 1)));
+        memcpy(r.start, str.start, str.len);
+        r.start[str.len] = '\0';
+    }
     return r;
 }
 
+// Creates a bstr with the copy of the given null-terminated C string.
+static inline struct bstr bstrdupfrom0(void *talloc_ctx, const char *s)
+{
+    struct bstr r = { NULL, 0 };
+    if (!s)
+        return r;
+    r.len = strlen(s);
+    r.start = (unsigned char *)talloc_memdup(talloc_ctx, s, r.len + 1);
+    return r;
+}
+
+
+// Use an existing C-string as a bstr.
+// Be careful with memory management.
 static inline struct bstr bstr0(const char *s)
 {
     return (struct bstr){(unsigned char *)s, s ? strlen(s) : 0};
+}
+
+// Returns a 0-length bstr allocated on the talloc context.
+// The underlying pointer is null-terminated.
+static inline struct bstr newbstr(void *talloc_ctx) {
+    char *ptr = talloc_size(talloc_ctx, sizeof(char));
+    *ptr = '\0';
+    return (bstr){ptr, 0};
 }
 
 int bstrcmp(struct bstr str1, struct bstr str2);
@@ -140,6 +170,10 @@ void bstr_xappend_asprintf(void *talloc_ctx, bstr *s, const char *fmt, ...)
 void bstr_xappend_vasprintf(void *talloc_ctx, bstr *s, const char *fmt, va_list va)
     PRINTF_ATTRIBUTE(3, 0);
 
+inline void bstr_xappend0(void *talloc_ctx, bstr *s, const char *append) {
+    bstr_xappend(talloc_ctx, s, (bstr){(unsigned char*) append, strlen(append)});
+}
+
 // If s starts/ends with prefix, return true and return the rest of the string
 // in s.
 bool bstr_eatstart(struct bstr *s, struct bstr prefix);
@@ -150,6 +184,8 @@ bool bstr_case_endswith(struct bstr s, struct bstr suffix);
 struct bstr bstr_strip_ext(struct bstr str);
 struct bstr bstr_get_ext(struct bstr s);
 
+// returns a slice of the underlying bstr as str[:n]
+// Note that because this is a slice, the underlying pointer cannot be freed
 static inline struct bstr bstr_cut(struct bstr str, int n)
 {
     if (n < 0) {
@@ -222,6 +258,43 @@ static inline bool bstr_eatstart0(struct bstr *s, const char *prefix)
 static inline bool bstr_eatend0(struct bstr *s, const char *prefix)
 {
     return bstr_eatend(s, bstr0(prefix));
+}
+
+
+// Convenience method to free a bstr assuming
+// That the underlying pointer is a valid talloc context.
+static inline void bstr_free(struct bstr *s) {
+    talloc_free(s->start);
+    s->len = 0;
+    s->start = NULL;
+}
+
+
+// Returns a new bstr allocated on ta_ctx with the input bstrs joined with joiner.
+static bstr bstr_join_lines(void *ta_ctx, bstr *parts, int num_parts, char joiner)
+{
+    if (num_parts <= 0) {
+        return newbstr(ta_ctx);
+    }
+
+    int new_len = 1; // For null char
+    for (int i = 0; i < num_parts; i++) {
+        new_len += parts[i].len;
+    }
+    new_len += (num_parts - 1); // For joiner chars
+    char *joined = talloc_size(ta_ctx, sizeof(char) * new_len);
+    bstr ret = {joined, new_len};
+
+    memcpy(joined, parts[0].start, parts[0].len);
+    joined += parts[0].len;
+
+    for (int n = 1; n < num_parts; n++) {
+        *(joined++) = joiner;
+        memcpy(joined, parts[n].start, parts[n].len);
+        joined += parts[n].len;
+    }
+    *joined = '\0';
+    return ret;
 }
 
 // create a pair (not single value!) for "%.*s" printf syntax
