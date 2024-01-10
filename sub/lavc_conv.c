@@ -57,7 +57,7 @@ static const char *get_lavc_format(const char *format)
 // We always want the user defined style instead.
 static void disable_styles(bstr header)
 {
-    bstr style = bstr0("\nStyle: ");
+    bstr style = bstrof0("\nStyle: ");
     while (header.len) {
         int n = bstr_find(header, style);
         if (n < 0)
@@ -99,7 +99,7 @@ struct lavc_conv *lavc_conv_create(struct mp_log *log, const char *codec_name,
     priv->avctx = avctx;
     priv->extradata = talloc_strndup(priv, avctx->subtitle_header,
                                      avctx->subtitle_header_size);
-    disable_styles(bstr0(priv->extradata));
+    disable_styles(bstrof0(priv->extradata));
     return priv;
 
  error:

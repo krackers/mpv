@@ -63,8 +63,8 @@ static int open_cb(stream_t *stream)
     struct priv *p = talloc_ptrtype(stream, p);
     stream->priv = p;
 
-    bstr bproto = mp_split_proto(bstr0(stream->url), NULL);
-    char *proto = bstrto0(stream, bproto);
+    bstr bproto = mp_split_proto(bstrof0(stream->url), NULL);
+    char *proto = bstr_dupto0(stream, bproto);
 
     void *user_data;
     mpv_stream_cb_open_ro_fn open_fn;

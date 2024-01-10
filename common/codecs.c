@@ -62,7 +62,7 @@ struct mp_decoder_list *mp_select_decoders(struct mp_log *log,
     if (!codec)
         codec = "unknown";
     bool stop = false;
-    bstr sel = bstr0(selection);
+    bstr sel = bstrof0(selection);
     while (sel.len) {
         bstr entry;
         bstr_split_tok(sel, ",", &entry, &sel);

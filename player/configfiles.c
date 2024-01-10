@@ -114,7 +114,7 @@ static void mp_load_per_file_config(struct MPContext *mpctx)
         char *name = mp_basename(cfg);
 
         bstr dir = mp_dirname(cfg);
-        char *dircfg = mp_path_join_bstr(NULL, dir, bstr0("mpv.conf"));
+        char *dircfg = mp_path_join_bstr(NULL, dir, bstrof0("mpv.conf"));
         try_load_config(mpctx, dircfg, FILE_LOCAL_FLAGS, MSGL_INFO);
         talloc_free(dircfg);
 
@@ -147,9 +147,9 @@ static void mp_auto_load_profile(struct MPContext *mpctx, char *category,
 void mp_load_auto_profiles(struct MPContext *mpctx)
 {
     mp_auto_load_profile(mpctx, "protocol",
-                         mp_split_proto(bstr0(mpctx->filename), NULL));
+                         mp_split_proto(bstrof0(mpctx->filename), NULL));
     mp_auto_load_profile(mpctx, "extension",
-                         bstr0(mp_splitext(mpctx->filename, NULL)));
+                         bstrof0(mp_splitext(mpctx->filename, NULL)));
 
     mp_load_per_file_config(mpctx);
 }
@@ -163,7 +163,7 @@ static char *mp_get_playback_resume_config_filename(struct MPContext *mpctx,
     char *res = NULL;
     void *tmp = talloc_new(NULL);
     const char *realpath = fname;
-    bstr bfname = bstr0(fname);
+    bstr bfname = bstrof0(fname);
     if (!mp_is_url(bfname)) {
         if (opts->ignore_path_in_watch_later_config) {
             realpath = mp_basename(fname);
@@ -368,7 +368,7 @@ void mp_write_watch_later_conf(struct MPContext *mpctx)
     if (cur->num_redirects) {
         char *path = cur->redirects[0];
         char tmp[4096];
-        if (!mp_is_url(bstr0(path)) && strlen(path) < sizeof(tmp)) {
+        if (!mp_is_url(bstrof0(path)) && strlen(path) < sizeof(tmp)) {
             snprintf(tmp, sizeof(tmp), "%s", path);
             for (;;) {
                 bstr dir = mp_dirname(tmp);

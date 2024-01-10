@@ -45,7 +45,7 @@ static const char *const audio_exts[] = {"mp3", "aac", "mka", "dts", "flac",
 static bool test_ext_list(bstr ext, const char *const *list)
 {
     for (int n = 0; list[n]; n++) {
-        if (bstrcasecmp(bstr0(list[n]), ext) == 0)
+        if (bstrcasecmp(bstrof0(list[n]), ext) == 0)
             return true;
     }
     return false;
@@ -62,7 +62,7 @@ static int test_ext(bstr ext)
 
 bool mp_might_be_subtitle_file(const char *filename)
 {
-    return test_ext(bstr_get_ext(bstr0(filename))) == STREAM_SUB;
+    return test_ext(bstr_get_ext(bstrof0(filename))) == STREAM_SUB;
 }
 
 static int compare_sub_filename(const void *a, const void *b)
@@ -113,7 +113,7 @@ static void append_dir_subtitles(struct mpv_global *global,
     struct MPOpts *opts = global->opts;
     struct mp_log *log = mp_log_new(tmpmem, global->log, "find_files");
 
-    struct bstr f_fbname = bstr0(mp_basename(fname));
+    struct bstr f_fbname = bstrof0(mp_basename(fname));
     struct bstr f_fname = mp_iconv_to_utf8(log, f_fbname,
                                            "UTF-8-MAC", MP_NO_LATIN1_FALLBACK);
     struct bstr f_fname_noext = bstrdup(tmpmem, bstr_strip_ext(f_fname));
@@ -123,9 +123,9 @@ static void append_dir_subtitles(struct mpv_global *global,
     if (f_fbname.start != f_fname.start)
         talloc_steal(tmpmem, f_fname.start);
 
-    char *path0 = bstrdup0(tmpmem, path);
+    char *path0 = bstr_dupas0(tmpmem, path);
 
-    if (mp_is_url(bstr0(path0)))
+    if (mp_is_url(bstrof0(path0)))
         goto out;
 
     DIR *d = opendir(path0);
@@ -135,7 +135,7 @@ static void append_dir_subtitles(struct mpv_global *global,
     struct dirent *de;
     while ((de = readdir(d))) {
         void *tmpmem2 = talloc_new(tmpmem);
-        struct bstr den = bstr0(de->d_name);
+        struct bstr den = bstrof0(de->d_name);
         struct bstr dename = mp_iconv_to_utf8(log, den,
                                               "UTF-8-MAC", MP_NO_LATIN1_FALLBACK);
         // retrieve various parts of the filename
@@ -176,7 +176,7 @@ static void append_dir_subtitles(struct mpv_global *global,
         if (bstr_startswith(tmp_fname_trim, f_fname_trim))
             lang = guess_lang_from_filename(tmp_fname_trim);
         for (int n = 0; langs && langs[n]; n++) {
-            if (lang.len && bstr_case_startswith(lang, bstr0(langs[n]))) {
+            if (lang.len && bstr_case_startswith(lang, bstrof0(langs[n]))) {
                 prio = 4; // matches the movie name + lang extension
                 break;
             }
@@ -212,7 +212,7 @@ static void append_dir_subtitles(struct mpv_global *global,
                 sub->type     = type;
                 sub->priority = prio;
                 sub->fname    = subpath;
-                sub->lang     = lang.len ? bstrdup0(*slist, lang) : NULL;
+                sub->lang     = lang.len ? bstr_dupas0(*slist, lang) : NULL;
             } else
                 talloc_free(subpath);
         }
@@ -261,8 +261,8 @@ static void load_paths(struct mpv_global *global, struct subfn **slist,
         char *expanded_path = mp_get_user_path(NULL, global, paths[i]);
         char *path = mp_path_join_bstr(
             *slist, mp_dirname(fname),
-            bstr0(expanded_path ? expanded_path : paths[i]));
-        append_dir_subtitles(global, slist, nsubs, bstr0(path),
+            bstrof0(expanded_path ? expanded_path : paths[i]));
+        append_dir_subtitles(global, slist, nsubs, bstrof0(path),
                              fname, 0, type);
         talloc_free(expanded_path);
     }
@@ -270,7 +270,7 @@ static void load_paths(struct mpv_global *global, struct subfn **slist,
     // Load subtitles in ~/.mpv/sub (or similar) limiting sub fuzziness
     char *mp_subdir = mp_find_config_file(NULL, global, cfg_path);
     if (mp_subdir) {
-        append_dir_subtitles(global, slist, nsubs, bstr0(mp_subdir), fname, 1,
+        append_dir_subtitles(global, slist, nsubs, bstrof0(mp_subdir), fname, 1,
                              type);
     }
     talloc_free(mp_subdir);

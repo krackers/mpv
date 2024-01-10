@@ -97,7 +97,7 @@ static struct tl_parts *parse_edl(bstr str)
                 str = bstr_cut(str, next + 1);
             } else {
                 const char *names[] = {"file", "start", "length"}; // implied name
-                name = bstr0(nparam < 3 ? names[nparam] : "-");
+                name = bstrof0(nparam < 3 ? names[nparam] : "-");
             }
             if (bstr_eatstart0(&str, "%")) {
                 int len = bstrtoll(str, &str, 0);
@@ -112,7 +112,7 @@ static struct tl_parts *parse_edl(bstr str)
             }
             // Interpret parameters. Explicitly ignore unknown ones.
             if (bstr_equals0(name, "file")) {
-                p.filename = bstrto0(tl, val);
+                p.filename = bstr_dupto0(tl, val);
             } else if (bstr_equals0(name, "start")) {
                 if (!parse_time(val, &p.offset))
                     goto error;
@@ -139,7 +139,7 @@ static struct tl_parts *parse_edl(bstr str)
             if (bstr_equals0(type, "mp4_dash")) {
                 tl->dash = true;
                 if (nparam > 1 && bstr_equals0(param_names[1], "init"))
-                    tl->init_fragment_url = bstrto0(tl, param_vals[1]);
+                    tl->init_fragment_url = bstr_dupto0(tl, param_vals[1]);
             }
             continue;
         }
@@ -337,7 +337,7 @@ static void fix_filenames(struct tl_parts *parts, char *source_path)
     for (int n = 0; n < parts->num_parts; n++) {
         struct tl_part *part = &parts->parts[n];
         char *filename = mp_basename(part->filename); // plain filename only
-        part->filename = mp_path_join_bstr(parts, dirname, bstr0(filename));
+        part->filename = mp_path_join_bstr(parts, dirname, bstrof0(filename));
     }
 }
 
@@ -368,7 +368,7 @@ static int try_open_file(struct demuxer *demuxer, enum demux_check check)
 
     struct stream *s = demuxer->stream;
     if (s->info && strcmp(s->info->name, "edl") == 0) {
-        p->data = bstr0(s->path);
+        p->data = bstrof0(s->path);
         // Source is edl:// and not .edl => allow arbitrary paths
         p->allow_any = true;
         return 0;

@@ -191,7 +191,7 @@ static char **find_volumes(struct stream *primary_stream)
 {
     char **res = talloc_new(NULL);
     int    num = 0;
-    struct bstr primary_url = bstr0(primary_stream->url);
+    struct bstr primary_url = bstrof0(primary_stream->url);
 
     const struct file_pattern *pattern = patterns;
     while (pattern->match) {
@@ -329,7 +329,7 @@ bool mp_archive_next_entry(struct mp_archive *mpa)
         // Some archives may have no filenames, or libarchive won't return some.
         const char *fn = archive_entry_pathname(entry);
         char buf[64];
-        if (!fn || bstr_validate_utf8(bstr0(fn)) < 0) {
+        if (!fn || bstr_validate_utf8(bstrof0(fn)) < 0) {
             snprintf(buf, sizeof(buf), "mpv_unknown#%d", mpa->entry_num);
             fn = buf;
         }

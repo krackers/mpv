@@ -195,9 +195,9 @@ static void mangle_ass(bstr *dst, const char *in)
     while (*in) {
         // As used by osd_get_function_sym().
         if (in[0] == '\xFF' && in[1]) {
-            bstr_xappend(NULL, dst, bstr0(ASS_USE_OSD_FONT));
+            bstr_xappend(NULL, dst, bstrof0(ASS_USE_OSD_FONT));
             mp_append_utf8_bstr(NULL, dst, OSD_CODEPOINTS + in[1]);
-            bstr_xappend(NULL, dst, bstr0("{\\r}"));
+            bstr_xappend(NULL, dst, bstrof0("{\\r}"));
             in += 2;
             continue;
         }
@@ -207,10 +207,10 @@ static void mangle_ass(bstr *dst, const char *in)
             continue;
         }
         if (escape_ass && *in == '{')
-            bstr_xappend(NULL, dst, bstr0("\\"));
+            bstr_xappend(NULL, dst, bstrof0("\\"));
         // Libass will strip leading whitespace
         if (in[0] == ' ' && (in == start || in[-1] == '\n')) {
-            bstr_xappend(NULL, dst, bstr0("\\h"));
+            bstr_xappend(NULL, dst, bstrof0("\\h"));
             in += 1;
             continue;
         }
@@ -395,16 +395,16 @@ static void update_progbar(struct osd_state *osd, struct osd_object *obj)
     float sx = px - border * 2 - height / 4; // includes additional spacing
     float sy = py + height / 2;
 
-    bstr buf = bstr0(talloc_asprintf(NULL, "{\\an6\\pos(%f,%f)}", sx, sy));
+    bstr buf = bstrof0(talloc_asprintf(NULL, "{\\an6\\pos(%f,%f)}", sx, sy));
 
     if (obj->progbar_state.type == 0 || obj->progbar_state.type >= 256) {
         // no sym
     } else if (obj->progbar_state.type >= 32) {
         mp_append_utf8_bstr(NULL, &buf, obj->progbar_state.type);
     } else {
-        bstr_xappend(NULL, &buf, bstr0(ASS_USE_OSD_FONT));
+        bstr_xappend(NULL, &buf, bstrof0(ASS_USE_OSD_FONT));
         mp_append_utf8_bstr(NULL, &buf, OSD_CODEPOINTS + obj->progbar_state.type);
-        bstr_xappend(NULL, &buf, bstr0("{\\r}"));
+        bstr_xappend(NULL, &buf, bstrof0("{\\r}"));
     }
 
     add_osd_ass_event(track, "progbar", buf.start);
@@ -471,7 +471,7 @@ static void update_osd(struct osd_state *osd, struct osd_object *obj)
 static void update_external(struct osd_state *osd, struct osd_object *obj,
                             struct osd_external *ext)
 {
-    bstr t = bstr0(ext->text);
+    bstr t = bstrof0(ext->text);
     if (!t.len)
         return;
     ext->ass.res_x = ext->res_x;
@@ -491,7 +491,7 @@ static void update_external(struct osd_state *osd, struct osd_object *obj,
         bstr line;
         bstr_split_tok(t, "\n", &line, &t);
         if (line.len) {
-            char *tmp = bstrdup0(NULL, line);
+            char *tmp = bstr_dupas0(NULL, line);
             add_osd_ass_event(ext->ass.track, "OSD", tmp);
             talloc_free(tmp);
         }

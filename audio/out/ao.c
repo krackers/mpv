@@ -138,7 +138,7 @@ static struct ao *ao_alloc(bool probing, struct mpv_global *global,
     struct MPOpts *opts = global->opts;
     struct mp_log *log = mp_log_new(NULL, global->log, "ao");
     struct m_obj_desc desc;
-    if (!m_obj_list_find(&desc, &ao_obj_list, bstr0(name))) {
+    if (!m_obj_list_find(&desc, &ao_obj_list, bstrof0(name))) {
         mp_msg(log, MSGL_ERR, "Audio output %s not found!\n", name);
         talloc_free(log);
         return NULL;
@@ -255,10 +255,10 @@ static void split_ao_device(void *tmp, char *opt, char **out_ao, char **out_dev)
         return;
     // Split on "/". If "/" is the final character, or absent, out_dev is NULL.
     bstr b_dev, b_ao;
-    bstr_split_tok(bstr0(opt), "/", &b_ao, &b_dev);
+    bstr_split_tok(bstrof0(opt), "/", &b_ao, &b_dev);
     if (b_dev.len > 0)
-        *out_dev = bstrto0(tmp, b_dev);
-    *out_ao = bstrto0(tmp, b_ao);
+        *out_dev = bstr_dupto0(tmp, b_dev);
+    *out_ao = bstr_dupto0(tmp, b_ao);
 }
 
 struct ao *ao_init_best(struct mpv_global *global,

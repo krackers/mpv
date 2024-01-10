@@ -25,7 +25,7 @@
 
 void mp_tags_set_str(struct mp_tags *tags, const char *key, const char *value)
 {
-    mp_tags_set_bstr(tags, bstr0(key), bstr0(value));
+    mp_tags_set_bstr(tags, bstrof0(key), bstrof0(value));
 }
 
 void mp_tags_set_bstr(struct mp_tags *tags, bstr key, bstr value)
@@ -33,21 +33,21 @@ void mp_tags_set_bstr(struct mp_tags *tags, bstr key, bstr value)
     for (int n = 0; n < tags->num_keys; n++) {
         if (bstrcasecmp0(key, tags->keys[n]) == 0) {
             talloc_free(tags->values[n]);
-            tags->values[n] = bstrto0(tags, value);
+            tags->values[n] = bstr_dupto0(tags, value);
             return;
         }
     }
 
     MP_RESIZE_ARRAY(tags, tags->keys,   tags->num_keys + 1);
     MP_RESIZE_ARRAY(tags, tags->values, tags->num_keys + 1);
-    tags->keys[tags->num_keys]   = bstrto0(tags, key);
-    tags->values[tags->num_keys] = bstrto0(tags, value);
+    tags->keys[tags->num_keys]   = bstr_dupto0(tags, key);
+    tags->values[tags->num_keys] = bstr_dupto0(tags, value);
     tags->num_keys++;
 }
 
 void mp_tags_remove_str(struct mp_tags *tags, const char *key)
 {
-    mp_tags_remove_bstr(tags, bstr0(key));
+    mp_tags_remove_bstr(tags, bstrof0(key));
 }
 
 void mp_tags_remove_bstr(struct mp_tags *tags, bstr key)
@@ -65,7 +65,7 @@ void mp_tags_remove_bstr(struct mp_tags *tags, bstr key)
 
 char *mp_tags_get_str(struct mp_tags *tags, const char *key)
 {
-    return mp_tags_get_bstr(tags, bstr0(key));
+    return mp_tags_get_bstr(tags, bstrof0(key));
 }
 
 char *mp_tags_get_bstr(struct mp_tags *tags, bstr key)

@@ -73,12 +73,12 @@ static char *pl_get_line0(struct pl_parser *p)
 
 static bstr pl_get_line(struct pl_parser *p)
 {
-    return bstr0(pl_get_line0(p));
+    return bstrof0(pl_get_line0(p));
 }
 
 static void pl_add(struct pl_parser *p, bstr entry)
 {
-    char *s = bstrto0(NULL, entry);
+    char *s = bstr_dupto0(NULL, entry);
     playlist_add_file(p->pl, s);
     talloc_free(s);
 }
@@ -127,12 +127,12 @@ ok:
             bstr duration, btitle;
             if (bstr_split_tok(line, ",", &duration, &btitle) && btitle.len) {
                 talloc_free(title);
-                title = bstrto0(NULL, btitle);
+                title = bstr_dupto0(NULL, btitle);
             }
         } else if (bstr_startswith0(line, "#EXT-X-")) {
             p->format = "hls";
         } else if (line.len > 0 && !bstr_startswith0(line, "#")) {
-            char *fn = bstrto0(NULL, line);
+            char *fn = bstr_dupto0(NULL, line);
             struct playlist_entry *e = playlist_entry_new(fn);
             talloc_free(fn);
             e->title = talloc_steal(e, title);
@@ -159,7 +159,7 @@ static int parse_ref_init(struct pl_parser *p)
         "audio/x-ms-wma", "video/x-ms-asf", "video/x-ms-afs", "video/x-ms-wmv",
         "video/x-ms-wma", "application/x-mms-framed",
         "application/vnd.ms.wms-hdr.asfv1", NULL};
-    bstr burl = bstr0(p->s->url);
+    bstr burl = bstrof0(p->s->url);
     if (bstr_eatstart0(&burl, "http://") && check_mimetype(p->s, mmsh_types)) {
         MP_INFO(p, "Redirecting to mmsh://\n");
         playlist_add_file(p->pl, talloc_asprintf(p, "mmsh://%.*s", BSTR_P(burl)));
@@ -168,7 +168,7 @@ static int parse_ref_init(struct pl_parser *p)
 
     while (!pl_eof(p)) {
         line = bstr_strip(pl_get_line(p));
-        if (bstr_case_startswith(line, bstr0("Ref"))) {
+        if (bstr_case_startswith(line, bstrof0("Ref"))) {
             bstr_split_tok(line, "=", &(bstr){0}, &line);
             if (line.len)
                 pl_add(p, line);
@@ -191,7 +191,7 @@ static int parse_ini_thing(struct pl_parser *p, const char *header,
         line = bstr_strip(pl_get_line(p));
         bstr key, value;
         if (bstr_split_tok(line, "=", &key, &value) &&
-            bstr_case_startswith(key, bstr0(entry)))
+            bstr_case_startswith(key, bstrof0(entry)))
         {
             value = bstr_strip(value);
             if (bstr_startswith0(value, "\"") && bstr_endswith0(value, "\""))
@@ -293,7 +293,7 @@ static int parse_dir(struct pl_parser *p)
     if (p->probing)
         return 0;
 
-    char *path = mp_file_get_path(p, bstr0(p->real_stream->url));
+    char *path = mp_file_get_path(p, bstrof0(p->real_stream->url));
     if (!path)
         return -1;
 

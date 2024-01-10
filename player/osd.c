@@ -101,7 +101,7 @@ void term_osd_set_subs(struct MPContext *mpctx, const char *text)
     if (strcmp(mpctx->term_osd_subs.len ? (char *)mpctx->term_osd_subs.start : "", text) == 0)
         return;
     talloc_free(mpctx->term_osd_subs.start);
-    mpctx->term_osd_subs = bstrdupfrom0(mpctx, text);
+    mpctx->term_osd_subs = bstr_dupfrom0(mpctx, text);
     term_osd_update(mpctx);
 }
 
@@ -109,7 +109,7 @@ static void term_osd_set_text_lazy(struct MPContext *mpctx, bstr text)
 {
     bool video_osd = mpctx->video_out && mpctx->opts->video_osd;
     if ((video_osd && mpctx->opts->term_osd != 1) || !text.len)
-        text = bstr0(""); // disable
+        text = bstrof0(""); // disable
     bstr_free(&mpctx->term_osd_text);
     mpctx->term_osd_text = bstrdup(mpctx, text);
 }
@@ -140,7 +140,7 @@ static void add_term_osd_bar(struct MPContext *mpctx, bstr *line, int width)
     int pos = get_current_pos_ratio(mpctx, false) * (width - 3);
     pos = MPCLAMP(pos, 0, width - 3);
 
-    bstr chars = bstr0(opts->term_osd_bar_chars);
+    bstr chars = bstrof0(opts->term_osd_bar_chars);
     bstr parts[5];
     for (int n = 0; n < 5; n++)
         parts[n] = bstr_split_utf8(chars, &chars);
@@ -167,9 +167,9 @@ static bstr get_term_status_msg(struct MPContext *mpctx)
 
     // Underlying talloc allocated string ownership passed directly to bstr
     if (opts->status_msg)
-        return bstr0(mp_property_expand_escaped_string(mpctx, opts->status_msg));
+        return bstrof0(mp_property_expand_escaped_string(mpctx, opts->status_msg));
 
-    bstr line = newbstr(mpctx);
+    bstr line = bstr_new(mpctx);
 
     // Playback status
     if (is_busy(mpctx)) {
@@ -275,7 +275,7 @@ static void term_osd_print_status_lazy(struct MPContext *mpctx)
 
     if (opts->quiet || !mpctx->playback_initialized || !mpctx->playing_msg_shown)
     {
-        term_osd_set_status_lazy__releasing(mpctx, bstrdupfrom0(mpctx, ""));
+        term_osd_set_status_lazy__releasing(mpctx, bstr_dupfrom0(mpctx, ""));
         return;
     }
 
@@ -590,7 +590,7 @@ void update_vo_osd_msg(struct MPContext *mpctx) {
     if (mpctx->osd_show_pos)
         osd_level = 3;
 
-    bstr text = newbstr(NULL);
+    bstr text = bstr_new(NULL);
     sadd_osd_status(&text, mpctx, osd_level);
     if (mpctx->osd_msg_text.len) {
         if (text.len) {

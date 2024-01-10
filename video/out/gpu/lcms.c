@@ -156,7 +156,7 @@ struct gl_lcms *gl_lcms_init(void *talloc_ctx, struct mp_log *log,
 void gl_lcms_update_options(struct gl_lcms *p)
 {
     if ((p->using_memory_profile && !p->opts->profile_auto) ||
-        !bstr_equals(bstr0(p->opts->profile), bstr0(p->current_profile)))
+        !bstr_equals(bstrof0(p->opts->profile), bstrof0(p->current_profile)))
     {
         load_profile(p);
     }

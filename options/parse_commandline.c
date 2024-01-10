@@ -58,8 +58,8 @@ static int split_opt_silent(struct parse_state *p)
         return 1;
 
     p->is_opt = false;
-    p->arg = bstr0(p->argv[0]);
-    p->param = bstr0(NULL);
+    p->arg = bstrof0(p->argv[0]);
+    p->param = bstrof0(NULL);
 
     p->argv++;
 
@@ -83,7 +83,7 @@ static int split_opt_silent(struct parse_state *p)
     if (ambiguous && need_param) {
         if (!p->argv[0])
             return M_OPT_MISSING_PARAM;
-        p->param = bstr0(p->argv[0]);
+        p->param = bstrof0(p->argv[0]);
         p->argv++;
     }
 
@@ -198,7 +198,7 @@ int m_config_parse_mp_command_line(m_config_t *config, struct playlist *files,
 
             if (bstrcmp0(p.arg, "playlist") == 0) {
                 // append the playlist to the local args
-                char *param0 = bstrdup0(NULL, p.param);
+                char *param0 = bstr_dupas0(NULL, p.param);
                 struct playlist *pl = playlist_parse_file(param0, global);
                 talloc_free(param0);
                 if (!pl) {
@@ -219,7 +219,7 @@ int m_config_parse_mp_command_line(m_config_t *config, struct playlist *files,
             // filename
             void *tmp = talloc_new(NULL);
             bstr file = p.arg;
-            char *file0 = bstrdup0(tmp, p.arg);
+            char *file0 = bstr_dupas0(tmp, p.arg);
 #if HAVE_GPL
             // expand DVD filename entries like dvd://1-3 into component titles
             if (bstr_startswith0(file, "dvd://")) {

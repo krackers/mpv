@@ -163,10 +163,10 @@ static bool parse_hook(struct mp_log *log, struct bstr *body,
                        struct gl_user_shader_hook *out)
 {
     *out = (struct gl_user_shader_hook){
-        .pass_desc = bstr0("(unknown)"),
+        .pass_desc = bstrof0("(unknown)"),
         .offset = identity_trans,
-        .width = {{ SZEXP_VAR_W, { .varname = bstr0("HOOKED") }}},
-        .height = {{ SZEXP_VAR_H, { .varname = bstr0("HOOKED") }}},
+        .width = {{ SZEXP_VAR_W, { .varname = bstrof0("HOOKED") }}},
+        .height = {{ SZEXP_VAR_H, { .varname = bstrof0("HOOKED") }}},
         .cond = {{ SZEXP_CONST, { .cval = 1.0 }}},
     };
 
@@ -297,7 +297,7 @@ static bool parse_tex(struct mp_log *log, struct ra *ra, struct bstr *body,
                       struct gl_user_shader_tex *out)
 {
     *out = (struct gl_user_shader_tex){
-        .name = bstr0("USER_TEX"),
+        .name = bstrof0("USER_TEX"),
         .params = {
             .dimensions = 2,
             .w = 1, .h = 1, .d = 1,
@@ -427,7 +427,7 @@ void parse_user_shader(struct mp_log *log, struct ra *ra, struct bstr shader,
         return;
 
     // Skip all garbage (e.g. comments) before the first header
-    int pos = bstr_find(shader, bstr0("//!"));
+    int pos = bstr_find(shader, bstrof0("//!"));
     if (pos < 0) {
         mp_warn(log, "Shader appears to contain no headers!\n");
         return;

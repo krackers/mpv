@@ -185,7 +185,7 @@ void gl_sc_enable_extension(struct gl_shader_cache *sc, char *name)
     MP_TARRAY_APPEND(sc, sc->exts, sc->num_exts, talloc_strdup(sc, name));
 }
 
-#define bstr_xappend0(sc, b, s) bstr_xappend(sc, b, bstr0(s))
+#define bstr_xappend0(sc, b, s) bstr_xappend(sc, b, bstrof0(s))
 
 void gl_sc_add(struct gl_shader_cache *sc, const char *text)
 {

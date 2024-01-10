@@ -68,7 +68,7 @@ static int open_f(stream_t *stream)
     stream->priv = p;
 
     // Initial data
-    bstr data = bstr0(stream->url);
+    bstr data = bstrof0(stream->url);
     bool use_hex = bstr_eatstart0(&data, "hex://");
     if (!use_hex)
         bstr_eatstart0(&data, "memory://");

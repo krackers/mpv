@@ -218,7 +218,7 @@ static bool chmap_from_waveformat(struct mp_chmap *channels,
     }
 
     if (channels->num != wf->nChannels) {
-        mp_chmap_from_str(channels, bstr0("empty"));
+        mp_chmap_from_str(channels, bstrof0("empty"));
         return false;
     }
 
@@ -379,7 +379,7 @@ static bool search_channels(struct ao *ao, WAVEFORMATEXTENSIBLE *wformat)
 
     wformat->Format.nSamplesPerSec = 0;
     for (int j = 0; channel_layouts[j]; j++) {
-        mp_chmap_from_str(&entry, bstr0(channel_layouts[j]));
+        mp_chmap_from_str(&entry, bstrof0(channel_layouts[j]));
         if (!wformat->Format.nSamplesPerSec) {
             if (search_samplerates(ao, wformat, &entry))
                 mp_chmap_sel_add_map(&chmap_sel, &entry);
@@ -704,9 +704,9 @@ static struct device_desc *get_device_desc(struct mp_log *l, IMMDevice *pDevice)
     SAFE_DESTROY(deviceID, CoTaskMemFree(deviceID));
 
     char *full_id = mp_to_utf8(NULL, d->deviceID);
-    bstr id = bstr0(full_id);
+    bstr id = bstrof0(full_id);
     bstr_eatstart0(&id, "{0.0.0.00000000}.");
-    d->id = bstrdup0(d, id);
+    d->id = bstr_dupas0(d, id);
     talloc_free(full_id);
 
     d->name = get_device_name(l, d, pDevice);
@@ -828,7 +828,7 @@ static LPWSTR select_device(struct mp_log *l, struct device_desc *d)
 
 bstr wasapi_get_specified_device_string(struct ao *ao)
 {
-    return bstr_strip(bstr0(ao->device));
+    return bstr_strip(bstrof0(ao->device));
 }
 
 LPWSTR wasapi_find_deviceID(struct ao *ao)
@@ -871,13 +871,13 @@ LPWSTR wasapi_find_deviceID(struct ao *ao)
         if (!d)
             goto exit_label;
 
-        if (bstrcmp(device, bstr_strip(bstr0(d->id))) == 0) {
+        if (bstrcmp(device, bstr_strip(bstrof0(d->id))) == 0) {
             MP_VERBOSE(ao, "Selecting device by id: \'%.*s\'\n", BSTR_P(device));
             deviceID = select_device(ao->log, d);
             goto exit_label;
         }
 
-        if (bstrcmp(device, bstr_strip(bstr0(d->name))) == 0) {
+        if (bstrcmp(device, bstr_strip(bstrof0(d->name))) == 0) {
             if (!deviceID) {
                 MP_VERBOSE(ao, "Selecting device by name: \'%.*s\'\n", BSTR_P(device));
                 deviceID = select_device(ao->log, d);

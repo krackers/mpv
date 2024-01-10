@@ -281,7 +281,7 @@ struct MPContext *mp_create(void)
     struct MPContext *mpctx = talloc(NULL, MPContext);
     *mpctx = (struct MPContext){
         .last_chapter = -2,
-        .term_osd_contents = newbstr(mpctx),
+        .term_osd_contents = bstr_new(mpctx),
         .osd_progbar = { .type = -1 },
         .playlist = talloc_struct(mpctx, struct playlist, {0}),
         .dispatch = mp_dispatch_create(mpctx),
@@ -307,7 +307,7 @@ struct MPContext *mp_create(void)
     mpctx->mconfig->use_profiles = true;
     mpctx->mconfig->is_toplevel = true;
     mpctx->mconfig->global = mpctx->global;
-    m_config_parse(mpctx->mconfig, "", bstr0(def_config), NULL, 0);
+    m_config_parse(mpctx->mconfig, "", bstrof0(def_config), NULL, 0);
     m_config_create_shadow(mpctx->mconfig);
 
     mpctx->global->opts = mpctx->opts;

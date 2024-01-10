@@ -439,7 +439,7 @@ char *mp_ipc_consume_next_command(struct mpv_handle *client, void *ctx, bstr *bu
 
     bstr rest;
     bstr line = bstr_getline(*buf, &rest);
-    char *line0 = bstrto0(tmp, line);
+    char *line0 = bstr_dupto0(tmp, line);
     talloc_steal(tmp, buf->start);
     *buf = bstrdup(NULL, rest);
 

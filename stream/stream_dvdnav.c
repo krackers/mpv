@@ -531,7 +531,7 @@ static int open_s(stream_t *stream)
     stream->priv = priv;
 
     bstr title, bdevice;
-    bstr_split_tok(bstr0(stream->path), "/", &title, &bdevice);
+    bstr_split_tok(bstrof0(stream->path), "/", &title, &bdevice);
 
     priv->track = TITLE_LONGEST;
 
@@ -548,7 +548,7 @@ static int open_s(stream_t *stream)
         }
     }
 
-    priv->device = bstrto0(priv, bdevice);
+    priv->device = bstr_dupto0(priv, bdevice);
 
     return open_s_internal(stream);
 }
@@ -577,7 +577,7 @@ static int ifo_dvdnav_stream_open(stream_t *stream)
 
     priv->track = TITLE_LONGEST;
 
-    char *path = mp_file_get_path(priv, bstr0(stream->url));
+    char *path = mp_file_get_path(priv, bstrof0(stream->url));
     if (!path)
         goto unsupported;
 
@@ -594,7 +594,7 @@ static int ifo_dvdnav_stream_open(stream_t *stream)
         path = npath;
     }
 
-    priv->device = bstrto0(priv, mp_dirname(path));
+    priv->device = bstr_dupto0(priv, mp_dirname(path));
 
     MP_INFO(stream, ".IFO detected. Redirecting to dvd://\n");
     return open_s_internal(stream);

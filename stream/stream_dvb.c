@@ -1146,13 +1146,13 @@ dvb_state_t *dvb_get_state(stream_t *stream)
     dvb_state_t *state = NULL;
     bstr prog, devno;
 
-    if (!bstr_split_tok(bstr0(stream->path), "@", &devno, &prog)) {
+    if (!bstr_split_tok(bstrof0(stream->path), "@", &devno, &prog)) {
         prog = devno;
         devno.len = 0;
     }
     if (prog.len) {
         talloc_free(priv->cfg_prog);
-        priv->cfg_prog = bstrto0(NULL, prog);
+        priv->cfg_prog = bstr_dupto0(NULL, prog);
     }
     if (devno.len) {
         bstr r;

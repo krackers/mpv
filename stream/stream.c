@@ -208,7 +208,7 @@ static const char *match_proto(const char *url, const char *proto)
     if (l > 0) {
         if (strncasecmp(url, proto, l) == 0 && strncmp("://", url + l, 3) == 0)
             return url + l + 3;
-    } else if (!mp_is_url(bstr0(url))) {
+    } else if (!mp_is_url(bstrof0(url))) {
         return url; // pure filenames
     }
     return NULL;
