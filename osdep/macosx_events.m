@@ -308,10 +308,12 @@ void cocoa_set_mpv_handle(struct mpv_handle *ctx)
 - (BOOL)setMpvHandle:(struct mpv_handle *)ctx
 {
     if (_is_application) {
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            _ctx = ctx;
-            [NSApp setMpvHandle:ctx];
-        });
+        // At this point no other threads are consuming ctx, so safe to use it.
+        // dispatch_sync would technically be safer but for some reason using it
+        // here adds 20ms of latency to startup. Maybe beacuse main loop not
+        // yet ready or something? (Usually dispatch_sync takes < 100 us)
+        _ctx = ctx;
+        [NSApp setMpvHandle:ctx];
         return YES;
     } else {
         mpv_destroy(ctx);
@@ -347,7 +349,8 @@ void cocoa_set_mpv_handle(struct mpv_handle *ctx)
         #endif
         struct mpv_handle *old_ctx = _ctx;
         _ctx = nil;
-        // Avoid blocking the main thread
+        // Avoid blocking the main thread. Mpv will wait for all clients
+        // to be destroyed.
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             mpv_destroy(old_ctx);
         });
