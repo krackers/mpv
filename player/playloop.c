@@ -1035,6 +1035,8 @@ static void handle_playback_restart(struct MPContext *mpctx)
         mpctx->video_status = STATUS_PLAYING;
         get_relative_time(mpctx);
         mp_wakeup_core(mpctx);
+        MP_VERBOSE(mpctx, "starting video playback\n");
+        mpctx->osd_force_update = true;
     }
 
     if (mpctx->audio_status == STATUS_READY) {
@@ -1057,6 +1059,7 @@ static void handle_playback_restart(struct MPContext *mpctx)
         mpctx->audio_status = STATUS_PLAYING;
         fill_audio_out_buffers(mpctx); // actually play prepared buffer
         mp_wakeup_core(mpctx);
+        mpctx->osd_force_update = true;
     }
 
     if (!mpctx->restart_complete) {
@@ -1083,6 +1086,7 @@ static void handle_playback_restart(struct MPContext *mpctx)
             }
         }
         mpctx->playing_msg_shown = true;
+        mpctx->osd_force_update = true;
         mp_wakeup_core(mpctx);
         mpctx->ab_loop_clip = mpctx->playback_pts < opts->ab_loop[1];
         MP_VERBOSE(mpctx, "playback restart complete\n");
