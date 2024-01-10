@@ -1359,6 +1359,7 @@ static void play_current_file(struct MPContext *mpctx)
     playback_start = mp_time_sec();
     mpctx->error_playing = 0;
     mpctx->in_playloop = true;
+    mpctx->osd_force_update = true;
     while (!mpctx->stop_play)
         run_playloop(mpctx);
     mpctx->in_playloop = false;
