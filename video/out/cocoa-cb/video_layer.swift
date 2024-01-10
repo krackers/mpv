@@ -113,11 +113,24 @@ class VideoLayer: CAOpenGLLayer {
         var i: GLint = 1
         CGLSetParameter(cglContext, kCGLCPSwapInterval, &i)
         CGLEnable(cglContext, kCGLCEMPEngine)
+        
+        CGLLockContext(cglContext)
         CGLSetCurrentContext(cglContext)
-
         libmpv.initRender()
+        CGLUnlockContext(cglContext)
+
         libmpv.setRenderUpdateCallback(updateCallback, context: self)
-        libmpv.setRenderControlCallback(cocoaCB.controlCallback, context: cocoaCB)
+    }
+
+    func uninit() {
+        // Unblock any currently blocked VO thread
+        self.libmpv.reportRenderPresent()
+        self.libmpv.reportRenderFlip(time: 0)
+
+        CGLLockContext(cglContext)
+        CGLSetCurrentContext(cglContext)
+        libmpv.uninitRender()
+        CGLUnlockContext(cglContext)
     }
 
     //necessary for when the layer containing window changes the screen

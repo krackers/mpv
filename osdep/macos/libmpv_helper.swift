@@ -49,6 +49,13 @@ class LibmpvHelper: LogHelper {
         macOpts = UnsafeMutablePointer<macos_opts>(OpaquePointer(ptr)).pointee
     }
 
+    func createRender() {
+        if (mpv_render_context_create(&mpvRenderContext, mpvHandle) < 0) {
+            sendError("Render context creation has failed.")
+            exit(1)
+        }
+    }
+
     func initRender() {
         var advanced: CInt = 1
         let api = UnsafeMutableRawPointer(mutating: (MPV_RENDER_API_TYPE_OPENGL as NSString).utf8String)
@@ -62,7 +69,7 @@ class LibmpvHelper: LogHelper {
             mpv_render_param()
         ]
 
-        if (mpv_render_context_create(&mpvRenderContext, mpvHandle, &params) < 0)
+        if (mpv_render_context_initialize(mpvRenderContext, mpvHandle, &params) < 0)
         {
             sendError("Render context init has failed.")
             exit(1)
@@ -240,8 +247,14 @@ class LibmpvHelper: LogHelper {
         return str
     }
 
-    func deinitRender() {
+    func uninitRender() {
         mpv_render_context_set_update_callback(mpvRenderContext, nil, nil)
+        renderContextLock.lock()
+        mpv_render_context_uninit(mpvRenderContext)
+        renderContextLock.unlock()
+    }
+
+    func freeRenderer() {
         mp_render_context_set_control_callback(mpvRenderContext, nil, nil)
         renderContextLock.lock()
         mpv_render_context_free(mpvRenderContext)
