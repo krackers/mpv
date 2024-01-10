@@ -383,8 +383,10 @@ int mp_initialize(struct MPContext *mpctx, char **options)
     mpctx->mconfig->option_set_callback_cb = mpctx;
     mpctx->mconfig->option_change_callback = mp_option_change_callback;
     mpctx->mconfig->option_change_callback_ctx = mpctx;
+    MP_VERBOSE(mpctx, "Loaded input config.\n");
     // Run all update handlers.
     mp_option_change_callback(mpctx, NULL, UPDATE_OPTS_MASK);
+    MP_VERBOSE(mpctx, "Ran option change handlers.\n");
 
     if (handle_help_options(mpctx))
         return 1; // help
@@ -416,6 +418,7 @@ int mp_initialize(struct MPContext *mpctx, char **options)
 #if HAVE_COCOA
     mpv_handle *ctx = mp_new_client(mpctx->clients, "osx");
     cocoa_set_mpv_handle(ctx);
+    MP_VERBOSE(mpctx, "Cocoa client initialized.\n");
 #endif
 
     if (opts->encode_opts->file && opts->encode_opts->file[0]) {
@@ -438,6 +441,7 @@ int mp_initialize(struct MPContext *mpctx, char **options)
     if (opts->force_vo == 2 && handle_force_window(mpctx, false) < 0)
         return -1;
 
+    MP_VERBOSE(mpctx, "Init finished.\n");
     MP_STATS(mpctx, "end init");
 
     return 0;
