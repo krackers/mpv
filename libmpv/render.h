@@ -432,8 +432,9 @@ typedef struct mpv_render_frame_info {
  *      MPV_ERROR_INVALID_PARAMETER: at least one of the provided parameters was
  *                                   not valid.
  */
-int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv,
-                              mpv_render_param *params);
+int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv, mpv_render_param *params);
+
+int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv);
 
 /**
  * Attempt to change a single parameter. Not all backends and parameter types
@@ -594,6 +595,8 @@ void mpv_render_context_report_present(mpv_render_context *ctx);
  *            a valid pointer anymore. NULL is also allowed and does nothing.
  */
 void mpv_render_context_free(mpv_render_context *ctx);
+
+void mpv_render_context_uninit(mpv_render_context *ctx);
 
 #ifdef __cplusplus
 }

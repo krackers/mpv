@@ -57,21 +57,24 @@ class CocoaCB: NSObject {
     @objc init(_ mpvHandle: OpaquePointer) {
         libmpv = LibmpvHelper(mpvHandle, "cocoacb")
         super.init()
-        layer = VideoLayer(cocoaCB: self)
-        timer =  PreciseTimer(common: self)
-
-        libmpv.observeFlag("ontop")
-        libmpv.observeFlag("border")
-        libmpv.observeFlag("keepaspect-window")
-        libmpv.observeString("macos-title-bar-style")
-        libmpv.observeString("macos-title-bar-appearance")
-        libmpv.observeString("macos-title-bar-material")
-        libmpv.observeString("macos-title-bar-color")
+        libmpv.createRender()
+        libmpv.setRenderControlCallback(self.controlCallback, context: self)
     }
 
     func preinit(_ vo: UnsafeMutablePointer<vo>) {
         if backendState == .uninitialized {
             backendState = .needsInit
+
+            layer = VideoLayer(cocoaCB: self)
+            timer =  PreciseTimer(common: self)
+
+            libmpv.observeFlag("ontop")
+            libmpv.observeFlag("border")
+            libmpv.observeFlag("keepaspect-window")
+            libmpv.observeString("macos-title-bar-style")
+            libmpv.observeString("macos-title-bar-appearance")
+            libmpv.observeString("macos-title-bar-material")
+            libmpv.observeString("macos-title-bar-color")
 
             mpv = MPVHelper(vo, "cocoacb")
             view = EventsView(cocoaCB: self)
@@ -84,7 +87,11 @@ class CocoaCB: NSObject {
         }
     }
 
+    // This must be idempotent as it can potentially be called multiple times.
     func uninit() {
+        layer?.uninit()
+        layer = nil
+
         window?.orderOut(nil)
         window?.close()
         timer?.terminate()
@@ -581,16 +588,11 @@ class CocoaCB: NSObject {
         }
         if isShuttingDown { return }
         uninit()
+        libmpv.freeRenderer()
         setCursorVisiblility(true)
         stopDisplaylink()
         uninitLightSensor()
         removeDisplayReconfigureObserver()
-
-        // Unblock any currently blocked VO thread
-        self.libmpv.reportRenderPresent()
-        self.libmpv.reportRenderFlip(time: 0)
-
-        libmpv.deinitRender()
         libmpv.deinitMPV(destroy)
     }
 

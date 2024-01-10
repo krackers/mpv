@@ -1860,12 +1860,14 @@ int mpv_opengl_cb_init_gl(mpv_opengl_cb_context *ctx, const char *exts,
         {(mpv_render_param_type)-1, ctx->client_api->mpctx->global},
         {0}
     };
-    int err = mpv_render_context_create(&ctx->client_api->render_context,
+    int err = mpv_render_context_create(&ctx->client_api->render_context, &dummy);
+    if (err < 0) goto done;
+    err = mpv_render_context_initialize(ctx->client_api->render_context,
                                         &dummy, params);
-    if (err >= 0) {
-        mpv_render_context_set_update_callback(ctx->client_api->render_context,
-                                               ctx->callback, ctx->callback_ctx);
-    }
+    if (err < 0) goto done;
+    mpv_render_context_set_update_callback(ctx->client_api->render_context, ctx->callback, ctx->callback_ctx);
+
+done:
     return err;
 }
 
@@ -1897,8 +1899,10 @@ int mpv_opengl_cb_report_flip(mpv_opengl_cb_context *ctx, int64_t time)
 
 int mpv_opengl_cb_uninit_gl(mpv_opengl_cb_context *ctx)
 {
-    if (ctx->client_api->render_context)
+    if (ctx->client_api->render_context) {
+        mpv_render_context_uninit(ctx->client_api->render_context);
         mpv_render_context_free(ctx->client_api->render_context);
+    }
     ctx->client_api->render_context = NULL;
     return 0;
 }

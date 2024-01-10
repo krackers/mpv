@@ -166,23 +166,37 @@ static struct mp_image *render_get_image(void *ptr, int imgfmt, int w, int h,
     return ctx->renderer->fns->get_image(ctx->renderer, imgfmt, w, h, stride_align);
 }
 
-int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv,
-                              mpv_render_param *params)
+int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv)
 {
     mpv_render_context *ctx = talloc_zero(NULL, mpv_render_context);
     pthread_mutex_init(&ctx->control_lock, NULL);
     pthread_mutex_init(&ctx->lock, NULL);
+
+    ctx->global = mp_client_get_global(mpv);
+    ctx->client_api = ctx->global->client_api;
+
+    if (!mp_set_main_render_context(ctx->client_api, ctx, true)) {
+        MP_ERR(ctx, "There is already a mpv_render_context set.\n");
+        mpv_render_context_free(ctx);
+        return MPV_ERROR_GENERIC;
+    }
+
+    *res = ctx;
+    return 0;
+}
+
+int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv,
+                              mpv_render_param *params)
+{
     pthread_mutex_init(&ctx->update_lock, NULL);
     pthread_cond_init(&ctx->update_cond, NULL);
     pthread_cond_init(&ctx->video_wait, NULL);
 
-    ctx->global = mp_client_get_global(mpv);
-    ctx->client_api = ctx->global->client_api;
     ctx->log = mp_log_new(ctx, ctx->global->log, "libmpv_render");
-
     ctx->vo_opts_cache = m_config_cache_alloc(ctx, ctx->global, &vo_sub_opts);
     ctx->vo_opts = ctx->vo_opts_cache->opts;
 
+    assert(!ctx->dispatch);
     ctx->dispatch = mp_dispatch_create(ctx);
     mp_dispatch_set_wakeup_fn(ctx->dispatch, dispatch_wakeup, ctx);
 
@@ -227,8 +241,6 @@ int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv,
         mpv_render_context_free(ctx);
         return MPV_ERROR_GENERIC;
     }
-
-    *res = ctx;
     return 0;
 }
 
@@ -254,9 +266,7 @@ void mp_render_context_set_control_callback(mpv_render_context *ctx,
     pthread_mutex_unlock(&ctx->control_lock);
 }
 
-
-void mpv_render_context_free(mpv_render_context *ctx)
-{
+void mpv_render_context_uninit(mpv_render_context *ctx) {
     if (!ctx)
         return;
 
@@ -320,10 +330,25 @@ void mpv_render_context_free(mpv_render_context *ctx)
     }
     talloc_free(ctx->dr);
     talloc_free(ctx->dispatch);
+    ctx->dispatch = NULL;
 
     pthread_cond_destroy(&ctx->update_cond);
     pthread_cond_destroy(&ctx->video_wait);
     pthread_mutex_destroy(&ctx->update_lock);
+}
+
+
+void mpv_render_context_free(mpv_render_context *ctx)
+{
+    if (!ctx)
+        return;
+
+    assert(!atomic_load(&ctx->in_use));
+    assert(!ctx->vo);
+    assert(!ctx->dispatch);
+
+    mp_set_main_render_context(ctx->client_api, ctx, false);
+
     pthread_mutex_destroy(&ctx->lock);
     pthread_mutex_destroy(&ctx->control_lock);
 
@@ -813,17 +838,22 @@ static int preinit(struct vo *vo)
     if (!ctx) {
         if (!vo->probing)
             MP_FATAL(vo, "No render context set.\n");
+        else
+            MP_VERBOSE(vo, "No render context for libmpv found while probing.\n");
         return -1;
     }
 
+    control(vo, VOCTRL_PREINIT, NULL);
+    // After this, we must have a valid context. Use presence of dispatch as signal.
     pthread_mutex_lock(&ctx->lock);
+    assert(ctx->dispatch);
     ctx->vo = vo;
     ctx->need_resize = true;
     ctx->need_update_external = true;
     pthread_mutex_unlock(&ctx->lock);
 
     vo->hwdec_devs = ctx->hwdec_devs;
-    control(vo, VOCTRL_PREINIT, NULL);
+    
     cocoa_set_realtime(vo->log, 0.2);
 
     return 0;
