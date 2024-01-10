@@ -270,7 +270,7 @@ static int append_terminal_line(void *talloc_ctx, struct mp_log *log, int lev, b
         set_msg_color(talloc_ctx, term_msg, lev);
 
     if (root->show_time)
-        bstr_xappend_asprintf(talloc_ctx, term_msg, "[%" PRId64 "] ", mp_time_us());
+        bstr_xappend_asprintf(talloc_ctx, term_msg, "[%10.6f] ", (mp_time_us() - MP_START_TIME) / 1e6);
 
     const char *prefix = (lev >= MSGL_V) || root->verbose || root->module
                                 ? log->verbose_prefix : log->prefix;
