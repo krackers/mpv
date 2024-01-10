@@ -973,7 +973,7 @@ int mpv_set_option(mpv_handle *ctx, const char *name, mpv_format format,
         data = &tmp;
     }
     lock_core(ctx);
-    int err = m_config_set_option_node(ctx->mpctx->mconfig, bstr0(name),
+    int err = m_config_set_option_node(ctx->mpctx->mconfig, bstrof0(name),
                                        data, flags);
     unlock_core(ctx);
     switch (err) {
@@ -1080,7 +1080,7 @@ int mpv_command_node(mpv_handle *ctx, mpv_node *args, mpv_node *result)
 int mpv_command_string(mpv_handle *ctx, const char *args)
 {
     return run_client_command(ctx,
-        mp_input_parse_cmd(ctx->mpctx->input, bstr0((char*)args), ctx->name), NULL);
+        mp_input_parse_cmd(ctx->mpctx->input, bstrof0((char*)args), ctx->name), NULL);
 }
 
 static int run_cmd_async(mpv_handle *ctx, uint64_t ud, struct mp_cmd *cmd)

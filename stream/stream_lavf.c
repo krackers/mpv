@@ -239,7 +239,7 @@ void mp_setup_av_network_options(AVDictionary **dict, struct mpv_global *global,
 // in a 100% safe case (spaces only) was rejected.
 static char *normalize_url(void *ta_parent, const char *filename)
 {
-    bstr proto = mp_split_proto(bstr0(filename), NULL);
+    bstr proto = mp_split_proto(bstrof0(filename), NULL);
     for (int n = 0; http_like[n]; n++) {
         if (bstr_equals0(proto, http_like[n]))
             // Escape everything but reserved characters.
@@ -283,7 +283,7 @@ static int open_f(stream_t *stream)
     }
 
     // Replace "mms://" with "mmsh://", so that most mms:// URLs just work.
-    bstr b_filename = bstr0(filename);
+    bstr b_filename = bstrof0(filename);
     if (bstr_eatstart0(&b_filename, "mms://") ||
         bstr_eatstart0(&b_filename, "mmshttp://"))
     {
@@ -369,13 +369,13 @@ static struct mp_tags *read_icy(stream_t *s)
     if ((!icy_header || !icy_header[0]) && (!icy_packet || !icy_packet[0]))
         goto done;
 
-    bstr packet = bstr0(icy_packet);
+    bstr packet = bstrof0(icy_packet);
     if (bstr_equals0(packet, "-"))
         goto done;
 
     res = talloc_zero(NULL, struct mp_tags);
 
-    bstr header = bstr0(icy_header);
+    bstr header = bstrof0(icy_header);
     while (header.len) {
         bstr line = bstr_strip_linebreaks(bstr_getline(header, &header));
         bstr name, val;
@@ -383,13 +383,13 @@ static struct mp_tags *read_icy(stream_t *s)
             mp_tags_set_bstr(res, name, val);
     }
 
-    bstr head = bstr0("StreamTitle='");
+    bstr head = bstrof0("StreamTitle='");
     int i = bstr_find(packet, head);
     if (i >= 0) {
         packet = bstr_cut(packet, i + head.len);
-        int end = bstr_find(packet, bstr0("\';"));
+        int end = bstr_find(packet, bstrof0("\';"));
         packet = bstr_splice(packet, 0, end);
-        mp_tags_set_bstr(res, bstr0("icy-title"), packet);
+        mp_tags_set_bstr(res, bstrof0("icy-title"), packet);
     }
 
     av_opt_set(avio, "icy_metadata_packet", "-", AV_OPT_SEARCH_CHILDREN);

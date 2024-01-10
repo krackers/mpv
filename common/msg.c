@@ -106,7 +106,7 @@ static bool match_mod(const char *name, const char *mod)
     if (!strcmp(mod, "all"))
         return true;
     // Path prefix matches
-    bstr b = bstr0(name);
+    bstr b = bstrof0(name);
     return bstr_eatstart0(&b, mod) && (bstr_eatstart0(&b, "/") || !b.len);
 }
 
@@ -171,11 +171,11 @@ static void prepare_status_line(void *talloc_ctx, struct mp_log_root *root, bstr
     // clear the status line itself
     bstr_xappend0(talloc_ctx, term_msg, "\r\033[K");
     // and clear all previous old lines
-    bstr up_clear_escape = bstr0("\033[A\r\033[K");
+    bstr up_clear_escape = bstrof0("\033[A\r\033[K");
     for (size_t n = 1; n < clear_lines; n++)
         bstr_xappend(talloc_ctx, term_msg, up_clear_escape);
     // skip "unused" blank lines, so that status is aligned to term bottom
-    bstr new_line = bstr0("\n");
+    bstr new_line = bstrof0("\n");
     for (size_t n = new_lines; n < clear_lines; n++)
         bstr_xappend(talloc_ctx, term_msg, new_line);
 
@@ -284,7 +284,7 @@ static int append_terminal_line(void *talloc_ctx, struct mp_log *log, int lev, b
     }
 
     bstr_xappend(talloc_ctx, term_msg, text);
-    bstr_xappend(talloc_ctx, term_msg, bstr0(trail));
+    bstr_xappend(talloc_ctx, term_msg, bstrof0(trail));
 
     if (root->color)
         set_term_color(talloc_ctx, term_msg, -1);
@@ -332,7 +332,7 @@ static void write_msg_to_buffers(struct mp_log *log, int lev, bstr text)
                 *entry = (struct mp_log_buffer_entry) {
                     .prefix = talloc_strdup(entry, log->verbose_prefix),
                     .level = lev,
-                    .text = bstrdup0(entry, text),
+                    .text = bstr_dupas0(entry, text),
                 };
             } else {
                 // write overflow message to signal that messages might be lost

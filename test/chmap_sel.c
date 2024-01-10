@@ -10,12 +10,12 @@ static void test_sel(const char *input, const char *expected_selection,
     struct mp_chmap input_map;
     struct mp_chmap expected_map;
 
-    assert_true(mp_chmap_from_str(&input_map, bstr0(input)));
-    assert_true(mp_chmap_from_str(&expected_map, bstr0(expected_selection)));
+    assert_true(mp_chmap_from_str(&input_map, bstrof0(input)));
+    assert_true(mp_chmap_from_str(&expected_map, bstrof0(expected_selection)));
 
     for (int n = 0; layouts[n]; n++) {
         struct mp_chmap tmp;
-        assert_true(mp_chmap_from_str(&tmp, bstr0(layouts[n])));
+        assert_true(mp_chmap_from_str(&tmp, bstrof0(layouts[n])));
         int count = s.num_chmaps;
         mp_chmap_sel_add_map(&s, &tmp);
         assert_true(s.num_chmaps > count); // assure validity and max. count
@@ -84,7 +84,7 @@ static void test_mp_chmap_sel_fallback_reject_unknown(void **state) {
 
     mp_chmap_set_unknown(&a, 2);
 
-    mp_chmap_from_str(&b, bstr0("5.1"));
+    mp_chmap_from_str(&b, bstrof0("5.1"));
 
     mp_chmap_sel_add_map(&s, &a);
     assert_false(mp_chmap_sel_fallback(&s, &b));

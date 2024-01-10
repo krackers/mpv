@@ -260,7 +260,7 @@ static char *create_fname(struct MPContext *mpctx, char *template,
                 fallback = talloc_strndup(res, template + 1, end - template - 1);
                 template = end + 1;
             }
-            if (!mpctx->filename || mp_is_url(bstr0(mpctx->filename))) {
+            if (!mpctx->filename || mp_is_url(bstrof0(mpctx->filename))) {
                 res = talloc_strdup_append(res, fallback);
             } else {
                 bstr dir = mp_dirname(mpctx->filename);
@@ -305,7 +305,7 @@ static char *create_fname(struct MPContext *mpctx, char *template,
             char *end = strchr(template, '}');
             if (!end)
                 goto error_exit;
-            struct bstr prop = bstr_splice(bstr0(template), 0, end - template);
+            struct bstr prop = bstr_splice(bstrof0(template), 0, end - template);
             char *tmp = talloc_asprintf(NULL, "${%.*s}", BSTR_P(prop));
             char *s = mp_property_expand_string(mpctx, tmp);
             talloc_free(tmp);
@@ -363,7 +363,7 @@ static char *gen_fname(screenshot_ctx *ctx, const char *file_ext)
             talloc_free(t);
         }
 
-        char *full_dir = bstrto0(fname, mp_dirname(fname));
+        char *full_dir = bstr_dupto0(fname, mp_dirname(fname));
         if (!mp_path_exists(full_dir)) {
             mp_mkdirp(full_dir);
         }

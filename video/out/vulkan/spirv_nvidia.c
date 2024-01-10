@@ -9,7 +9,7 @@ static bool nv_glsl_compile(struct spirv_compiler *spirv, void *tactx,
                             struct bstr *out_spirv)
 {
     // The nvidia extension literally assumes your SPIRV is in fact valid GLSL
-    *out_spirv = bstr0(glsl);
+    *out_spirv = bstrof0(glsl);
     return true;
 }
 

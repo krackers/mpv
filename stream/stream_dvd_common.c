@@ -141,7 +141,7 @@ int mp_dvdtimetomsec(dvd_time_t *dt)
 // Check if this is likely to be an .ifo or similar file.
 int dvd_probe(const char *path, const char *ext, const char *sig)
 {
-    if (!bstr_case_endswith(bstr0(path), bstr0(ext)))
+    if (!bstr_case_endswith(bstrof0(path), bstrof0(ext)))
         return false;
 
     FILE *temp = fopen(path, "rb");

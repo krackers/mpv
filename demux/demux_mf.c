@@ -88,12 +88,12 @@ static mf_t *open_mf_pattern(void *talloc_ctx, struct mp_log *log, char *filenam
 
     if (strchr(filename, ',')) {
         mp_info(log, "filelist: %s\n", filename);
-        bstr bfilename = bstr0(filename);
+        bstr bfilename = bstrof0(filename);
 
         while (bfilename.len) {
             bstr bfname;
             bstr_split_tok(bfilename, ",", &bfname, &bfilename);
-            char *fname2 = bstrdup0(mf, bfname);
+            char *fname2 = bstr_dupas0(mf, bfname);
 
             if (!mp_path_exists(fname2))
                 mp_verbose(log, "file not found: '%s'\n", fname2);

@@ -605,7 +605,7 @@ static int try_open_device(struct ao *ao, const char *device, int mode)
             // noise otherwise). Unfortunately, ALSA gives us no way to map
             // these devices, so try it for the default device only.
             bstr dev;
-            bstr_split_tok(bstr0(device), ":", &dev, &(bstr){0});
+            bstr_split_tok(bstrof0(device), ":", &dev, &(bstr){0});
             if (bstr_equals0(dev, "default")) {
                 const char *const fallbacks[] = {"hdmi", "iec958", NULL};
                 for (int n = 0; fallbacks[n]; n++) {

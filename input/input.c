@@ -282,9 +282,9 @@ static void append_bind_info(struct input_ctx *ictx, char **pmsg,
                              struct cmd_bind *bind)
 {
     char *msg = *pmsg;
-    struct mp_cmd *cmd = mp_input_parse_cmd(ictx, bstr0(bind->cmd),
+    struct mp_cmd *cmd = mp_input_parse_cmd(ictx, bstrof0(bind->cmd),
                                             bind->location);
-    bstr stripped = cmd ? cmd->original : bstr0(bind->cmd);
+    bstr stripped = cmd ? cmd->original : bstrof0(bind->cmd);
     msg = talloc_asprintf_append(msg, " '%.*s'", BSTR_P(stripped));
     if (!cmd)
         msg = talloc_asprintf_append(msg, " (invalid)");
@@ -344,7 +344,7 @@ static struct cmd_bind_section *get_bind_section(struct input_ctx *ictx,
     struct cmd_bind_section *bind_section = ictx->cmd_bind_sections;
 
     if (section.len == 0)
-        section = bstr0("default");
+        section = bstrof0("default");
     while (bind_section) {
         if (bstrcmp0(section, bind_section->section) == 0)
             return bind_section;
@@ -360,7 +360,7 @@ static struct cmd_bind_section *get_bind_section(struct input_ctx *ictx,
         bind_section = ictx->cmd_bind_sections;
     }
     *bind_section = (struct cmd_bind_section) {
-        .section = bstrdup0(bind_section, section),
+        .section = bstr_dupas0(bind_section, section),
         .mouse_area = {INT_MIN, INT_MIN, INT_MAX, INT_MAX},
         .mouse_area_set = true,
     };
@@ -377,7 +377,7 @@ static void key_buf_add(int *buf, int code)
 static struct cmd_bind *find_bind_for_key_section(struct input_ctx *ictx,
                                                   char *section, int code)
 {
-    struct cmd_bind_section *bs = get_bind_section(ictx, bstr0(section));
+    struct cmd_bind_section *bs = get_bind_section(ictx, bstrof0(section));
 
     if (!bs->num_binds)
         return NULL;
@@ -472,7 +472,7 @@ static mp_cmd_t *get_cmd_from_keys(struct input_ctx *ictx, char *force_section,
         talloc_free(key_buf);
         return NULL;
     }
-    mp_cmd_t *ret = mp_input_parse_cmd(ictx, bstr0(cmd->cmd), cmd->location);
+    mp_cmd_t *ret = mp_input_parse_cmd(ictx, bstrof0(cmd->cmd), cmd->location);
     if (ret) {
         ret->input_section = cmd->owner->section;
         ret->key_name = talloc_steal(ret, mp_input_get_key_combo_name(&code, 1));
@@ -840,7 +840,7 @@ void mp_input_set_mouse_pos_artificial(struct input_ctx *ictx, int x, int y)
     update_mouse_section(ictx);
     struct mp_cmd *cmd = get_cmd_from_keys(ictx, NULL, MP_KEY_MOUSE_MOVE);
     if (!cmd)
-        cmd = mp_input_parse_cmd(ictx, bstr0("ignore"), "<internal>");
+        cmd = mp_input_parse_cmd(ictx, bstrof0("ignore"), "<internal>");
 
     if (cmd) {
         cmd->mouse_move = true;
@@ -985,7 +985,7 @@ void mp_input_get_mouse_pos(struct input_ctx *ictx, int *x, int *y)
 // gets deallocated).
 static char *normalize_section(struct input_ctx *ictx, char *name)
 {
-    return get_bind_section(ictx, bstr0(name))->section;
+    return get_bind_section(ictx, bstrof0(name))->section;
 }
 
 void mp_input_disable_section(struct input_ctx *ictx, char *name)
@@ -1048,7 +1048,7 @@ void mp_input_set_section_mouse_area(struct input_ctx *ictx, char *name,
                                      int x0, int y0, int x1, int y1)
 {
     input_lock(ictx);
-    struct cmd_bind_section *s = get_bind_section(ictx, bstr0(name));
+    struct cmd_bind_section *s = get_bind_section(ictx, bstrof0(name));
     s->mouse_area = (struct mp_rect){x0, y0, x1, y1};
     s->mouse_area_set = x0 != x1 && y0 != y1;
     input_unlock(ictx);
@@ -1062,7 +1062,7 @@ static bool test_mouse(struct input_ctx *ictx, int x, int y, int rej_flags)
         struct active_section *as = &ictx->active_sections[i];
         if (as->flags & rej_flags)
             continue;
-        struct cmd_bind_section *s = get_bind_section(ictx, bstr0(as->name));
+        struct cmd_bind_section *s = get_bind_section(ictx, bstrof0(as->name));
         if (s->mouse_area_set && test_rect(&s->mouse_area, x, y)) {
             res = true;
             break;
@@ -1112,7 +1112,7 @@ void mp_input_define_section(struct input_ctx *ictx, char *name, char *location,
         return; // parse_config() changes semantics with restrict_section==empty
     input_lock(ictx);
     // Delete:
-    struct cmd_bind_section *bs = get_bind_section(ictx, bstr0(name));
+    struct cmd_bind_section *bs = get_bind_section(ictx, bstrof0(name));
     if ((!bs->owner || (owner && strcmp(bs->owner, owner) != 0)) &&
         strcmp(bs->section, "default") != 0)
     {
@@ -1122,7 +1122,7 @@ void mp_input_define_section(struct input_ctx *ictx, char *name, char *location,
     remove_binds(bs, builtin);
     if (contents && contents[0]) {
         // Redefine:
-        parse_config(ictx, builtin, bstr0(contents), location, name);
+        parse_config(ictx, builtin, bstrof0(contents), location, name);
     } else {
         // Disable:
         mp_input_disable_section(ictx, name);
@@ -1182,7 +1182,7 @@ static void bind_keys(struct input_ctx *ictx, bool builtin, bstr section,
     bind_dealloc(bind);
 
     *bind = (struct cmd_bind) {
-        .cmd = bstrdup0(bs->binds, command),
+        .cmd = bstr_dupas0(bs->binds, command),
         .location = talloc_strdup(bs->binds, loc),
         .owner = bs,
         .is_builtin = builtin,
@@ -1237,7 +1237,7 @@ static int parse_config(struct input_ctx *ictx, bool builtin, bstr data,
                    cur_loc);
             continue;
         }
-        char *name = bstrdup0(NULL, keyname);
+        char *name = bstr_dupas0(NULL, keyname);
         int keys[MP_MAX_KEY_DOWN];
         int num_keys = 0;
         if (!mp_input_get_keys_from_string(name, MP_MAX_KEY_DOWN, &num_keys, keys))
@@ -1248,7 +1248,7 @@ static int parse_config(struct input_ctx *ictx, bool builtin, bstr data,
         }
         talloc_free(name);
 
-        bstr section = bstr0(restrict_section);
+        bstr section = bstrof0(restrict_section);
         if (!section.len) {
             if (bstr_startswith0(command, "{")) {
                 int p = bstrchr(command, '}');
@@ -1370,7 +1370,7 @@ void mp_input_load_config(struct input_ctx *ictx)
 
     // "Uncomment" the default key bindings in etc/input.conf and add them.
     // All lines that do not start with '# ' are parsed.
-    bstr builtin = bstr0(builtin_input_conf);
+    bstr builtin = bstrof0(builtin_input_conf);
     while (builtin.len) {
         bstr line = bstr_getline(builtin, &builtin);
         bstr_eatstart0(&line, "#");

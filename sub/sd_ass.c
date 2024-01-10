@@ -622,11 +622,11 @@ static void fill_plaintext(struct sd *sd, double pts)
     bstr dst = {0};
 
     if (ctx->on_top)
-        bstr_xappend(NULL, &dst, bstr0("{\\a6}"));
+        bstr_xappend(NULL, &dst, bstrof0("{\\a6}"));
 
     while (*text) {
         if (*text == '{')
-            bstr_xappend(NULL, &dst, bstr0("\\"));
+            bstr_xappend(NULL, &dst, bstrof0("\\"));
         bstr_xappend(NULL, &dst, (bstr){text, 1});
         // Break ASS escapes with U+2060 WORD JOINER
         if (*text == '\\')

@@ -33,27 +33,32 @@
 typedef struct bstr {
     unsigned char *start; // Note that this may not necessarily be null-terminated
                           // Unless guaranteed by the generating functions.
-    size_t len; // size (equivalent to strlen, so not including null-term)
+                          // Unsigned char is used since this can be used as a generic data-slice.
+    size_t len; // size (for strings, this does not include null-term)
+                // May be different from what is reported by strlen as slice may be of generic data.
 } bstr;
+
+// Typedef to remind someone when the underlying start points to a null-terminated str.
+typedef bstr bstr0;
 
 // Returns _copy_ of contents of bstr, allocated on talloc ctx
 // If str.start is NULL, return NULL.
-static inline char *bstrdup0(void *talloc_ctx, struct bstr str)
+static inline char *bstr_dupas0(void *talloc_ctx, struct bstr str)
 {
     return talloc_strndup(talloc_ctx, (char *)str.start, str.len);
 }
 
 // Returns _copy_ of contents of bstr, allocated on talloc ctx.
-// Unlike bstrdup0() this will always return a valid C-string (null-terminated).
-static inline char *bstrto0(void *talloc_ctx, struct bstr str)
+// Unlike bstr_dupas0() this will always return a valid C-string (null-terminated).
+static inline char *bstr_dupto0(void *talloc_ctx, struct bstr str)
 {
-    return str.start ? bstrdup0(talloc_ctx, str) : talloc_strdup(talloc_ctx, "");
+    return str.start ? bstr_dupas0(talloc_ctx, str) : talloc_strdup(talloc_ctx, "");
 }
 
 // Return start = NULL iff that is true for the original.
 // Creates a copy of a given bstr, with the new copy allocated on talloc_ctx.
 // The underlying bstr is created with a null-terminated string.
-static inline struct bstr bstrdup(void *talloc_ctx, struct bstr str)
+static inline bstr0 bstrdup(void *talloc_ctx, struct bstr str)
 {
     struct bstr r = { NULL, str.len };
     if (str.start) {
@@ -65,7 +70,7 @@ static inline struct bstr bstrdup(void *talloc_ctx, struct bstr str)
 }
 
 // Creates a bstr with the copy of the given null-terminated C string.
-static inline struct bstr bstrdupfrom0(void *talloc_ctx, const char *s)
+static inline bstr0 bstr_dupfrom0(void *talloc_ctx, const char *s)
 {
     struct bstr r = { NULL, 0 };
     if (!s)
@@ -78,14 +83,14 @@ static inline struct bstr bstrdupfrom0(void *talloc_ctx, const char *s)
 
 // Use an existing C-string as a bstr.
 // Be careful with memory management.
-static inline struct bstr bstr0(const char *s)
+static inline struct bstr bstrof0(const char *s)
 {
     return (struct bstr){(unsigned char *)s, s ? strlen(s) : 0};
 }
 
 // Returns a 0-length bstr allocated on the talloc context.
 // The underlying pointer is null-terminated.
-static inline struct bstr newbstr(void *talloc_ctx) {
+static inline bstr0 bstr_new(void *talloc_ctx) {
     char *ptr = talloc_size(talloc_ctx, sizeof(char));
     *ptr = '\0';
     return (bstr){ptr, 0};
@@ -164,13 +169,15 @@ static inline struct bstr bstr_getline(struct bstr str, struct bstr *rest)
 // and will remove the trailing \n or \r\n sequence.
 struct bstr bstr_strip_linebreaks(struct bstr str);
 
-void bstr_xappend(void *talloc_ctx, bstr *s, bstr append);
-void bstr_xappend_asprintf(void *talloc_ctx, bstr *s, const char *fmt, ...)
+// Input bstr is always updated to be null-terminated, even if it is not
+// originally.
+void bstr_xappend(void *talloc_ctx, bstr0 *s, bstr append);
+void bstr_xappend_asprintf(void *talloc_ctx, bstr0 *s, const char *fmt, ...)
     PRINTF_ATTRIBUTE(3, 4);
-void bstr_xappend_vasprintf(void *talloc_ctx, bstr *s, const char *fmt, va_list va)
+void bstr_xappend_vasprintf(void *talloc_ctx, bstr0 *s, const char *fmt, va_list va)
     PRINTF_ATTRIBUTE(3, 0);
 
-inline void bstr_xappend0(void *talloc_ctx, bstr *s, const char *append) {
+inline void bstr_xappend0(void *talloc_ctx, bstr0 *s, const char *append) {
     bstr_xappend(talloc_ctx, s, (bstr){(unsigned char*) append, strlen(append)});
 }
 
@@ -207,7 +214,7 @@ static inline bool bstr_startswith(struct bstr str, struct bstr prefix)
 
 static inline bool bstr_startswith0(struct bstr str, const char *prefix)
 {
-    return bstr_startswith(str, bstr0(prefix));
+    return bstr_startswith(str, bstrof0(prefix));
 }
 
 static inline bool bstr_endswith(struct bstr str, struct bstr suffix)
@@ -219,12 +226,12 @@ static inline bool bstr_endswith(struct bstr str, struct bstr suffix)
 
 static inline bool bstr_endswith0(struct bstr str, const char *suffix)
 {
-    return bstr_endswith(str, bstr0(suffix));
+    return bstr_endswith(str, bstrof0(suffix));
 }
 
 static inline int bstrcmp0(struct bstr str1, const char *str2)
 {
-    return bstrcmp(str1, bstr0(str2));
+    return bstrcmp(str1, bstrof0(str2));
 }
 
 static inline bool bstr_equals(struct bstr str1, struct bstr str2)
@@ -237,27 +244,27 @@ static inline bool bstr_equals(struct bstr str1, struct bstr str2)
 
 static inline bool bstr_equals0(struct bstr str1, const char *str2)
 {
-    return bstr_equals(str1, bstr0(str2));
+    return bstr_equals(str1, bstrof0(str2));
 }
 
 static inline int bstrcasecmp0(struct bstr str1, const char *str2)
 {
-    return bstrcasecmp(str1, bstr0(str2));
+    return bstrcasecmp(str1, bstrof0(str2));
 }
 
 static inline int bstr_find0(struct bstr haystack, const char *needle)
 {
-    return bstr_find(haystack, bstr0(needle));
+    return bstr_find(haystack, bstrof0(needle));
 }
 
 static inline bool bstr_eatstart0(struct bstr *s, const char *prefix)
 {
-    return bstr_eatstart(s, bstr0(prefix));
+    return bstr_eatstart(s, bstrof0(prefix));
 }
 
 static inline bool bstr_eatend0(struct bstr *s, const char *prefix)
 {
-    return bstr_eatend(s, bstr0(prefix));
+    return bstr_eatend(s, bstrof0(prefix));
 }
 
 
@@ -271,10 +278,10 @@ static inline void bstr_free(struct bstr *s) {
 
 
 // Returns a new bstr allocated on ta_ctx with the input bstrs joined with joiner.
-static bstr bstr_join_lines(void *ta_ctx, bstr *parts, int num_parts, char joiner)
+static bstr0 bstr_join_lines(void *ta_ctx, bstr *parts, int num_parts, char joiner)
 {
     if (num_parts <= 0) {
-        return newbstr(ta_ctx);
+        return bstr_new(ta_ctx);
     }
 
     int new_len = 1; // For null char

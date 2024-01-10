@@ -456,7 +456,7 @@ static void keyboard_handle_key(void *data, struct wl_keyboard *wl_keyboard,
     } else {
         char s[128];
         if (xkb_keysym_to_utf8(sym, s, sizeof(s)) > 0)
-            mp_input_put_key_utf8(wl->vo->input_ctx, mpmod, bstr0(s));
+            mp_input_put_key_utf8(wl->vo->input_ctx, mpmod, bstrof0(s));
     }
 }
 
@@ -1256,7 +1256,7 @@ static void check_dnd_fd(struct vo_wayland_state *wl)
 
         MP_VERBOSE(wl, "Read %td bytes from the DND fd\n", offset);
 
-        struct bstr file_list = bstr0(buffer);
+        struct bstr file_list = bstrof0(buffer);
         mp_event_drop_mime_data(wl->vo->input_ctx, wl->dnd_mime_type,
                                 file_list, wl->dnd_action);
         talloc_free(buffer);

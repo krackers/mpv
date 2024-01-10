@@ -200,7 +200,7 @@ int mp_input_get_key_from_name(const char *name)
     const char *p;
     while ((p = strchr(name, '+'))) {
         for (const struct key_name *m = modifier_names; m->name; m++)
-            if (!bstrcasecmp(bstr0(m->name),
+            if (!bstrcasecmp(bstrof0(m->name),
                              (struct bstr){(char *)name, p - name})) {
                 modifiers |= m->key;
                 goto found;
@@ -212,7 +212,7 @@ found:
         name = p + 1;
     }
 
-    struct bstr bname = bstr0(name);
+    struct bstr bname = bstrof0(name);
 
     struct bstr rest;
     int code = bstr_decode_utf8(bname, &rest);
@@ -268,7 +268,7 @@ char *mp_input_get_key_combo_name(const int *keys, int max)
     while (max > 0) {
         mp_input_append_key_name(&dst, *keys);
         if (--max && *++keys)
-            bstr_xappend(NULL, &dst, bstr0("-"));
+            bstr_xappend(NULL, &dst, bstrof0("-"));
         else
             break;
     }

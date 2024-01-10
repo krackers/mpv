@@ -32,7 +32,7 @@ static void write_arg(bstr *cmdline, char *arg)
 {
     // Empty args must be represented as an empty quoted string
     if (!arg[0]) {
-        bstr_xappend(NULL, cmdline, bstr0("\"\""));
+        bstr_xappend(NULL, cmdline, bstrof0("\"\""));
         return;
     }
 
@@ -40,12 +40,12 @@ static void write_arg(bstr *cmdline, char *arg)
     // to leave it alone for the sake of Windows programs that don't process
     // quoted args correctly.
     if (!strpbrk(arg, " \t\"")) {
-        bstr_xappend(NULL, cmdline, bstr0(arg));
+        bstr_xappend(NULL, cmdline, bstrof0(arg));
         return;
     }
 
     // If there are characters that need to be escaped, write a quoted string
-    bstr_xappend(NULL, cmdline, bstr0("\""));
+    bstr_xappend(NULL, cmdline, bstrof0("\""));
 
     // Escape the argument. To match the behavior of CommandLineToArgvW,
     // backslashes are only escaped if they appear before a quote or the end of
@@ -65,11 +65,11 @@ static void write_arg(bstr *cmdline, char *arg)
 
             // Double backslashes preceding the quote
             for (int i = 0; i < num_slashes; i++)
-                bstr_xappend(NULL, cmdline, bstr0("\\"));
+                bstr_xappend(NULL, cmdline, bstrof0("\\"));
             num_slashes = 0;
 
             // Escape the quote itself
-            bstr_xappend(NULL, cmdline, bstr0("\\"));
+            bstr_xappend(NULL, cmdline, bstrof0("\\"));
             break;
         default:
             num_slashes = 0;
@@ -77,13 +77,13 @@ static void write_arg(bstr *cmdline, char *arg)
     }
 
     // Write the rest of the argument
-    bstr_xappend(NULL, cmdline, bstr0(arg));
+    bstr_xappend(NULL, cmdline, bstrof0(arg));
 
     // Double backslashes at the end of the argument
     for (int i = 0; i < num_slashes; i++)
-        bstr_xappend(NULL, cmdline, bstr0("\\"));
+        bstr_xappend(NULL, cmdline, bstrof0("\\"));
 
-    bstr_xappend(NULL, cmdline, bstr0("\""));
+    bstr_xappend(NULL, cmdline, bstrof0("\""));
 }
 
 // Convert an array of arguments to a properly escaped command-line string
@@ -95,7 +95,7 @@ static wchar_t *write_cmdline(void *ctx, char **argv)
     bstr_xappend_asprintf(NULL, &cmdline, "\"%s\"", argv[0]);
 
     for (int i = 1; argv[i]; i++) {
-        bstr_xappend(NULL, &cmdline, bstr0(" "));
+        bstr_xappend(NULL, &cmdline, bstrof0(" "));
         write_arg(&cmdline, argv[i]);
     }
 

@@ -169,7 +169,7 @@ static STDMETHODIMP DropTarget_Drop(IDropTarget *self, IDataObject *pDataObj,
         if (wurl) {
             char *url = mp_to_utf8(NULL, wurl);
             if (mp_event_drop_mime_data(t->input_ctx, "text/uri-list",
-                                        bstr0(url), action) > 0)
+                                        bstrof0(url), action) > 0)
             {
                 MP_VERBOSE(t, "received dropped URL: %s\n", url);
             } else {

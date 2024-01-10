@@ -360,7 +360,7 @@ struct mp_decoder_list *select_spdif_codec(const char *codec, const char *pref)
         return list;
 
     bool spdif_allowed = false, dts_hd_allowed = false;
-    bstr sel = bstr0(pref);
+    bstr sel = bstrof0(pref);
     while (sel.len) {
         bstr decoder;
         bstr_split_tok(sel, ",", &decoder, &sel);

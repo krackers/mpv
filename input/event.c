@@ -66,7 +66,7 @@ int mp_event_drop_mime_data(struct input_ctx *ictx, const char *mime_type,
             line = bstr_strip_linebreaks(line);
             if (bstr_startswith0(line, "#"))
                 continue;
-            char *s = bstrto0(tmp, line);
+            char *s = bstr_dupto0(tmp, line);
             MP_TARRAY_APPEND(tmp, files, num_files, s);
         }
         mp_event_drop_files(ictx, num_files, files, action);

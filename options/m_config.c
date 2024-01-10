@@ -114,7 +114,7 @@ static int show_profile(struct m_config *config, bstr param)
                 list = e + 1;
             }
             if (list[0] != '\0')
-                show_profile(config, bstr0(list));
+                show_profile(config, bstrof0(list));
         }
     }
     config->profile_depth--;
@@ -254,8 +254,8 @@ static int m_config_set_obj_params(struct m_config *config, struct mp_log *log,
                                    struct m_obj_desc *desc, char **args)
 {
     for (int n = 0; args && args[n * 2 + 0]; n++) {
-        bstr opt = bstr0(args[n * 2 + 0]);
-        bstr val = bstr0(args[n * 2 + 1]);
+        bstr opt = bstrof0(args[n * 2 + 0]);
+        bstr val = bstrof0(args[n * 2 + 1]);
         if (m_config_set_option_cli(config, opt, val, 0) < 0)
             return -1;
     }
@@ -321,7 +321,7 @@ void m_config_restore_backups(struct m_config *config)
 
 void m_config_backup_opt(struct m_config *config, const char *opt)
 {
-    struct m_config_option *co = m_config_get_co(config, bstr0(opt));
+    struct m_config_option *co = m_config_get_co(config, bstrof0(opt));
     if (co) {
         ensure_backup(config, co);
     } else {
@@ -550,7 +550,7 @@ struct m_config_option *m_config_get_co_raw(const struct m_config *config,
 
     for (int n = 0; n < config->num_opts; n++) {
         struct m_config_option *co = &config->opts[n];
-        struct bstr coname = bstr0(co->name);
+        struct bstr coname = bstrof0(co->name);
         if (bstrcmp(coname, name) == 0)
             return co;
     }
@@ -581,7 +581,7 @@ static struct m_config_option *m_config_get_co_any(const struct m_config *config
             }
             co->warning_was_printed = true;
         }
-        return m_config_get_co_any(config, bstr0(alias));
+        return m_config_get_co_any(config, bstrof0(alias));
     } else if (co->opt->type == &m_option_type_removed) {
         if (!co->warning_was_printed) {
             char *msg = co->opt->priv;
@@ -733,7 +733,7 @@ static int m_config_handle_special_options(struct m_config *config,
     }
 
     if (config->use_profiles && strcmp(co->name, "show-profile") == 0)
-        return show_profile(config, bstr0(*(char **)data));
+        return show_profile(config, bstrof0(*(char **)data));
 
     if (config->is_toplevel && (strcmp(co->name, "h") == 0 ||
                                 strcmp(co->name, "help") == 0))
@@ -838,13 +838,13 @@ static struct m_config_option *m_config_mogrify_cli_opt(struct m_config *config,
     // Resolve CLI alias. (We don't allow you to combine them with "--no-".)
     co = m_config_get_co_any(config, *name);
     if (co && co->opt->type == &m_option_type_cli_alias)
-        *name = bstr0((char *)co->opt->priv);
+        *name = bstrof0((char *)co->opt->priv);
 
     // Might be a suffix "action", like "--vf-add". Expensively check for
     // matches. (We don't allow you to combine them with "--no-".)
     for (int n = 0; n < config->num_opts; n++) {
         co = &config->opts[n];
-        struct bstr basename = bstr0(co->name);
+        struct bstr basename = bstrof0(co->name);
 
         if (!bstr_startswith(*name, basename))
             continue;
@@ -858,7 +858,7 @@ static struct m_config_option *m_config_mogrify_cli_opt(struct m_config *config,
         const struct m_option_type *type = co->opt->type;
         for (int i = 0; type->actions && type->actions[i].name; i++) {
             const struct m_option_action *action = &type->actions[i];
-            bstr suffix = bstr0(action->name);
+            bstr suffix = bstrof0(action->name);
 
             if (bstr_endswith(*name, suffix) &&
                 (name->len == basename.len + 1 + suffix.len) &&
@@ -898,7 +898,7 @@ int m_config_set_option_cli(struct m_config *config, struct bstr name,
             goto done;
         }
 
-        param = bstr0("no");
+        param = bstrof0("no");
     }
 
     // This is the only mandatory function
@@ -950,7 +950,7 @@ int m_config_set_option_node(struct m_config *config, bstr name,
     union m_option_value val = {0};
 
     if (data->format == MPV_FORMAT_STRING) {
-        bstr param = bstr0(data->u.string);
+        bstr param = bstrof0(data->u.string);
         r = m_option_parse(mp_null_log, co->opt, name, param, &val);
     } else {
         r = m_option_set_node(co->opt, &val, data);
@@ -1090,7 +1090,7 @@ struct m_profile *m_config_get_profile(const struct m_config *config, bstr name)
 struct m_profile *m_config_get_profile0(const struct m_config *config,
                                         char *name)
 {
-    return m_config_get_profile(config, bstr0(name));
+    return m_config_get_profile(config, bstrof0(name));
 }
 
 struct m_profile *m_config_add_profile(struct m_config *config, char *name)
@@ -1110,7 +1110,7 @@ struct m_profile *m_config_add_profile(struct m_config *config, char *name)
 void m_profile_set_desc(struct m_profile *p, bstr desc)
 {
     talloc_free(p->desc);
-    p->desc = bstrto0(p, desc);
+    p->desc = bstr_dupto0(p, desc);
 }
 
 int m_config_set_profile_option(struct m_config *config, struct m_profile *p,
@@ -1122,8 +1122,8 @@ int m_config_set_profile_option(struct m_config *config, struct m_profile *p,
     if (i < 0)
         return i;
     p->opts = talloc_realloc(p, p->opts, char *, 2 * (p->num_opts + 2));
-    p->opts[p->num_opts * 2] = bstrto0(p, name);
-    p->opts[p->num_opts * 2 + 1] = bstrto0(p, val);
+    p->opts[p->num_opts * 2] = bstr_dupto0(p, name);
+    p->opts[p->num_opts * 2 + 1] = bstr_dupto0(p, val);
     p->num_opts++;
     p->opts[p->num_opts * 2] = p->opts[p->num_opts * 2 + 1] = NULL;
     return 1;
@@ -1144,8 +1144,8 @@ int m_config_set_profile(struct m_config *config, char *name, int flags)
     config->profile_depth++;
     for (int i = 0; i < p->num_opts; i++) {
         m_config_set_option_cli(config,
-                                bstr0(p->opts[2 * i]),
-                                bstr0(p->opts[2 * i + 1]),
+                                bstrof0(p->opts[2 * i]),
+                                bstrof0(p->opts[2 * i + 1]),
                                 flags | M_SETOPT_FROM_CONFIG_FILE);
     }
     config->profile_depth--;
@@ -1439,7 +1439,7 @@ void mp_read_option_raw(struct mpv_global *global, const char *name,
                         const struct m_option_type *type, void *dst)
 {
     struct m_config_shadow *shadow = global->config;
-    struct m_config_option *co = m_config_get_co_raw(shadow->root, bstr0(name));
+    struct m_config_option *co = m_config_get_co_raw(shadow->root, bstrof0(name));
     assert(co);
     assert(co->shadow_offset >= 0);
     assert(co->opt->type == type);

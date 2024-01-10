@@ -2163,7 +2163,7 @@ static void demux_init_cuesheet(struct demuxer *demuxer)
 {
     char *cue = mp_tags_get_str(demuxer->metadata, "cuesheet");
     if (cue && !demuxer->num_chapters) {
-        struct cue_file *f = mp_parse_cue(bstr0(cue));
+        struct cue_file *f = mp_parse_cue(bstrof0(cue));
         if (f) {
             if (mp_check_embedded_cue(f) < 0) {
                 MP_WARN(demuxer, "Embedded cue sheet references more than one file. "
