@@ -66,7 +66,7 @@ int mp_imgfmt_from_name(bstr name)
         }
     }
     if (!img_fmt) {
-        char *t = bstrdup0(NULL, name);
+        char *t = bstr_dupas0(NULL, name);
         img_fmt = pixfmt2imgfmt(av_get_pix_fmt(t));
         talloc_free(t);
     }

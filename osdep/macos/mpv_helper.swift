@@ -61,7 +61,7 @@ class MPVHelper: LogHelper {
 
     func command(_ cmd: String) {
         let cCmd = UnsafePointer<Int8>(strdup(cmd))
-        let mpvCmd = mp_input_parse_cmd(input, bstr0(cCmd), "")
+        let mpvCmd = mp_input_parse_cmd(input, bstrof0(cCmd), "")
         mp_input_queue_cmd(input, mpvCmd)
         free(UnsafeMutablePointer(mutating: cCmd))
     }

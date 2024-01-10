@@ -929,7 +929,7 @@ static int open_s(stream_t *stream)
     stream->priv = d;
 
     bstr title, bdevice;
-    bstr_split_tok(bstr0(stream->path), "/", &title, &bdevice);
+    bstr_split_tok(bstrof0(stream->path), "/", &title, &bdevice);
 
     if (title.len) {
         bstr rest;
@@ -940,7 +940,7 @@ static int open_s(stream_t *stream)
         }
     }
 
-    d->cfg_device = bstrto0(d, bdevice);
+    d->cfg_device = bstr_dupto0(d, bdevice);
 
     return open_s_internal(stream);
 }
@@ -953,7 +953,7 @@ static int ifo_stream_open(stream_t *stream)
     if (!stream->access_references)
         goto unsupported;
 
-    char *path = mp_file_get_path(priv, bstr0(stream->url));
+    char *path = mp_file_get_path(priv, bstrof0(stream->url));
     if (!path)
         goto unsupported;
 
@@ -969,7 +969,7 @@ static int ifo_stream_open(stream_t *stream)
     if (sscanf(base + 3, "_%02d_", &priv->cfg_title) != 1)
         goto unsupported;
 
-    priv->cfg_device = bstrto0(priv, mp_dirname(path));
+    priv->cfg_device = bstr_dupto0(priv, mp_dirname(path));
 
     MP_INFO(stream, ".IFO detected. Redirecting to dvdread://\n");
     return open_s_internal(stream);

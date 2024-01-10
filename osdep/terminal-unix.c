@@ -404,7 +404,7 @@ static void *terminal_thread(void *ptr)
     bool quit = read(death_pipe[0], &c, 1) == 1 && c == 1;
     // Important if we received SIGTERM, rather than regular quit.
     if (quit) {
-        struct mp_cmd *cmd = mp_input_parse_cmd(input_ctx, bstr0("quit 4"), "");
+        struct mp_cmd *cmd = mp_input_parse_cmd(input_ctx, bstrof0("quit 4"), "");
         if (cmd)
             mp_input_queue_cmd(input_ctx, cmd);
     }

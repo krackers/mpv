@@ -473,7 +473,7 @@ static int bluray_stream_open(stream_t *s)
     b->use_nav = s->info == &stream_info_bdnav;
 
     bstr title, bdevice, rest = { .len = 0 };
-    bstr_split_tok(bstr0(s->path), "/", &title, &bdevice);
+    bstr_split_tok(bstrof0(s->path), "/", &title, &bdevice);
 
     b->cfg_title = BLURAY_DEFAULT_TITLE;
 
@@ -507,7 +507,7 @@ static int bluray_stream_open(stream_t *s)
         b->cfg_title = t;
     }
 
-    b->cfg_device = bstrto0(b, bdevice);
+    b->cfg_device = bstr_dupto0(b, bdevice);
 
     return bluray_stream_open_internal(s);
 }
@@ -572,7 +572,7 @@ static int bdmv_dir_stream_open(stream_t *stream)
     if (!stream->access_references)
         goto unsupported;
 
-    char *path = mp_file_get_path(priv, bstr0(stream->url));
+    char *path = mp_file_get_path(priv, bstrof0(stream->url));
     if (!path)
         goto unsupported;
 

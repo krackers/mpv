@@ -669,7 +669,7 @@ static int cocoa_set_window_title(struct vo *vo)
 
     void *talloc_ctx   = talloc_new(NULL);
     struct bstr btitle =
-        bstr_sanitize_utf8_latin1(talloc_ctx, bstr0(s->window_title));
+        bstr_sanitize_utf8_latin1(talloc_ctx, bstrof0(s->window_title));
     if (btitle.start) {
         NSString *nstitle  = [NSString stringWithUTF8String:btitle.start];
         if (nstitle) {
@@ -1115,7 +1115,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 - (void)putCommand:(char*)cmd
 {
     char *cmd_ = ta_strdup(NULL, cmd);
-    mp_cmd_t *cmdt = mp_input_parse_cmd(self.vout->input_ctx, bstr0(cmd_), "");
+    mp_cmd_t *cmdt = mp_input_parse_cmd(self.vout->input_ctx, bstrof0(cmd_), "");
     mp_input_queue_cmd(self.vout->input_ctx, cmdt);
     ta_free(cmd_);
 }

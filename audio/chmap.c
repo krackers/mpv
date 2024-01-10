@@ -414,7 +414,7 @@ bool mp_chmap_from_str(struct mp_chmap *dst, bstr src)
     // From standard layout name
     for (int n = 0; std_layout_names[n][0]; n++) {
         if (bstr_equals0(src, std_layout_names[n][0])) {
-            src = bstr0(std_layout_names[n][1]);
+            src = bstrof0(std_layout_names[n][1]);
             break;
         }
     }
@@ -460,7 +460,7 @@ char *mp_chmap_to_str_hr_buf(char *buf, size_t buf_size, const struct mp_chmap *
     mp_chmap_remove_na(&map);
     for (int n = 0; std_layout_names[n][0]; n++) {
         struct mp_chmap s;
-        if (mp_chmap_from_str(&s, bstr0(std_layout_names[n][0])) &&
+        if (mp_chmap_from_str(&s, bstrof0(std_layout_names[n][0])) &&
             mp_chmap_equals_reordered(&s, &map))
         {
             map = s;

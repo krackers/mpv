@@ -152,7 +152,7 @@ static void get_and_update_icc_profile(struct gpu_priv *p)
 {
     if (gl_video_icc_auto_enabled(p->renderer)) {
         MP_VERBOSE(p, "Querying ICC profile...\n");
-        bstr icc = bstr0(NULL);
+        bstr icc = bstrof0(NULL);
         int r = p->ctx->fns->control(p->ctx, &p->events, VOCTRL_GET_ICC_PROFILE, &icc);
 
         if (r != VO_NOTAVAIL) {

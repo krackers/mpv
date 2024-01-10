@@ -365,7 +365,7 @@ static void add_all_hwdec_methods(struct hwdec_info **infos, int *num_infos)
 static bool hwdec_codec_allowed(struct mp_filter *vd, const char *codec)
 {
     vd_ffmpeg_ctx *ctx = vd->priv;
-    bstr s = bstr0(ctx->opts->hwdec_codecs);
+    bstr s = bstrof0(ctx->opts->hwdec_codecs);
     while (s.len) {
         bstr item;
         bstr_split_tok(s, ",", &item, &s);
@@ -409,7 +409,7 @@ static void select_and_set_hwdec(struct mp_filter *vd)
     vd_ffmpeg_ctx *ctx = vd->priv;
     const char *codec = ctx->codec->codec;
 
-    bstr opt = bstr0(ctx->opts->hwdec_api);
+    bstr opt = bstrof0(ctx->opts->hwdec_api);
 
     bool hwdec_requested = !bstr_equals0(opt, "no");
     bool hwdec_auto_all = bstr_equals0(opt, "auto") ||

@@ -424,9 +424,9 @@ static int mp_property_generic_option(void *ctx, struct m_property *prop,
     struct m_config_option *opt;
     if (mpctx->command_ctx->silence_option_deprecations) {
         // This case is specifically for making --reset-on-next-file=all silent.
-        opt = m_config_get_co_raw(mpctx->mconfig, bstr0(optname));
+        opt = m_config_get_co_raw(mpctx->mconfig, bstrof0(optname));
     } else {
-        opt = m_config_get_co(mpctx->mconfig, bstr0(optname));
+        opt = m_config_get_co(mpctx->mconfig, bstrof0(optname));
     }
 
     if (!opt)
@@ -513,7 +513,7 @@ static int mp_property_filename(void *ctx, struct m_property *prop,
     if (!mpctx->filename)
         return M_PROPERTY_UNAVAILABLE;
     char *filename = talloc_strdup(NULL, mpctx->filename);
-    if (mp_is_url(bstr0(filename)))
+    if (mp_is_url(bstrof0(filename)))
         mp_url_unescape_inplace(filename);
     char *f = (char *)mp_basename(filename);
     if (!f[0])
@@ -525,7 +525,7 @@ static int mp_property_filename(void *ctx, struct m_property *prop,
             arg = ka->arg;
             bstr root;
             if (mp_splitext(f, &root))
-                f = bstrto0(filename, root);
+                f = bstr_dupto0(filename, root);
         }
     }
     int r = m_property_strdup_ro(action, arg, f);
@@ -1412,7 +1412,7 @@ static int tag_property(int action, void *arg, struct mp_tags *tags)
                                         get_tag_entry, tags);
         }
         // Direct access without this prefix is allowed for compatibility.
-        bstr k = bstr0(ka->key);
+        bstr k = bstrof0(ka->key);
         bstr_eatstart0(&k, "by-key/");
         char *meta = mp_tags_get_bstr(tags, k);
         if (!meta)
@@ -3407,7 +3407,7 @@ static int mp_property_playlist(void *ctx, struct m_property *prop,
         for (struct playlist_entry *e = pl->first; e; e = e->next)
         {
             char *p = e->filename;
-            if (!mp_is_url(bstr0(p))) {
+            if (!mp_is_url(bstrof0(p))) {
                 char *s = mp_basename(e->filename);
                 if (s[0])
                     p = s;
@@ -3452,7 +3452,7 @@ static int property_filter(struct m_property *prop, int action, void *arg,
     switch (action) {
     case M_PROPERTY_PRINT: {
         struct m_config_option *opt = m_config_get_co(mpctx->mconfig,
-                                                      bstr0(prop->name));
+                                                      bstrof0(prop->name));
         *(char **)arg = print_obj_osd_list(*(struct m_obj_settings **)opt->data);
         return M_PROPERTY_OK;
     }
@@ -3567,7 +3567,7 @@ static int mp_property_record_file(void *ctx, struct m_property *prop,
     struct MPOpts *opts = mpctx->opts;
     if (action == M_PROPERTY_SET) {
         char *new = *(char **)arg;
-        if (!bstr_equals(bstr0(new), bstr0(opts->record_file))) {
+        if (!bstr_equals(bstrof0(new), bstrof0(opts->record_file))) {
             talloc_free(opts->record_file);
             opts->record_file = talloc_strdup(NULL, new);
             open_recorder(mpctx, false);
@@ -3696,7 +3696,7 @@ static int access_options(struct m_property_action_arg *ka, bool local,
                           MPContext *mpctx)
 {
     struct m_config_option *opt = m_config_get_co(mpctx->mconfig,
-                                                  bstr0(ka->key));
+                                                  bstrof0(ka->key));
     if (!opt)
         return M_PROPERTY_UNKNOWN;
     if (!opt->data)
@@ -4264,7 +4264,7 @@ char *mp_property_expand_string(struct MPContext *mpctx, const char *str)
 char *mp_property_expand_escaped_string(struct MPContext *mpctx, const char *str)
 {
     void *tmp = talloc_new(NULL);
-    bstr strb = bstr0(str);
+    bstr strb = bstrof0(str);
     bstr dst = {0};
     while (strb.len) {
         if (!mp_append_escaped_string(tmp, &dst, &strb)) {
@@ -4274,7 +4274,7 @@ char *mp_property_expand_escaped_string(struct MPContext *mpctx, const char *str
         // pass " through literally
         if (!bstr_eatstart0(&strb, "\""))
             break;
-        bstr_xappend(tmp, &dst, bstr0("\""));
+        bstr_xappend(tmp, &dst, bstrof0("\""));
     }
     char *r = mp_property_expand_string(mpctx, dst.start);
     talloc_free(tmp);
@@ -4472,7 +4472,7 @@ static const char *const filter_opt[STREAM_TYPE_COUNT] = {
 static int set_filters(struct MPContext *mpctx, enum stream_type mediatype,
                        struct m_obj_settings *new_chain)
 {
-    bstr option = bstr0(filter_opt[mediatype]);
+    bstr option = bstrof0(filter_opt[mediatype]);
     struct m_config_option *co = m_config_get_co(mpctx->mconfig, option);
     if (!co)
         return -1;
@@ -4500,7 +4500,7 @@ static int edit_filters(struct MPContext *mpctx, struct mp_log *log,
                         enum stream_type mediatype,
                         const char *cmd, const char *arg)
 {
-    bstr option = bstr0(filter_opt[mediatype]);
+    bstr option = bstrof0(filter_opt[mediatype]);
     struct m_config_option *co = m_config_get_co(mpctx->mconfig, option);
     if (!co)
         return -1;
@@ -4512,7 +4512,7 @@ static int edit_filters(struct MPContext *mpctx, struct mp_log *log,
     struct m_obj_settings *new_chain = NULL;
     m_option_copy(co->opt, &new_chain, co->data);
 
-    int r = m_option_parse(log, co->opt, bstr0(optname), bstr0(arg), &new_chain);
+    int r = m_option_parse(log, co->opt, bstrof0(optname), bstrof0(arg), &new_chain);
     if (r >= 0)
         r = set_filters(mpctx, mediatype, new_chain);
 
@@ -4809,7 +4809,7 @@ static bool compare_values(struct m_option *type, void *a, void *b)
     // values to a common, unambiguous representation - strings.
     char *as = m_option_print(type, a);
     char *bs = m_option_print(type, b);
-    bool res = bstr_equals(bstr0(as), bstr0(bs)); // treat as "" on failure
+    bool res = bstr_equals(bstrof0(as), bstrof0(bs)); // treat as "" on failure
     talloc_free(as);
     talloc_free(bs);
     return res;
@@ -4855,8 +4855,8 @@ static void cmd_cycle_values(void *p)
     int current = -1;
     for (int n = first; n < cmd->num_args; n++) {
         union m_option_value val = {0};
-        if (m_option_parse(mpctx->log, &prop, bstr0(name),
-                           bstr0(cmd->args[n].v.s), &val) < 0)
+        if (m_option_parse(mpctx->log, &prop, bstrof0(name),
+                           bstrof0(cmd->args[n].v.s), &val) < 0)
             continue;
 
         if (compare_values(&prop, &curval, &val))
@@ -5072,7 +5072,7 @@ static void cmd_change_list(void *p)
     }
 
     char *optname = mp_tprintf(80, "%s-%s", name, op); // the dirty truth
-    int r = m_option_parse(mpctx->log, &prop, bstr0(optname), bstr0(value), &val);
+    int r = m_option_parse(mpctx->log, &prop, bstrof0(optname), bstrof0(value), &val);
     if (r >= 0 && mp_property_do(name, M_PROPERTY_SET, &val, mpctx) <= 0)
         r = -1;
     m_option_free(&prop, &val);
@@ -5283,7 +5283,7 @@ static void cmd_loadfile(void *p)
     if (cmd->args[2].v.str_list) {
         char **pairs = cmd->args[2].v.str_list;
         for (int i = 0; pairs[i] && pairs[i + 1]; i += 2)
-            playlist_entry_add_param(entry, bstr0(pairs[i]), bstr0(pairs[i + 1]));
+            playlist_entry_add_param(entry, bstrof0(pairs[i]), bstrof0(pairs[i + 1]));
     }
     playlist_add(mpctx->playlist, entry);
 
@@ -6271,8 +6271,8 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
 
         // Rather coarse change-detection, but sufficient effort.
         struct MPOpts *opts = mpctx->opts;
-        if (!bstr_equals(bstr0(cmd->cur_ipc), bstr0(opts->ipc_path)) ||
-            !bstr_equals(bstr0(cmd->cur_ipc_input), bstr0(opts->input_file)))
+        if (!bstr_equals(bstrof0(cmd->cur_ipc), bstrof0(opts->ipc_path)) ||
+            !bstr_equals(bstrof0(cmd->cur_ipc_input), bstrof0(opts->input_file)))
         {
             talloc_free(cmd->cur_ipc);
             talloc_free(cmd->cur_ipc_input);

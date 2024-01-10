@@ -269,7 +269,7 @@ static struct vo *vo_create(bool probing, struct mpv_global *global,
 
     struct mp_log *log = mp_log_new(NULL, global->log, "vo");
     struct m_obj_desc desc;
-    if (!m_obj_list_find(&desc, &vo_obj_list, bstr0(name))) {
+    if (!m_obj_list_find(&desc, &vo_obj_list, bstrof0(name))) {
         mp_msg(log, MSGL_ERR, "Video output %s not found!\n", name);
         talloc_free(log);
         return NULL;

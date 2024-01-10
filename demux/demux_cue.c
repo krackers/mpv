@@ -50,12 +50,12 @@ static void add_source(struct timeline *tl, struct demuxer *d)
 
 static bool try_open(struct timeline *tl, char *filename)
 {
-    struct bstr bfilename = bstr0(filename);
+    struct bstr bfilename = bstrof0(filename);
     // Avoid trying to open itself or another .cue file. Best would be
     // to check the result of demuxer auto-detection, but the demuxer
     // API doesn't allow this without opening a full demuxer.
-    if (bstr_case_endswith(bfilename, bstr0(".cue"))
-        || bstrcasecmp(bstr0(tl->demuxer->filename), bfilename) == 0)
+    if (bstr_case_endswith(bfilename, bstrof0(".cue"))
+        || bstrcasecmp(bstrof0(tl->demuxer->filename), bfilename) == 0)
         return false;
 
     struct demuxer *d = demux_open_url(filename, NULL, tl->cancel, tl->global);
@@ -65,7 +65,7 @@ static bool try_open(struct timeline *tl, char *filename)
     // fragile, but it's about the only way we have.
     // TODO: maybe also could check if the .bin file is a multiple of the Audio
     //       CD sector size (2352 bytes)
-    if (!d && bstr_case_endswith(bfilename, bstr0(".bin"))) {
+    if (!d && bstr_case_endswith(bfilename, bstrof0(".bin"))) {
         MP_WARN(tl, "CUE: Opening as BIN file!\n");
         struct demuxer_params p = {.force_format = "rawaudio"};
         d = demux_open_url(filename, &p, tl->cancel, tl->global);
@@ -85,7 +85,7 @@ static bool open_source(struct timeline *tl, char *filename)
 
     struct bstr dirname = mp_dirname(tl->demuxer->filename);
 
-    struct bstr base_filename = bstr0(mp_basename(filename));
+    struct bstr base_filename = bstrof0(mp_basename(filename));
     if (!base_filename.len) {
         MP_WARN(tl, "CUE: Invalid audio filename in .cue file!\n");
     } else {
@@ -102,15 +102,15 @@ static bool open_source(struct timeline *tl, char *filename)
     // are renamed.
 
     struct bstr cuefile =
-        bstr_strip_ext(bstr0(mp_basename(tl->demuxer->filename)));
+        bstr_strip_ext(bstrof0(mp_basename(tl->demuxer->filename)));
 
-    DIR *d = opendir(bstrdup0(ctx, dirname));
+    DIR *d = opendir(bstr_dupas0(ctx, dirname));
     if (!d)
         goto out;
     struct dirent *de;
     while ((de = readdir(d))) {
         char *dename0 = de->d_name;
-        struct bstr dename = bstr0(dename0);
+        struct bstr dename = bstrof0(dename0);
         if (bstr_case_startswith(dename, cuefile)) {
             MP_WARN(tl, "CUE: No useful audio filename "
                     "in .cue file found, trying with '%s' instead!\n",

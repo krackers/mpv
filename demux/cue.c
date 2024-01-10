@@ -69,7 +69,7 @@ static enum cue_command read_cmd(struct bstr *data, struct bstr *out_params)
     if (line.len == 0)
         return CUE_EMPTY;
     for (int n = 0; cue_command_strings[n].command != -1; n++) {
-        struct bstr name = bstr0(cue_command_strings[n].text);
+        struct bstr name = bstrof0(cue_command_strings[n].text);
         if (bstr_case_startswith(line, name)) {
             struct bstr rest = bstr_cut(line, name.len);
             if (rest.len && !strchr(WHITESPACE, rest.start[0]))
@@ -102,7 +102,7 @@ static char *read_quoted(void *talloc_ctx, struct bstr *data)
         return NULL;
     struct bstr res = bstr_splice(*data, 0, end);
     *data = bstr_cut(*data, end + 1);
-    return bstrto0(talloc_ctx, res);
+    return bstr_dupto0(talloc_ctx, res);
 }
 
 static struct bstr strip_quotes(struct bstr data)
@@ -201,7 +201,7 @@ struct cue_file *mp_parse_cue(struct bstr data)
                 [CUE_PERFORMER] = "performer",
             };
             struct mp_tags *tags = cur_track ? cur_track->tags : f->tags;
-            mp_tags_set_bstr(tags, bstr0(metanames[cmd]), strip_quotes(param));
+            mp_tags_set_bstr(tags, bstrof0(metanames[cmd]), strip_quotes(param));
             break;
         }
         case CUE_INDEX: {

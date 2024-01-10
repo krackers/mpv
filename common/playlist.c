@@ -30,7 +30,7 @@
 struct playlist_entry *playlist_entry_new(const char *filename)
 {
     struct playlist_entry *e = talloc_zero(NULL, struct playlist_entry);
-    char *local_filename = mp_file_url_to_filename(e, bstr0(filename));
+    char *local_filename = mp_file_url_to_filename(e, bstrof0(filename));
     e->filename = local_filename ? local_filename : talloc_strdup(e, filename);
     return e;
 }
@@ -196,8 +196,8 @@ void playlist_add_base_path(struct playlist *pl, bstr base_path)
     if (base_path.len == 0 || bstrcmp0(base_path, ".") == 0)
         return;
     for (struct playlist_entry *e = pl->first; e; e = e->next) {
-        if (!mp_is_url(bstr0(e->filename))) {
-            char *new_file = mp_path_join_bstr(e, base_path, bstr0(e->filename));
+        if (!mp_is_url(bstrof0(e->filename))) {
+            char *new_file = mp_path_join_bstr(e, base_path, bstrof0(e->filename));
             talloc_free(e->filename);
             e->filename = new_file;
         }

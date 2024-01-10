@@ -172,7 +172,7 @@ char *mp_file_url_to_filename(void *talloc_ctx, bstr url)
     bstr proto = mp_split_proto(url, &url);
     if (bstrcasecmp0(proto, "file") != 0)
         return NULL;
-    char *filename = bstrto0(talloc_ctx, url);
+    char *filename = bstr_dupto0(talloc_ctx, url);
     mp_url_unescape_inplace(filename);
 #if HAVE_DOS_PATHS
     // extract '/' from '/x:/path'
@@ -189,7 +189,7 @@ char *mp_file_get_path(void *talloc_ctx, bstr url)
     if (mp_split_proto(url, &(bstr){0}).len) {
         return mp_file_url_to_filename(talloc_ctx, url);
     } else {
-        return bstrto0(talloc_ctx, url);
+        return bstr_dupto0(talloc_ctx, url);
     }
 }
 
@@ -280,7 +280,7 @@ static int open_f(stream_t *stream)
     bool write = stream->mode == STREAM_WRITE;
     int m = O_CLOEXEC | (write ? O_RDWR | O_CREAT | O_TRUNC : O_RDONLY);
 
-    char *filename = mp_file_url_to_filename(stream, bstr0(stream->url));
+    char *filename = mp_file_url_to_filename(stream, bstrof0(stream->url));
     if (filename) {
         stream->path = filename;
     } else {
@@ -306,7 +306,7 @@ static int open_f(stream_t *stream)
             p->fd = 1;
         }
     } else {
-        if (bstr_startswith0(bstr0(stream->url), "appending://"))
+        if (bstr_startswith0(bstrof0(stream->url), "appending://"))
             p->appending = true;
 
         mode_t openmode = S_IRUSR | S_IWUSR;

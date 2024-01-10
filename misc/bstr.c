@@ -142,7 +142,7 @@ struct bstr bstr_split(struct bstr str, const char *sep, struct bstr *rest)
 // Otherwise, return false, and set out_left==str, out_right==""
 bool bstr_split_tok(bstr str, const char *tok, bstr *out_left, bstr *out_right)
 {
-    bstr bsep = bstr0(tok);
+    bstr bsep = bstrof0(tok);
     int pos = bstr_find(str, bsep);
     if (pos < 0)
         pos = str.len;
@@ -259,9 +259,11 @@ void bstr_lower(struct bstr str)
 
 int bstr_sscanf(struct bstr str, const char *format, ...)
 {
-    char *ptr = bstrdup0(NULL, str);
+    char *ptr = bstr_dupas0(NULL, str);
     va_list va;
     va_start(va, format);
+    // TODO: This has quadratic behavior on most systems.
+    // To improve
     int ret = vsscanf(ptr, format, va);
     va_end(va);
     talloc_free(ptr);

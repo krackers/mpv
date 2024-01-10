@@ -345,7 +345,7 @@ void merge_playlist_files(struct playlist *pl)
             edl = talloc_strdup_append_buffer(edl, ";");
         // Escape if needed
         if (e->filename[strcspn(e->filename, "=%,;\n")] ||
-            bstr_strip(bstr0(e->filename)).len != strlen(e->filename))
+            bstr_strip(bstrof0(e->filename)).len != strlen(e->filename))
         {
             // %length%
             edl = talloc_asprintf_append_buffer(edl, "%%%zd%%", strlen(e->filename));

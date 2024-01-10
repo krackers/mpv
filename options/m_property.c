@@ -212,11 +212,11 @@ bool m_property_split_path(const char *path, bstr *prefix, char **rem)
 {
     char *next = strchr(path, '/');
     if (next) {
-        *prefix = bstr_splice(bstr0(path), 0, next - path);
+        *prefix = bstr_splice(bstrof0(path), 0, next - path);
         *rem = next + 1;
         return true;
     } else {
-        *prefix = bstr0(path);
+        *prefix = bstrof0(path);
         *rem = "";
         return false;
     }
@@ -278,7 +278,7 @@ static int expand_property(const struct m_property *prop_list, char **ret,
         char *append = s;
         if (!s && !silent_error && !raw)
             append = (r == M_PROPERTY_UNAVAILABLE) ? "(unavailable)" : "(error)";
-        append_str(ret, ret_len, bstr0(append));
+        append_str(ret, ret_len, bstrof0(append));
     }
     talloc_free(s);
     return skip;
@@ -291,7 +291,7 @@ char *m_properties_expand_string(const struct m_property *prop_list,
     int ret_len = 0;
     bool skip = false;
     int level = 0, skip_level = 0;
-    bstr str = bstr0(str0);
+    bstr str = bstrof0(str0);
 
     while (str.len) {
         if (level > 0 && bstr_eatstart0(&str, "}")) {

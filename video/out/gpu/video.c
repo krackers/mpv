@@ -1018,7 +1018,7 @@ static void pass_record(struct gl_video *p, struct mp_pass_perf perf)
     pass->perf = perf;
 
     if (pass->desc.len == 0)
-        bstr_xappend(p, &pass->desc, bstr0("(unknown)"));
+        bstr_xappend(p, &pass->desc, bstrof0("(unknown)"));
 
     p->pass_idx++;
 }
@@ -1032,7 +1032,7 @@ static void pass_describe(struct gl_video *p, const char *textf, ...)
     struct pass_info *pass = &p->pass[p->pass_idx];
 
     if (pass->desc.len > 0)
-        bstr_xappend(p, &pass->desc, bstr0(" + "));
+        bstr_xappend(p, &pass->desc, bstrof0(" + "));
 
     va_list ap;
     va_start(ap, textf);
@@ -1935,7 +1935,7 @@ static bool add_user_hook(void *priv, struct gl_user_shader_hook hook)
     *copy = hook;
 
     struct tex_hook texhook = {
-        .save_tex = bstrdup0(copy, hook.save_tex),
+        .save_tex = bstr_dupas0(copy, hook.save_tex),
         .components = hook.components,
         .hook = user_hook,
         .cond = user_hook_cond,
@@ -1943,9 +1943,9 @@ static bool add_user_hook(void *priv, struct gl_user_shader_hook hook)
     };
 
     for (int h = 0; h < SHADER_MAX_HOOKS; h++)
-        texhook.hook_tex[h] = bstrdup0(copy, hook.hook_tex[h]);
+        texhook.hook_tex[h] = bstr_dupas0(copy, hook.hook_tex[h]);
     for (int h = 0; h < SHADER_MAX_BINDS; h++)
-        texhook.bind_tex[h] = bstrdup0(copy, hook.bind_tex[h]);
+        texhook.bind_tex[h] = bstr_dupas0(copy, hook.bind_tex[h]);
 
     MP_TARRAY_APPEND(p, p->tex_hooks, p->num_tex_hooks, texhook);
     return true;

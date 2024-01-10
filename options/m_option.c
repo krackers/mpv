@@ -101,10 +101,10 @@ int m_option_set_node_or_string(struct mp_log *log, const m_option_t *opt,
     if (src->format == MPV_FORMAT_STRING) {
         // The af and vf option unfortunately require this, because the
         // option name includes the "action".
-        bstr optname = bstr0(name), a, b;
+        bstr optname = bstrof0(name), a, b;
         if (bstr_split_tok(optname, "/", &a, &b))
             optname = b;
-        return m_option_parse(log, opt, optname, bstr0(src->u.string), dst);
+        return m_option_parse(log, opt, optname, bstrof0(src->u.string), dst);
     } else {
         return m_option_set_node(opt, dst, src);
     }
@@ -679,7 +679,7 @@ static int choice_set(const m_option_t *opt, void *dst, struct mpv_node *src)
     if (!src_str)
         return M_OPT_UNKNOWN;
     int val = 0;
-    int r = parse_choice(mp_null_log, opt, (bstr){0}, bstr0(src_str), &val);
+    int r = parse_choice(mp_null_log, opt, (bstr){0}, bstrof0(src_str), &val);
     if (r >= 0)
         *(int *)dst = val;
     return r;
@@ -825,7 +825,7 @@ static int flags_set(const m_option_t *opt, void *dst, struct mpv_node *src)
     for (int n = 0; n < srclist->num; n++) {
         if (srclist->values[n].format != MPV_FORMAT_STRING)
             return M_OPT_INVALID;
-        if (apply_flag(opt, &value, bstr0(srclist->values[n].u.string)) < 0)
+        if (apply_flag(opt, &value, bstrof0(srclist->values[n].u.string)) < 0)
             return M_OPT_INVALID;
     }
     *(int *)dst = value;
@@ -1139,7 +1139,7 @@ static int parse_str(struct mp_log *log, const m_option_t *opt,
 
     if (dst) {
         talloc_free(VAL(dst));
-        VAL(dst) = bstrdup0(NULL, param);
+        VAL(dst) = bstr_dupas0(NULL, param);
     }
 
     return 0;
@@ -1403,7 +1403,7 @@ static int parse_str_list_impl(struct mp_log *log, const m_option_t *opt,
 
     while (1) {
         struct bstr el = get_nextsep(&str, separator, 1);
-        res[n] = bstrdup0(NULL, el);
+        res[n] = bstr_dupas0(NULL, el);
         n++;
         if (!str.len)
             break;
@@ -1575,7 +1575,7 @@ static int parse_keyvalue_list(struct mp_log *log, const m_option_t *opt,
     bool full_value = false;
 
     if ((opt->flags & M_OPT_HAVE_HELP) && bstr_equals0(param, "help"))
-        param = bstr0("help=");
+        param = bstrof0("help=");
 
     if (bstr_endswith0(name, "-add")) {
         append = true;
@@ -1613,8 +1613,8 @@ static int parse_keyvalue_list(struct mp_log *log, const m_option_t *opt,
                 keyvalue_list_del_key(lst, index);
                 num -= 2;
             }
-            MP_TARRAY_APPEND(NULL, lst, num, bstrto0(NULL, key));
-            MP_TARRAY_APPEND(NULL, lst, num, bstrto0(NULL, val));
+            MP_TARRAY_APPEND(NULL, lst, num, bstr_dupto0(NULL, key));
+            MP_TARRAY_APPEND(NULL, lst, num, bstr_dupto0(NULL, val));
             MP_TARRAY_APPEND(NULL, lst, num, NULL);
             num -= 1;
         }
@@ -2653,7 +2653,7 @@ bool m_obj_list_find(struct m_obj_desc *dst, const struct m_obj_list *l,
     for (int i = 0; l->aliases[i][0]; i++) {
         const char *aname = l->aliases[i][0];
         const char *alias = l->aliases[i][1];
-        if (bstr_equals0(name, aname) && m_obj_list_find(dst, l, bstr0(alias)))
+        if (bstr_equals0(name, aname) && m_obj_list_find(dst, l, bstrof0(alias)))
         {
             dst->replaced_name = aname;
             return true;
@@ -2672,7 +2672,7 @@ static void obj_setting_free(m_obj_settings_t *item)
 // If at least one item has a label, compare labels only - otherwise ignore them.
 static bool obj_setting_equals(m_obj_settings_t *a, m_obj_settings_t *b)
 {
-    bstr la = bstr0(a->label), lb = bstr0(b->label);
+    bstr la = bstrof0(a->label), lb = bstrof0(b->label);
     if (la.len || lb.len)
         return bstr_equals(la, lb);
     if (strcmp(a->name, b->name) != 0)
@@ -2748,7 +2748,7 @@ static int obj_settings_list_find_by_label(m_obj_settings_t *obj_list,
 static int obj_settings_list_find_by_label0(m_obj_settings_t *obj_list,
                                             const char *label)
 {
-    return obj_settings_list_find_by_label(obj_list, bstr0(label));
+    return obj_settings_list_find_by_label(obj_list, bstrof0(label));
 }
 
 static int obj_settings_find_by_content(m_obj_settings_t *obj_list,
@@ -2833,7 +2833,7 @@ static int get_obj_param(struct mp_log *log, bstr opt_name, bstr obj_name,
             }
             // Positional naming convention for/followed by mp_set_avopts().
             snprintf(tmp, tmp_size, "@%d", *nold);
-            *out_name = bstr0(tmp);
+            *out_name = bstrof0(tmp);
             *out_val = val;
             (*nold)++;
         }
@@ -2875,7 +2875,7 @@ static int get_obj_param(struct mp_log *log, bstr opt_name, bstr obj_name,
                    BSTR_P(opt_name), BSTR_P(obj_name), *nold, *nold);
             return M_OPT_OUT_OF_RANGE;
         }
-        r = m_config_set_option_cli(config, bstr0(opt), val, flags);
+        r = m_config_set_option_cli(config, bstrof0(opt), val, flags);
         if (r < 0) {
             if (r != M_OPT_EXIT)
                 mp_err(log, "Option %.*s: "
@@ -2883,7 +2883,7 @@ static int get_obj_param(struct mp_log *log, bstr opt_name, bstr obj_name,
                        BSTR_P(opt_name), BSTR_P(obj_name), opt, BSTR_P(val));
             return r;
         }
-        *out_name = bstr0(opt);
+        *out_name = bstrof0(opt);
         *out_val = val;
         (*nold)++;
         return 1;
@@ -2938,8 +2938,8 @@ static int m_obj_parse_sub_config(struct mp_log *log, struct bstr opt_name,
             goto exit;
 
         if (r > 0 && ret) {
-            MP_TARRAY_APPEND(NULL, args, num_args, bstrto0(NULL, fname));
-            MP_TARRAY_APPEND(NULL, args, num_args, bstrto0(NULL, fval));
+            MP_TARRAY_APPEND(NULL, args, num_args, bstr_dupto0(NULL, fname));
+            MP_TARRAY_APPEND(NULL, args, num_args, bstr_dupto0(NULL, fval));
             MP_TARRAY_APPEND(NULL, args, num_args, NULL);
             MP_TARRAY_APPEND(NULL, args, num_args, NULL);
             num_args -= 2;
@@ -3062,8 +3062,8 @@ static int parse_obj_settings(struct mp_log *log, struct bstr opt, int op,
 
 done: ;
     m_obj_settings_t item = {
-        .name = bstrto0(NULL, str),
-        .label = bstrdup0(NULL, label),
+        .name = bstr_dupto0(NULL, str),
+        .label = bstr_dupas0(NULL, label),
         .enabled = enabled,
         .attribs = plist,
     };

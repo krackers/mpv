@@ -103,7 +103,7 @@ static char **find_files(const char *original_file)
     char *basename = mp_basename(original_file);
     struct bstr directory = mp_dirname(original_file);
     char **results = talloc_size(NULL, 0);
-    char *dir_zero = bstrdup0(tmpmem, directory);
+    char *dir_zero = bstr_dupas0(tmpmem, directory);
     DIR *dp = opendir(dir_zero);
     if (!dp) {
         talloc_free(tmpmem);
@@ -119,7 +119,7 @@ static char **find_files(const char *original_file)
         if (!strcmp(ep->d_name, basename))
             continue;
 
-        char *name = mp_path_join_bstr(results, directory, bstr0(ep->d_name));
+        char *name = mp_path_join_bstr(results, directory, bstrof0(ep->d_name));
         char *s1 = ep->d_name;
         char *s2 = basename;
         int matchlen = 0;

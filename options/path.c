@@ -112,12 +112,12 @@ static char **mp_find_all_config_files_limited(void *talloc_ctx,
 
     for (int i = 0; i < MP_ARRAY_SIZE(config_dirs); i++) {
         const char *dir = mp_get_platform_path(ret, global, config_dirs[i]);
-        bstr s = bstr0(filename);
+        bstr s = bstrof0(filename);
         while (dir && num_ret < max_files && s.len) {
             bstr fn;
             bstr_split_tok(s, "|", &fn, &s);
 
-            char *file = mp_path_join_bstr(ret, bstr0(dir), fn);
+            char *file = mp_path_join_bstr(ret, bstrof0(dir), fn);
             if (mp_path_exists(file)) {
                 MP_DBG(global, "config path: '%.*s' -> '%s'\n",
                         BSTR_P(fn), file);
@@ -158,7 +158,7 @@ char *mp_get_user_path(void *talloc_ctx, struct mpv_global *global,
     if (!path)
         return NULL;
     char *res = NULL;
-    bstr bpath = bstr0(path);
+    bstr bpath = bstrof0(path);
     if (bstr_eatstart0(&bpath, "~")) {
         // parse to "~" <prefix> "/" <rest>
         bstr prefix, rest;
@@ -169,20 +169,20 @@ char *mp_get_user_path(void *talloc_ctx, struct mpv_global *global,
                 if (!res) {
                     void *tmp = talloc_new(NULL);
                     const char *p = mp_get_platform_path(tmp, global, "home");
-                    res = mp_path_join_bstr(talloc_ctx, bstr0(p), rest);
+                    res = mp_path_join_bstr(talloc_ctx, bstrof0(p), rest);
                     talloc_free(tmp);
                 }
             } else if (bstr_equals0(prefix, "")) {
                 char *home = getenv("HOME");
                 if (!home)
                     home = getenv("USERPROFILE");
-                res = mp_path_join_bstr(talloc_ctx, bstr0(home), rest);
+                res = mp_path_join_bstr(talloc_ctx, bstrof0(home), rest);
             } else if (bstr_eatstart0(&prefix, "~")) {
                 void *tmp = talloc_new(NULL);
                 char type[80];
                 snprintf(type, sizeof(type), "%.*s", BSTR_P(prefix));
                 const char *p = mp_get_platform_path(tmp, global, type);
-                res = mp_path_join_bstr(talloc_ctx, bstr0(p), rest);
+                res = mp_path_join_bstr(talloc_ctx, bstrof0(p), rest);
                 talloc_free(tmp);
             }
         }
@@ -215,7 +215,7 @@ struct bstr mp_dirname(const char *path)
         (uint8_t *)path, mp_basename(path) - path
     };
     if (ret.len == 0)
-        return bstr0(".");
+        return bstrof0(".");
     return ret;
 }
 
@@ -249,9 +249,9 @@ char *mp_path_join_bstr(void *talloc_ctx, struct bstr p1, struct bstr p2)
 {
     bool test;
     if (p1.len == 0)
-        return bstrdup0(talloc_ctx, p2);
+        return bstr_dupas0(talloc_ctx, p2);
     if (p2.len == 0)
-        return bstrdup0(talloc_ctx, p1);
+        return bstr_dupas0(talloc_ctx, p1);
 
 #if HAVE_DOS_PATHS
     test = (p2.len >= 2 && p2.start[1] == ':')
@@ -260,7 +260,7 @@ char *mp_path_join_bstr(void *talloc_ctx, struct bstr p1, struct bstr p2)
     test = p2.start[0] == '/';
 #endif
     if (test)
-        return bstrdup0(talloc_ctx, p2);   // absolute path
+        return bstr_dupas0(talloc_ctx, p2);   // absolute path
 
     bool have_separator;
     int endchar1 = p1.start[p1.len - 1];
@@ -277,7 +277,7 @@ char *mp_path_join_bstr(void *talloc_ctx, struct bstr p1, struct bstr p2)
 
 char *mp_path_join(void *talloc_ctx, const char *p1, const char *p2)
 {
-    return mp_path_join_bstr(talloc_ctx, bstr0(p1), bstr0(p2));
+    return mp_path_join_bstr(talloc_ctx, bstrof0(p1), bstrof0(p2));
 }
 
 char *mp_getcwd(void *talloc_ctx)

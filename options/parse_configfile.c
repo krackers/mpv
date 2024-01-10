@@ -75,7 +75,7 @@ int m_config_parse(m_config_t *config, const char *location, bstr data,
                        loc, BSTR_P(line));
                 goto error;
             }
-            profile = m_config_add_profile(config, bstrto0(tmp, profilename));
+            profile = m_config_add_profile(config, bstr_dupto0(tmp, profilename));
             continue;
         }
 

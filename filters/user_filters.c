@@ -128,7 +128,7 @@ struct mp_filter *mp_create_user_filter(struct mp_filter *parent,
     struct mp_filter *f = NULL;
 
     struct m_obj_desc desc;
-    if (!m_obj_list_find(&desc, obj_list, bstr0(name))) {
+    if (!m_obj_list_find(&desc, obj_list, bstrof0(name))) {
         // Generic lavfi bridge.
         if (strncmp(name, "lavfi-", 6) == 0)
             name += 6;

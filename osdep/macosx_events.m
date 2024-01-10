@@ -274,7 +274,7 @@ void cocoa_set_mpv_handle(struct mpv_handle *ctx)
     bool r = false;
     [_input_lock lock];
     if (_inputContext) {
-        mp_cmd_t *cmdt = mp_input_parse_cmd(_inputContext, bstr0(cmd), "");
+        mp_cmd_t *cmdt = mp_input_parse_cmd(_inputContext, bstrof0(cmd), "");
         mp_input_queue_cmd(_inputContext, cmdt);
         r = true;
     }
@@ -539,7 +539,7 @@ void cocoa_set_mpv_handle(struct mpv_handle *ctx)
         chars = [event charactersIgnoringModifiers];
     }
 
-    struct bstr t = bstr0([chars UTF8String]);
+    struct bstr t = bstrof0([chars UTF8String]);
     int key = convert_key([event keyCode], bstr_decode_utf8(t, &t));
 
     if (key > -1)

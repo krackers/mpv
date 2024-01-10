@@ -482,7 +482,7 @@ static int lavf_check_file(demuxer_t *demuxer, enum demux_check check)
         return -1;
     }
 
-    if (bstr_endswith0(bstr0(priv->avif->name), "_pipe")) {
+    if (bstr_endswith0(bstrof0(priv->avif->name), "_pipe")) {
         MP_VERBOSE(demuxer, "Assuming this is an image format.\n");
         priv->format_hack.image_format = true;
     }
@@ -513,7 +513,7 @@ static void guess_and_set_vobsub_name(struct demuxer *demuxer, AVDictionary **d)
         return;
 
     void *tmp = talloc_new(NULL);
-    bstr bfilename = bstr0(priv->filename);
+    bstr bfilename = bstrof0(priv->filename);
     char *subname = NULL;
     if (mp_is_url(bfilename)) {
         // It might be a http URL, which has additional parameters after the

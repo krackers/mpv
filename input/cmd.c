@@ -148,14 +148,14 @@ struct mp_cmd *mp_input_parse_cmd_node(struct mp_log *log, mpv_node *node)
     while (cur < args->num) {
         if (args->values[cur].format != MPV_FORMAT_STRING)
             break;
-        if (!apply_flag(cmd, bstr0(args->values[cur].u.string)))
+        if (!apply_flag(cmd, bstrof0(args->values[cur].u.string)))
             break;
         cur++;
     }
 
     bstr cmd_name = {0};
     if (cur < args->num && args->values[cur].format == MPV_FORMAT_STRING)
-        cmd_name = bstr0(args->values[cur++].u.string);
+        cmd_name = bstrof0(args->values[cur++].u.string);
     if (!find_cmd(log, cmd, cmd_name))
         goto error;
 
@@ -170,8 +170,8 @@ struct mp_cmd *mp_input_parse_cmd_node(struct mp_log *log, mpv_node *node)
         struct mp_cmd_arg arg = {.type = opt};
         void *dst = &arg.v;
         if (val->format == MPV_FORMAT_STRING) {
-            int r = m_option_parse(log, opt, bstr0(cmd->name),
-                                   bstr0(val->u.string), dst);
+            int r = m_option_parse(log, opt, bstrof0(cmd->name),
+                                   bstrof0(val->u.string), dst);
             if (r < 0) {
                 mp_err(log, "Command %s: argument %d can't be parsed: %s.\n",
                        cmd->name, i + 1, m_option_strerror(r));
@@ -282,7 +282,7 @@ static struct mp_cmd *parse_cmd_str(struct mp_log *log, void *tmp,
             break;
 
         struct mp_cmd_arg arg = {.type = opt};
-        r = m_option_parse(ctx->log, opt, bstr0(cmd->name), cur_token, &arg.v);
+        r = m_option_parse(ctx->log, opt, bstrof0(cmd->name), cur_token, &arg.v);
         if (r < 0) {
             MP_ERR(ctx, "Command %s: argument %d can't be parsed: %s.\n",
                    cmd->name, i + 1, m_option_strerror(r));
