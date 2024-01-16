@@ -41,6 +41,7 @@
 #include "common/msg.h"
 #include "common/msg_control.h"
 #include "misc/json.h"
+#include "misc/node.h"
 #include "m_option.h"
 #include "m_config.h"
 
@@ -179,6 +180,11 @@ static int flag_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool flag_equal(const m_option_t *opt, void *a, void *b)
+{
+    return VAL(a) == VAL(b);
+}
+
 const m_option_type_t m_option_type_flag = {
     // need yes or no in config files
     .name  = "Flag",
@@ -190,6 +196,7 @@ const m_option_type_t m_option_type_flag = {
     .add   = add_flag,
     .set   = flag_set,
     .get   = flag_get,
+    .equal = flag_equal,
 };
 
 // Integer
@@ -369,6 +376,18 @@ static int int_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+
+static bool int_equal(const m_option_t *opt, void *a, void *b)
+{
+    return *(int *)a == *(int *)b;
+}
+
+static bool int64_equal(const m_option_t *opt, void *a, void *b)
+{
+    return *(int64_t *)a == *(int64_t *)b;
+}
+
+
 const m_option_type_t m_option_type_int = {
     .name  = "Integer",
     .size  = sizeof(int),
@@ -379,6 +398,7 @@ const m_option_type_t m_option_type_int = {
     .multiply = multiply_int,
     .set   = int_set,
     .get   = int_get,
+    .equal = int_equal,
 };
 
 const m_option_type_t m_option_type_int64 = {
@@ -391,6 +411,7 @@ const m_option_type_t m_option_type_int64 = {
     .multiply = multiply_int64,
     .set   = int64_set,
     .get   = int64_get,
+    .equal = int64_equal,
 };
 
 static int parse_byte_size(struct mp_log *log, const m_option_t *opt,
@@ -486,6 +507,7 @@ const m_option_type_t m_option_type_byte_size = {
     .multiply = multiply_int64,
     .set   = int64_set,
     .get   = int64_get,
+    .equal = int64_equal,
 };
 
 static int parse_intpair(struct mp_log *log, const struct m_option *opt,
@@ -754,6 +776,7 @@ const struct m_option_type m_option_type_choice = {
     .add   = add_choice,
     .set   = choice_set,
     .get   = choice_get,
+    .equal = int_equal,
 };
 
 static int apply_flag(const struct m_option *opt, int *val, bstr flag)
@@ -876,6 +899,7 @@ const struct m_option_type m_option_type_flags = {
     .copy  = copy_opt,
     .set   = flags_set,
     .get   = flags_get,
+    .equal = int_equal,
 };
 
 // Float
@@ -992,6 +1016,14 @@ static int double_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool double_equal(const m_option_t *opt, void *a, void *b)
+{
+    double fa = VAL(a), fb = VAL(b);
+    if (isnan(fa) || isnan(fb))
+        return isnan(fa) == isnan(fb);
+    return fa == fb;
+}
+
 const m_option_type_t m_option_type_double = {
     // double precision float or ratio (numerator[:/]denominator)
     .name  = "Double",
@@ -1004,6 +1036,7 @@ const m_option_type_t m_option_type_double = {
     .multiply = multiply_double,
     .set   = double_set,
     .get   = double_get,
+    .equal = double_equal,
 };
 
 #undef VAL
@@ -1060,6 +1093,11 @@ static int float_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool float_equal(const m_option_t *opt, void *a, void *b)
+{
+    return double_equal(opt, &(double){VAL(a)}, &(double){VAL(b)});
+}
+
 const m_option_type_t m_option_type_float = {
     // floating point number or ratio (numerator[:/]denominator)
     .name  = "Float",
@@ -1072,6 +1110,7 @@ const m_option_type_t m_option_type_float = {
     .multiply = multiply_float,
     .set   = float_set,
     .get   = float_get,
+    .equal = float_equal,
 };
 
 static int parse_float_aspect(struct mp_log *log, const m_option_t *opt,
@@ -1097,6 +1136,7 @@ const m_option_type_t m_option_type_aspect = {
     .multiply = multiply_float,
     .set   = float_set,
     .get   = float_get,
+    .equal = float_equal,
 };
 
 ///////////// String
@@ -1177,6 +1217,11 @@ static int str_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool str_equal(const m_option_t *opt, void *a, void *b)
+{
+    return bstr_equals(bstrof0(VAL(a)), bstrof0(VAL(b)));
+}
+
 static void free_str(void *src)
 {
     if (src && VAL(src)) {
@@ -1194,6 +1239,7 @@ const m_option_type_t m_option_type_string = {
     .free  = free_str,
     .set   = str_set,
     .get   = str_get,
+    .equal = str_equal,
 };
 
 //////////// String list
@@ -1519,6 +1565,26 @@ static int parse_str_list(struct mp_log *log, const m_option_t *opt,
     return parse_str_list_impl(log, opt, name, param, dst, OP_NONE);
 }
 
+static bool str_list_equal(const m_option_t *opt, void *a, void *b)
+{
+    char **la = VAL(a);
+    char **lb = VAL(b);
+
+    bool a_empty = !la || !la[0];
+    bool b_empty = !lb || !lb[0];
+    if (a_empty || b_empty)
+        return a_empty == b_empty;
+
+    for (int n = 0; la[n] || lb[n]; n++) {
+        if (!la[n] || !lb[n])
+            return false;
+        if (strcmp(la[n], lb[n]) != 0)
+            return false;
+    }
+
+    return true;
+}
+
 const m_option_type_t m_option_type_string_list = {
     .name  = "String list",
     .size  = sizeof(char **),
@@ -1528,6 +1594,7 @@ const m_option_type_t m_option_type_string_list = {
     .free  = free_str_list,
     .get   = str_list_get,
     .set   = str_list_set,
+    .equal = str_list_equal,
     .actions = (const struct m_option_action[]){
         {"add"},
         {"append"},
@@ -1704,6 +1771,7 @@ const m_option_type_t m_option_type_keyvalue_list = {
     .free  = free_str_list,
     .get   = keyvalue_list_get,
     .set   = keyvalue_list_set,
+    .equal = str_list_equal,
     .actions = (const struct m_option_action[]){
         {"add"},
         {"append"},
@@ -1776,6 +1844,7 @@ const m_option_type_t m_option_type_msglevels = {
     .free  = free_str_list,
     .get   = keyvalue_list_get,
     .set   = set_msglevels,
+    .equal = str_list_equal,
 };
 
 static int parse_print(struct mp_log *log, const m_option_t *opt,
@@ -1988,12 +2057,20 @@ static char *print_color(const m_option_t *opt, const void *val)
     return talloc_asprintf(NULL, "#%02X%02X%02X%02X", c->a, c->r, c->g, c->b);
 }
 
+static bool color_equal(const m_option_t *opt, void *a, void *b)
+{
+    struct m_color *ca = a;
+    struct m_color *cb = b;
+    return ca->a == cb->a && ca->r == cb->r && ca->g == cb->g && ca->b == cb->b;
+}
+
 const m_option_type_t m_option_type_color = {
     .name  = "Color",
     .size  = sizeof(struct m_color),
     .parse = parse_color,
     .print = print_color,
     .copy  = copy_opt,
+    .equal = color_equal,
 };
 
 
@@ -2170,12 +2247,24 @@ exit:
     return is_help ? M_OPT_EXIT : M_OPT_INVALID;
 }
 
+static bool geometry_equal(const m_option_t *opt, void *a, void *b)
+{
+    struct m_geometry *ga = a;
+    struct m_geometry *gb = b;
+    return ga->x == gb->x && ga->y == gb->y && ga->w == gb->w && ga->h == gb->h &&
+           ga->xy_valid == gb->xy_valid && ga->wh_valid == gb->wh_valid &&
+           ga->w_per == gb->w_per && ga->h_per == gb->h_per &&
+           ga->x_per == gb->x_per && ga->y_per == gb->y_per &&
+           ga->x_sign == gb->x_sign && ga->y_sign == gb->y_sign;
+}
+
 const m_option_type_t m_option_type_geometry = {
     .name  = "Window geometry",
     .size  = sizeof(struct m_geometry),
     .parse = parse_geometry,
     .print = print_geometry,
     .copy  = copy_opt,
+    .equal = geometry_equal,
 };
 
 static int parse_size_box(struct mp_log *log, const m_option_t *opt,
@@ -2212,6 +2301,7 @@ const m_option_type_t m_option_type_size_box = {
     .parse = parse_size_box,
     .print = print_geometry,
     .copy  = copy_opt,
+    .equal = geometry_equal,
 };
 
 
@@ -2262,6 +2352,7 @@ const m_option_type_t m_option_type_imgfmt = {
     .parse = parse_imgfmt,
     .print = print_imgfmt,
     .copy  = copy_opt,
+    .equal = int_equal,
 };
 
 static int parse_fourcc(struct mp_log *log, const m_option_t *opt,
@@ -2303,6 +2394,7 @@ const m_option_type_t m_option_type_fourcc = {
     .parse = parse_fourcc,
     .print = print_fourcc,
     .copy  = copy_opt,
+    .equal = int_equal,
 };
 
 #include "audio/format.h"
@@ -2350,6 +2442,7 @@ const m_option_type_t m_option_type_afmt = {
     .parse = parse_afmt,
     .print = print_afmt,
     .copy  = copy_opt,
+    .equal = int_equal,
 };
 
 #include "audio/chmap.h"
@@ -2452,13 +2545,21 @@ static void copy_channels(const m_option_t *opt, void *dst, const void *src)
         talloc_memdup(NULL, ch->chmaps, sizeof(ch->chmaps[0]) * ch->num_chmaps);
 }
 
+static bool channels_equal(const m_option_t *opt, void *a, void *b)
+{
+    struct mp_chmap *ca = a;
+    struct mp_chmap *cb = b;
+    return mp_chmap_equals(ca, cb);
+}
+
 const m_option_type_t m_option_type_channels = {
     .name  = "Audio channels or channel map",
     .size  = sizeof(struct m_channels),
     .parse = parse_channels,
     .print = print_channels,
     .copy  = copy_channels,
-    .free = free_channels,
+    .free  = free_channels,
+    .equal = channels_equal,
 };
 
 static int parse_timestring(struct bstr str, double *time, char endchar)
@@ -2551,6 +2652,7 @@ const m_option_type_t m_option_type_time = {
     .add   = add_double,
     .set   = time_set,
     .get   = time_get,
+    .equal = double_equal,
 };
 
 
@@ -2627,12 +2729,21 @@ static char *print_rel_time(const m_option_t *opt, const void *val)
     return talloc_strdup(NULL, "none");
 }
 
+static bool rel_time_equal(const m_option_t *opt, void *a, void *b)
+{
+    struct m_rel_time *ta = a;
+    struct m_rel_time *tb = b;
+    return ta->type == tb->type && ta->pos == tb->pos;
+}
+
+
 const m_option_type_t m_option_type_rel_time = {
     .name  = "Relative time or percent position",
     .size  = sizeof(struct m_rel_time),
     .parse = parse_rel_time,
     .print = print_rel_time,
     .copy  = copy_opt,
+    .equal = rel_time_equal,
 };
 
 
@@ -3459,6 +3570,26 @@ static int get_obj_settings_list(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool obj_settings_list_equal(const m_option_t *opt, void *pa, void *pb)
+{
+    struct m_obj_settings *a = VAL(pa);
+    struct m_obj_settings *b = VAL(pb);
+
+    if (a == b || !a || !b)
+        return a == b;
+
+    if (!str_equal(NULL, &a->name, &b->name))
+        return false;
+
+    if (!str_equal(NULL, &a->label, &b->label))
+        return false;
+
+    if (a->enabled != b->enabled)
+        return false;
+
+    return str_list_equal(NULL, &a->attribs, &b->attribs);
+}
+
 const m_option_type_t m_option_type_obj_settings_list = {
     .name  = "Object settings list",
     .size  = sizeof(m_obj_settings_t *),
@@ -3468,6 +3599,7 @@ const m_option_type_t m_option_type_obj_settings_list = {
     .free  = free_obj_settings_list,
     .set   = set_obj_settings_list,
     .get   = get_obj_settings_list,
+    .equal = obj_settings_list_equal,
     .actions = (const struct m_option_action[]){
         {"add"},
         {"clr",     M_OPT_TYPE_OPTIONAL_PARAM},
@@ -3599,6 +3731,11 @@ static int node_get(const m_option_t *opt, void *ta_parent,
     return 1;
 }
 
+static bool node_equal(const m_option_t *opt, void *a, void *b)
+{
+    return equal_mpv_node(&VAL(a), &VAL(b));
+}
+
 const m_option_type_t m_option_type_node = {
     .name  = "Complex",
     .size  = sizeof(struct mpv_node),
@@ -3609,6 +3746,7 @@ const m_option_type_t m_option_type_node = {
     .free  = free_node,
     .set   = node_set,
     .get   = node_get,
+    .equal = node_equal,
 };
 
 // Special-cased by m_config.c.
