@@ -307,13 +307,23 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     int set_hinting = 0;
     bool set_scale_with_window = false;
     bool set_scale_by_window = true;
-    bool total_override = false;
+
+    int set_force_flags = 0;
+
     // With forced overrides, apply the --sub-* specific options
     if (converted || opts->ass_style_override == 3) { // 'force'
         set_scale_with_window = opts->sub_scale_with_window;
         set_use_margins = opts->sub_use_margins;
         set_scale_by_window = opts->sub_scale_by_window;
-        total_override = true;
+
+        // For total override we override everything _except_
+        // attribute events (italic/bold).
+        set_force_flags |= ASS_OVERRIDE_BIT_FONT_NAME |
+                           ASS_OVERRIDE_BIT_FONT_SIZE_FIELDS |
+                           ASS_OVERRIDE_BIT_COLORS |
+                           ASS_OVERRIDE_BIT_BORDER | 
+                           ASS_OVERRIDE_BIT_MARGINS |
+                           ASS_OVERRIDE_BIT_FONT_SIZE;
     } else {
         set_scale_with_window = opts->ass_scale_with_window;
         set_use_margins = opts->ass_use_margins;
@@ -336,9 +346,7 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     ass_set_use_margins(priv, set_use_margins);
     ass_set_line_position(priv, set_sub_pos);
     ass_set_shaper(priv, opts->ass_shaper);
-    int set_force_flags = 0;
-    if (total_override)
-        set_force_flags |= ASS_OVERRIDE_BIT_STYLE | ASS_OVERRIDE_BIT_FONT_SIZE;
+
     if (opts->ass_style_override == 4) // 'scale'
         set_force_flags |= ASS_OVERRIDE_BIT_FONT_SIZE;
 #if LIBASS_VERSION >= 0x01201001
