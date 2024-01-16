@@ -392,6 +392,7 @@ const m_option_t mp_opts[] = {
     OPT_STRING("ytdl-format", lua_ytdl_format, 0),
     OPT_KEYVALUELIST("ytdl-raw-options", lua_ytdl_raw_options, 0),
     OPT_FLAG("load-stats-overlay", lua_load_stats, UPDATE_BUILTIN_SCRIPTS),
+    OPT_CHOICE("load-auto-profiles", lua_load_auto_profiles, UPDATE_BUILTIN_SCRIPTS, ({"no", 0}, {"yes", 1}, {"auto", -1})),
 #endif
 
 // ------------------------- stream options --------------------
@@ -911,6 +912,7 @@ const struct MPOpts mp_default_opts = {
     .lua_ytdl_format = NULL,
     .lua_ytdl_raw_options = NULL,
     .lua_load_stats = 1,
+    .lua_load_auto_profiles = -1,
 #endif
     .auto_load_scripts = 1,
     .loop_times = 1,

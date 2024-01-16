@@ -5868,8 +5868,12 @@ static void cmd_apply_profile(void *p)
     struct MPContext *mpctx = cmd->mpctx;
 
     char *profile = cmd->args[0].v.s;
-    if (m_config_set_profile(mpctx->mconfig, profile, M_SETOPT_RUNTIME) < 0)
-        cmd->success = false;
+    int mode = cmd->args[1].v.i;
+    if (mode == 0) {
+        cmd->success = m_config_set_profile(mpctx->mconfig, profile, 0) >= 0;
+    } else {
+        cmd->success = m_config_restore_profile(mpctx->mconfig, profile) >= 0;
+    }
 }
 
 static void cmd_load_script(void *p)
@@ -6111,9 +6115,9 @@ const struct mp_cmd_def mp_cmds[] = {
         OARG_CHOICE(1, ({"keep-selection", 0},
                         {"reselect", 1})),
     }},
-
-    { "apply-profile", cmd_apply_profile, {ARG_STRING } },
-
+    { "apply-profile", cmd_apply_profile, {
+        ARG_STRING,
+        OARG_CHOICE(0, ({"apply", 0}, {"restore", 1}))} },
     { "load-script", cmd_load_script, {ARG_STRING} },
 
     {0}
@@ -6265,7 +6269,7 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
             mp_force_video_refresh(mpctx);
         }
     }
-
+ 
     if (flags & UPDATE_INPUT) {
         mp_input_update_opts(mpctx->input);
 
