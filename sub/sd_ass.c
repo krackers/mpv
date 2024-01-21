@@ -290,6 +290,11 @@ static void decode(struct sd *sd, struct demux_packet *packet)
     }
 }
 
+static inline bool should_set_storage_size(bool converted, struct mp_subtitle_opts *opts) {
+    return !converted && (!opts->ass_style_override ||
+                       opts->ass_vsfilter_blur_compat);
+}
+
 static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
                           bool converted, ASS_Track *track)
 {
@@ -360,6 +365,72 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     ass_set_selective_style_override_enabled(priv, set_force_flags);
     ASS_Style style = {0};
     mp_ass_set_style(&style, 288, opts->sub_style);
+
+    if (opts->ass_style_override == 3) { // 'force'
+        // Work around a bug in libass. MarginV, MarginL, MarginR are usually scaled
+        // with the PlayRes size, but unlike font libass doesn't automatically scale
+        // margins on override for us. This is not exact since margin is int, not float.
+        style.MarginV *= track->PlayResY / 288.0;
+        style.MarginL *= track->PlayResX / 384.0;
+        style.MarginR *= track->PlayResX / 384.0;
+
+        // We similarly want to ensure the border size (in px) remains visually constant
+        // regardless of the underlying content. Libass takes
+        // care of scaling the override's border to the original script PlayRes size.
+        // Assuming that the original script had ScaleBorderAndShadow (ensuring
+        // that borders are interpreted with respect to PlayRes) this gives us 
+        // the content-independence we desire. But if ScaleBorderAndShadow is not enabled,
+        // then we have to simulate its effect ourselves.
+
+        /**
+        The format matrix looks like this:
+        Pre libass 0.15
+            scaledbordershadow + set storage
+                render_priv->blur_scale = font_scr_h / settings_priv->storage_height;
+                render_priv->border_scale = font_scr_h / render_priv->track->PlayResY;
+            scaledbordershadow + no set storage
+                render_priv->blur_scale = font_scr_h / render_priv->track->PlayResY;
+                render_priv->border_scale = font_scr_h / render_priv->track->PlayResY;
+            no scaledbordershadow + set storage
+                render_priv->blur_scale = font_scr_h / settings_priv->storage_height;
+                render_priv->border_scale = font_scr_h / settings_priv->storage_height;
+            no scaledbordreshadow + noset storage
+                render_priv->blur_scale = 1
+                render_priv->border_scale = 1
+        Post libass 0.15
+            scaledbordershadow + set storage
+                render_priv->blur_scale = font_scr_h / settings_priv->storage_height;
+                render_priv->border_scale = font_scr_h / render_priv->track->PlayResY;
+            scaledbordershadow + no set storage
+                render_priv->blur_scale = font_scr_h / render_priv->track->PlayResY;
+                render_priv->border_scale = font_scr_h / render_priv->track->PlayResY;
+            no scaledbordershadow + set storage
+                render_priv->blur_scale = font_scr_h / settings_priv->storage_height;
+                render_priv->border_scale = font_scr_h / settings_priv->storage_height;
+            no scaledbordreshadow + noset storage
+                render_priv->blur_scale = font_scr_h / render_priv->track->PlayResY;
+                render_priv->border_scale = font_scr_h / render_priv->track->PlayResY;
+        */
+        // We only care about border scale because that's what can be influenced by the style
+        // track.
+        bool uses_scaled_border = track->ScaledBorderAndShadow;
+        bool storage_set = should_set_storage_size(converted, opts);
+#if LIBASS_VERSION >= 0x01500000
+        // Since https://github.com/libass/libass/commit/d60f2dce1dcafaed0e21406213e66072f3036752
+        // libass effectively applies scaled border behavior if storage not set.
+        uses_scaled_border = uses_scaled_border || !storage_set;
+        float factor = ctx->video_params.h; // The storage height
+#else
+        float factor = storage_set ? ctx->video_params.h : (dim->h - (dim->mt + dim->mb));
+#endif
+        if (!uses_scaled_border) {
+            style.Outline *= (factor / track->PlayResY);
+            style.Shadow *= (factor / track->PlayResY);
+        }
+    }
+
+
+
     ass_set_selective_style_override(priv, &style);
     free(style.FontName);
     if (converted && track->default_style < track->n_styles) {
@@ -446,6 +517,7 @@ static long long find_timestamp(struct sd *sd, double pts)
 
 #undef END
 
+
 static void get_bitmaps(struct sd *sd, struct mp_osd_res dim, int format,
                         double pts, struct sub_bitmaps *res)
 {
@@ -478,8 +550,7 @@ static void get_bitmaps(struct sd *sd, struct mp_osd_res dim, int format,
         ctx->ass_configured = true;
     }
     ass_set_pixel_aspect(renderer, scale);
-    if (!converted && (!opts->ass_style_override ||
-                       opts->ass_vsfilter_blur_compat))
+    if (should_set_storage_size(converted, opts))
     {
         ass_set_storage_size(renderer, ctx->video_params.w, ctx->video_params.h);
     } else {
