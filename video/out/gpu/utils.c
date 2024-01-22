@@ -122,36 +122,47 @@ bool ra_tex_upload_pbo(struct ra *ra, struct ra_buf_pool *pbo,
         return ra->fns->tex_upload(ra, params);
 
     struct ra_tex *tex = params->tex;
-    size_t row_size = tex->params.dimensions == 2 ? params->stride :
-                      tex->params.w * tex->params.format->pixel_size;
 
-    struct ra_tex_upload_params newparams = *params;
+    struct ra_tex_upload_params new_params = *params;
+
+    // TODO use opengl capabilities instead of compile-time ifdef
     #if defined(__arm64__) && defined(__APPLE__)
-    if (newparams.rc && mp_rect_w(*newparams.rc) != row_size) {
+    // On M1, seem to require that PBO transfer width matches texture width.
+    // Ex: Given Width 4096, Row size 4096, rc rectw 2880 
+    // rounding rectw to nearest multiple of 32 still doesn't work. However
+    // updating rectw to 4096 works.
+    // Ex: Given width 709, row size 736, no rc (pix size 1). We cannot handle this on M1
+    // since transfer width does not match PBO texture width.
+    if (tex->params.w * tex->params.format->pixel_size != params->stride) {
+        goto bail;
+    }
+
+    struct mp_rect new_rc = new_params.rc ? *new_params.rc : (struct mp_rect){0};
+    if (new_params.rc && mp_rect_w(*new_params.rc) != tex->params.w) {
         if (!warned) {
             mp_verbose(ra->log, "GPU does not support partial-row upload with PBO\n");
             warned = true;
         }
-        if (newparams.invalidate) {
-            newparams.rc->x0 = 0;
-            newparams.rc->x1 = row_size;
+        if (new_params.invalidate) {
+            new_rc.x0 = 0;
+            new_rc.x1 = tex->params.w;
+            new_params.rc = &new_rc;
         } else {
-            ra->use_pbo = false;
-            bool ret = ra->fns->tex_upload(ra, params);
-            ra->use_pbo = true;
-            return ret;
+            goto bail;
         }
 
-    }
+    } 
     #endif
 
     int height = tex->params.h;
     if (tex->params.dimensions == 2 && params->rc)
         height = mp_rect_h(*params->rc);
 
+    size_t buf_row_size = tex->params.dimensions == 2 ? params->stride :
+                      tex->params.w * tex->params.format->pixel_size;
     struct ra_buf_params bufparams = {
         .type = RA_BUF_TYPE_TEX_UPLOAD,
-        .size = row_size * height * tex->params.d,
+        .size = buf_row_size * height * tex->params.d,
         .host_mutable = true,
     };
 
@@ -161,10 +172,16 @@ bool ra_tex_upload_pbo(struct ra *ra, struct ra_buf_pool *pbo,
 
     ra->fns->buf_update(ra, buf, 0, params->src, bufparams.size);
 
-    newparams.buf = buf;
-    newparams.src = NULL;
+    new_params.buf = buf;
+    new_params.src = NULL;
 
-    return ra->fns->tex_upload(ra, &newparams);
+    return ra->fns->tex_upload(ra, &new_params);
+
+bail:
+    ra->use_pbo = false;
+    bool ret = ra->fns->tex_upload(ra, params);
+    ra->use_pbo = true;
+    return ret;
 }
 
 struct ra_layout std140_layout(struct ra_renderpass_input *inp)
