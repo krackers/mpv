@@ -192,11 +192,11 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     osd_set_sub(mpctx->osd, order, track->d_sub);
     sub_control(track->d_sub, SD_CTRL_SET_TOP, &(bool){!!order});
 
-    // When paused we have to wait for packets to be available.
-    // So just retry until we get a packet in this case.
-    if (mpctx->playback_initialized) {
-        while (!update_subtitles(mpctx, mpctx->playback_pts) &&
-               mpctx->paused && !mpctx->paused_for_cache);
+    // When track switching when paused, we want to force-fetch subtitles.
+    // Exclude paused for cache case since that can block for a long-time
+    // (and we'll see any subs when we resume anyway.)
+    if (mpctx->playback_initialized || (mpctx->paused && !mpctx->paused_for_cache)) {
+        update_subtitles(mpctx, mpctx->playback_pts);
     }
   
 }
