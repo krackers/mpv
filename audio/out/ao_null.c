@@ -130,10 +130,11 @@ static void wait_drain(struct ao *ao)
         mp_sleep_us(1000000.0 * priv->buffered / ao->samplerate / priv->speed);
 }
 
-// stop playing and empty buffers (for seeking/pause)
+// stop playing and empty buffers (for seeking)
 static void reset(struct ao *ao)
 {
     struct priv *priv = ao->priv;
+    priv->paused = false;
     priv->buffered = 0;
     priv->playing_final = false;
 }
