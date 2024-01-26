@@ -452,8 +452,8 @@ void terminal_setup_getch(struct input_ctx *ictx)
     }
 
     setsigaction(SIGINT,  quit_request_sighandler, SA_RESETHAND, false);
-    setsigaction(SIGQUIT, quit_request_sighandler, SA_RESETHAND, false);
-    setsigaction(SIGTERM, quit_request_sighandler, SA_RESETHAND, false);
+    setsigaction(SIGQUIT, quit_request_sighandler, 0, true);
+    setsigaction(SIGTERM, quit_request_sighandler, 0, true);
 }
 
 void terminal_uninit(void)
