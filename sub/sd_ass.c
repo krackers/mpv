@@ -429,8 +429,10 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
         }
     }
 
-
-
+    // Note libass does not clear internal cache
+    // if setting this on older versions. But since
+    // toggling override clears cache anyway, it's
+    // not too big of an issue.
     ass_set_selective_style_override(priv, &style);
     free(style.FontName);
     if (converted && track->default_style < track->n_styles) {
