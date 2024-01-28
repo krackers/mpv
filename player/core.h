@@ -291,6 +291,8 @@ typedef struct MPContext {
     struct demux_chapter *chapters;
     int num_chapters;
 
+    // This is the demuxer for the "main" file (that mpv was opened with)
+    // There may be other demuxers spawned for tracks added separately.
     struct demuxer *demuxer;
     struct mp_tags *filtered_tags;
 

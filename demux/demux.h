@@ -198,9 +198,14 @@ typedef struct demuxer {
     // The file data was fully read, and there is no need to keep the stream
     // open, keep the cache active, or to run the demuxer thread. Generating
     // packets is not slow either (unlike e.g. libavdevice pseudo-demuxers).
-    // Typical examples: text subtitles, playlists
+    // Typical examples: text subtitles, playlists.
+    // Currently this is only set for "libavformat" specific quirk where specific text
+    // formats end up being fully read into memory during initial avformat_open_input.
+    // and afterwards libavformat serves packets from that in-memory queue.
     bool fully_read;
     bool is_network; // opened directly from a network stream
+    bool is_streaming; // implies a "slow" input, such as network or FUSE
+    
     bool access_references; // allow opening other files/URLs
 
     // Bitmask of DEMUX_EVENT_*

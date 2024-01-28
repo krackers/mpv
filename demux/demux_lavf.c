@@ -888,6 +888,8 @@ static int demux_open_lavf(demuxer_t *demuxer, enum demux_check check)
 
     mp_set_avdict(&dopts, lavfdopts->avopts);
 
+    // For "fully_read" streams, this reads the entire file into memory alloc'd
+    // by libavformat.
     if (avformat_open_input(&avfc, priv->filename, priv->avif, &dopts) < 0) {
         MP_ERR(demuxer, "avformat_open_input() failed\n");
         av_dict_free(&dopts);
