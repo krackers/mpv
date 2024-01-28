@@ -84,7 +84,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
 {
     struct dec_sub *dec_sub = track ? track->d_sub : NULL;
 
-    if (!dec_sub || video_pts == MP_NOPTS_VALUE)
+    if (!dec_sub || video_pts == MP_NOPTS_VALUE || !track->selected)
         return true;
 
     if (mpctx->vo_chain) {
@@ -93,6 +93,9 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
             sub_control(dec_sub, SD_CTRL_SET_VIDEO_PARAMS, &params);
     }
 
+    // Though preload uses a blocking packet read call, this should
+    // not actually block "fully_read" implies the demuxer (libavformat)
+    // has contents completely in-memory.
     if (track->demuxer->fully_read && sub_can_preload(dec_sub)) {
         // Assume fully_read implies no interleaved audio/video streams.
         // (Reading packets will change the demuxer position.)
@@ -100,7 +103,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
         sub_preload(dec_sub);
     }
 
-    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused))
+    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused && !track->demuxer->is_streaming))
         return false;
 
     // Handle displaying subtitles on terminal; never done for secondary subs
@@ -193,9 +196,10 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     sub_control(track->d_sub, SD_CTRL_SET_TOP, &(bool){!!order});
 
     // When track switching when paused, we want to force-fetch subtitles.
-    // Exclude paused for cache case since that can block for a long-time
-    // (and we'll see any subs when we resume anyway.)
-    if (mpctx->playback_initialized || (mpctx->paused && !mpctx->paused_for_cache)) {
+    // Note that we don't have to explicitly take care of paused for cache case
+    // (where reads might block for a long-time) since we don't allow is_streaming
+    // tracks to be force-read.
+    if (mpctx->playback_initialized || mpctx->opts->pause) {
         update_subtitles(mpctx, mpctx->playback_pts);
     }
   

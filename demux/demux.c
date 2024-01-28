@@ -2051,6 +2051,7 @@ static void demux_copy(struct demuxer *dst, struct demuxer *src)
     dst->start_time = src->start_time;
     dst->duration = src->duration;
     dst->is_network = src->is_network;
+    dst->is_streaming = src->is_streaming;
     dst->priv = src->priv;
     dst->metadata = mp_tags_dup(dst, src->metadata);
 }
@@ -2233,6 +2234,7 @@ static struct demuxer *open_given_type(struct mpv_global *global,
         .glog = log,
         .filename = talloc_strdup(demuxer, stream->url),
         .is_network = stream->is_network,
+        .is_streaming = stream->streaming,
         .access_references = opts->access_references,
         .events = DEMUX_EVENT_ALL,
         .duration = -1,
@@ -2310,7 +2312,8 @@ static struct demuxer *open_given_type(struct mpv_global *global,
         
         int use_demux_cache = opts->demux_cache;
         if (use_demux_cache < 0) {
-            use_demux_cache = demuxer->is_network || stream->caching;
+            // This allows us to use demux cache on auto even when stream cache is disabled.
+            use_demux_cache = demuxer->is_streaming || demuxer->is_network || stream->caching;
         }
         int seekable = opts->seekable_cache;
         if (use_demux_cache) {
