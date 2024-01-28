@@ -79,8 +79,9 @@ void uninit_sub_all(struct MPContext *mpctx)
         uninit_sub(mpctx, mpctx->tracks[n]);
 }
 
+// If force is set, try to read-ahead packets even for a lazy stream.
 static bool update_subtitle(struct MPContext *mpctx, double video_pts,
-                            struct track *track)
+                            struct track *track, bool force)
 {
     struct dec_sub *dec_sub = track ? track->d_sub : NULL;
 
@@ -103,7 +104,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
         sub_preload(dec_sub);
     }
 
-    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused && !track->demuxer->is_streaming))
+    if (!sub_read_packets(dec_sub, video_pts, force))
         return false;
 
     // Handle displaying subtitles on terminal; never done for secondary subs
@@ -126,14 +127,22 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
     return true;
 }
 
+// If force is set, readahead will be attempted for non-networked lazy streams.
+// The non-networked condition avoids blocking core for unbounded amount of time.
+static bool _update_subtitles(struct MPContext *mpctx, double video_pts, bool force) {
+    bool ok = true;
+    for (int n = 0; n < NUM_PTRACKS; n++) {
+        struct track *track = mpctx->current_track[n][STREAM_SUB];
+        ok &= update_subtitle(mpctx, video_pts, track, force && track && !track->demuxer->is_streaming);
+    }
+    return ok;
+}
+
 // Return true if the subtitles for the given PTS are ready; false if the player
 // should wait for new demuxer data, and then should retry.
 bool update_subtitles(struct MPContext *mpctx, double video_pts)
 {
-    bool ok = true;
-    for (int n = 0; n < NUM_PTRACKS; n++)
-        ok &= update_subtitle(mpctx, video_pts, mpctx->current_track[n][STREAM_SUB]);
-    return ok;
+    return _update_subtitles(mpctx, video_pts, /*force=*/ false);
 }
 
 static struct attachment_list *get_all_attachments(struct MPContext *mpctx)
@@ -199,8 +208,8 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     // Note that we don't have to explicitly take care of paused for cache case
     // (where reads might block for a long-time) since we don't allow is_streaming
     // tracks to be force-read.
-    if (mpctx->playback_initialized || mpctx->opts->pause) {
-        update_subtitles(mpctx, mpctx->playback_pts);
+    if (mpctx->playback_initialized) {
+        _update_subtitles(mpctx, mpctx->playback_pts, /*forced=*/ mpctx->opts->pause);
     }
   
 }
