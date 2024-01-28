@@ -237,7 +237,12 @@ void sub_preload(struct dec_sub *sub)
     sub->preload_attempted = true;
 
     for (;;) {
-        struct demux_packet *pkt = demux_read_packet(sub->sh, /*min_pts=*/ MP_NOPTS_VALUE);
+        struct demux_packet *pkt;
+        int ret = demux_read_packet_sync(sub->sh, &pkt);
+        if (ret == 0) {
+            // This only ever happens when demux is blocked.
+            sub->preload_attempted = false;
+        }
         if (!pkt)
             break;
         sub->sd->driver->decode(sub->sd, pkt);
@@ -285,13 +290,20 @@ bool sub_read_packets(struct dec_sub *sub, double video_pts, bool force)
         double min_pts = sub->opts->sub_delay < 0 || force ? video_pts : MP_NOPTS_VALUE;
 
         struct demux_packet *pkt;
-        int st = force ? demux_read_packet_sync_until(sub->sh, min_pts, &pkt) : demux_read_packet_async_until(sub->sh, min_pts, &pkt);
-        // Note: "wait" (st==0) happens with non-interleaved streams only, and
-        // then we should stop the playloop until a new enough packet has been
-        // seen (or the subtitle decoder's queue is full). This usually does not
-        // happen for interleaved subtitle streams, which never return "wait"
-        // when reading, unless min_pts is set.
+        int st = force ? demux_read_packet_sync_until(sub->sh, min_pts, &pkt) 
+                       : demux_read_packet_async_until(sub->sh, min_pts, &pkt);
+        // Note: If minpts not set, "wait/retry" (st==0) happens with non-interleaved
+        // streams only, and then caller should retry later
+        // (relying on demux callback is preferred) until a new enough packet has been seen
+        // (or the subtitle decoder's queue is full).
+        // Interleaved subtitle will never return "wait" when reading, unless min_pts is set.
+        // For the "forced" read condition we will only ever get "wait" if reading was
+        // forcefully blocked by a client (via demux_block_reading).
         if (st <= 0) {
+            // Return "true" (no waiting needed) even in the interleaved case, as
+            // there is nothing the client can really do here besides consume more video
+            // packets. (We expect interleaved files to be muxed properly so that the
+            // necessary sub packet is near the video packet).
             r = st < 0 || (sub->last_pkt_pts != MP_NOPTS_VALUE &&
                            sub->last_pkt_pts > video_pts);
             break;
