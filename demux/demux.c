@@ -1372,6 +1372,19 @@ static bool lazy_stream_needs_wait(struct demux_stream *ds)
     struct demux_internal *in = ds->in;
     // Attempt to read until force_read_until was reached, or reading has
     // stopped for some reason (true EOF, queue overflow).
+
+    // Note: Unlike mentioned in 9d9e986e068fc47575ad93557ce9f92b5a992dae
+    // I think it should actually work to have !ds->reader_head as
+    // part of this condition. Reason is that if reader_head is set
+    // then dequeue_packet will return that packet so ret code cannot be -1.
+    // If the packet is not correct pts, then the sub code will read again, and now
+    // if reader_head is unset then we force a read. So really the only
+    // difference is that if reader_head is part of this condition we will wait
+    // until all the existing packets in queue are drained before triggering
+    // read ahead to min pts.
+    // Also note that we don't include ds->selected here since it's the client
+    // responsibility to check that, similar to eager case (if using demux_read then
+    // this is done for you to avoid infinite looping.)
     return !ds->eager &&
            !in->last_eof && ds->force_read_until != MP_NOPTS_VALUE &&
            // A bit of a hack to avoid infinite readahead.
@@ -1753,7 +1766,7 @@ static struct demux_packet *dequeue_packet(struct demux_stream *ds, double min_p
 This version returns a packet if one already exists, otherwise blocks until a new packet is ready.
 Unlike the async version it doesn't trigger a readahead after the packet is ready.
 */
-struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts)
+static struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts, bool *blocked)
 {
     struct demux_stream *ds = sh ? sh->ds : NULL;
     if (!ds)
@@ -1770,6 +1783,7 @@ struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts)
         MP_DBG(in, "reading packet for %s\n", t);
         in->eof = false; // force retry
         ds->need_wakeup = true;
+        // When ds->reader_head gets set, we have a new packet ready for us.
         while (ds->selected && !ds->reader_head && !in->blocked) {
             in->reading = true;
             // Note: the following code marks EOF if it can't continue
@@ -1794,6 +1808,7 @@ struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts)
     pkt = dequeue_packet(ds, min_pts);
 
 ret:
+    *blocked = in->blocked;
     pthread_cond_signal(&in->wakeup); // possibly read more
     pthread_mutex_unlock(&in->lock);
     return pkt;
@@ -1811,6 +1826,9 @@ ret:
 // Note: when reading interleaved subtitles, the demuxer won't try to forcibly
 // read ahead to get the next subtitle packet (as the next packet could be
 // minutes away). In this situation, this function will just return -1.
+// If called for an unselected track, this will likely always return 0.
+// (In the future it may be changed to return cached data, but client responsibility
+// to avoid spinning forever.)
 int demux_read_packet_async(struct sh_stream *sh, struct demux_packet **out_pkt)
 {
     return demux_read_packet_async_until(sh, MP_NOPTS_VALUE, out_pkt);
@@ -1857,8 +1875,14 @@ int demux_read_packet_async_until(struct sh_stream *sh, double min_pts, struct d
     return r;
 }
 
+int demux_read_packet_sync(struct sh_stream *sh, struct demux_packet **out_pkt)
+{
+    return demux_read_packet_sync_until(sh, MP_NOPTS_VALUE, out_pkt);
+}
+
 /**
-  Unlike async version, this will never return 0 (try again later)
+  Unlike async version, this only ever returns 0 if demux was forcefully
+  blocked via demux_block_reading
 */
 int demux_read_packet_sync_until(struct sh_stream *sh, double min_pts, struct demux_packet **out_pkt) {
     struct demux_stream *ds = sh ? sh->ds : NULL;
@@ -1866,12 +1890,10 @@ int demux_read_packet_sync_until(struct sh_stream *sh, double min_pts, struct de
     *out_pkt = NULL;
     if (!ds)
         return r;
-    if (ds->in->blocked) {
-        r = 0;
-    } else {
-        *out_pkt = demux_read_packet(sh, min_pts);
-        r = *out_pkt ? 1 : -1;
-    }
+
+    bool blocked = false;
+    *out_pkt = demux_read_packet(sh, min_pts, &blocked);
+    r = *out_pkt ? 1 : (blocked ? 0 : -1);
     ds->need_wakeup = r != 1;
     return r;
 }
@@ -1889,7 +1911,8 @@ bool demux_has_packet(struct sh_stream *sh)
 }
 
 // Read and return any packet we find. NULL means EOF.
-// Only safe to call this from within the demux thread itself.
+// Only works if demuxer is created without threading enabled,
+// usually used for slave demxuers.
 struct demux_packet *demux_read_any_packet(struct demuxer *demuxer)
 {
     struct demux_internal *in = demuxer->in;

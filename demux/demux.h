@@ -256,8 +256,8 @@ void free_demuxer_and_stream(struct demuxer *demuxer);
 void demux_add_packet(struct sh_stream *stream, demux_packet_t *dp);
 void demuxer_feed_caption(struct sh_stream *stream, demux_packet_t *dp);
 
-struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_pts);
 int demux_read_packet_async(struct sh_stream *sh, struct demux_packet **out_pkt);
+int demux_read_packet_sync(struct sh_stream *sh, struct demux_packet **out_pkt);
 int demux_read_packet_async_until(struct sh_stream *sh, double min_pts,
                                   struct demux_packet **out_pkt);
 int demux_read_packet_sync_until(struct sh_stream *sh, double min_pts,
