@@ -100,7 +100,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
         sub_preload(dec_sub);
     }
 
-    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused))
+    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused && !mpctx->paused_for_cache))
         return false;
 
     // Handle displaying subtitles on terminal; never done for secondary subs
@@ -192,10 +192,12 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     osd_set_sub(mpctx->osd, order, track->d_sub);
     sub_control(track->d_sub, SD_CTRL_SET_TOP, &(bool){!!order});
 
+    printf("Paused for cache %d\n", mpctx->paused_for_cache);
+
     // When track switching when paused, we want to force-fetch subtitles.
     // Exclude paused for cache case since that can block for a long-time
     // (and we'll see any subs when we resume anyway.)
-    if (mpctx->playback_initialized || (mpctx->paused && !mpctx->paused_for_cache)) {
+    if (mpctx->playback_initialized) {
         update_subtitles(mpctx, mpctx->playback_pts);
     }
   

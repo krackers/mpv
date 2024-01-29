@@ -1375,7 +1375,7 @@ static bool lazy_stream_needs_wait(struct demux_stream *ds)
     return !ds->eager &&
            !in->last_eof && ds->force_read_until != MP_NOPTS_VALUE &&
            // A bit of a hack to avoid infinite readahead.
-           (in->demux_ts == MP_NOPTS_VALUE || in->demux_ts <= ds->force_read_until + LAZY_WAIT_READAHEAD_PTS) &&
+           (in->seeking || in->demux_ts == MP_NOPTS_VALUE || in->demux_ts <= ds->force_read_until + LAZY_WAIT_READAHEAD_PTS) &&
            // Stream queue lacks demuxed packet satisfying timestamp condition
            (ds->queue->last_ts == MP_NOPTS_VALUE || ds->queue->last_ts <= ds->force_read_until);
 }
