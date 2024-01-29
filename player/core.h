@@ -459,7 +459,11 @@ typedef struct MPContext {
     //     to true.
     struct demuxer *open_res_demuxer;
     int open_res_error;
+
     IOPMAssertionID power_mgmt_assertion;
+
+    // If set, playloop will "force-update" subs to current video pts, if video is paused.
+    bool force_sub_update;
 } MPContext;
 
 // audio.c
@@ -604,6 +608,7 @@ void uninit_sub(struct MPContext *mpctx, struct track *track);
 void uninit_sub_all(struct MPContext *mpctx);
 void update_osd_msg(struct MPContext *mpctx);
 bool update_subtitles(struct MPContext *mpctx, double video_pts);
+bool force_update_subtitles(struct MPContext *mpctx, double video_pts, bool force);
 
 // video.c
 int video_get_colors(struct vo_chain *vo_c, const char *item, int *value);
