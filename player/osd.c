@@ -492,8 +492,34 @@ uint64_t osd_end = 0;
 
 extern uint64_t mach_absolute_time(void);
 
+static void update_vo_osd_msg(struct MPContext *mpctx) {
+    struct MPOpts *opts = mpctx->opts;
+    struct osd_state *osd = mpctx->osd;
+    if (!opts->video_osd)
+        return;
+
+    int osd_level = opts->osd_level;
+    if (mpctx->osd_show_pos)
+        osd_level = 3;
+
+    bstr text = bstr_new(NULL);
+    sadd_osd_status(&text, mpctx, osd_level);
+    if (mpctx->osd_msg_text.len) {
+        if (text.len) {
+            sadd(&text, "\n");
+        }
+        bstr_xappend(NULL, &text, mpctx->osd_msg_text);
+    }
+    osd_set_text(osd, text.start);
+    talloc_free(text.start);
+
+    osd_end = mach_absolute_time();
+}
+
 // Update the OSD text (both on VO and terminal status line).
-void update_term_osd_msg(struct MPContext *mpctx)
+// This is debounced to coalesce updates within a delay,
+// unless force update bit is set.
+void update_osd_msg(struct MPContext *mpctx)
 {
     osd_before = osd_after_seek_messages = osd_after_term_updates = osd_after_set_text = osd_after_print = osd_end = 0;
 
@@ -578,28 +604,6 @@ void update_term_osd_msg(struct MPContext *mpctx)
     term_osd_update(mpctx);
 
     osd_after_term_updates = mach_absolute_time();
-}
 
-void update_vo_osd_msg(struct MPContext *mpctx) {
-    struct MPOpts *opts = mpctx->opts;
-    struct osd_state *osd = mpctx->osd;
-    if (!opts->video_osd)
-        return;
-
-    int osd_level = opts->osd_level;
-    if (mpctx->osd_show_pos)
-        osd_level = 3;
-
-    bstr text = bstr_new(NULL);
-    sadd_osd_status(&text, mpctx, osd_level);
-    if (mpctx->osd_msg_text.len) {
-        if (text.len) {
-            sadd(&text, "\n");
-        }
-        bstr_xappend(NULL, &text, mpctx->osd_msg_text);
-    }
-    osd_set_text(osd, text.start);
-    talloc_free(text.start);
-
-    osd_end = mach_absolute_time();
+    update_vo_osd_msg(mpctx);
 }

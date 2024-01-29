@@ -602,8 +602,7 @@ void reinit_sub(struct MPContext *mpctx, struct track *track);
 void reinit_sub_all(struct MPContext *mpctx);
 void uninit_sub(struct MPContext *mpctx, struct track *track);
 void uninit_sub_all(struct MPContext *mpctx);
-void update_term_osd_msg(struct MPContext *mpctx);
-void update_vo_osd_msg(struct MPContext *mpctx);
+void update_osd_msg(struct MPContext *mpctx);
 bool update_subtitles(struct MPContext *mpctx, double video_pts);
 
 // video.c
