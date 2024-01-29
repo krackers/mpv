@@ -123,8 +123,10 @@ void sub_destroy(struct dec_sub *sub)
 {
     if (!sub)
         return;
-    sub_reset(sub);
-    sub->sd->driver->uninit(sub->sd);
+    if (sub->sd) {
+        sub_reset(sub);
+        sub->sd->driver->uninit(sub->sd);
+    }
     talloc_free(sub->sd);
     pthread_mutex_destroy(&sub->lock);
     talloc_free(sub);
@@ -188,7 +190,7 @@ struct dec_sub *sub_create(struct mpv_global *global, struct sh_stream *sh,
         return sub;
     }
 
-    talloc_free(sub);
+    sub_destroy(sub);
     return NULL;
 }
 
