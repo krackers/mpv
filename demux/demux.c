@@ -914,6 +914,7 @@ void demux_set_wakeup_cb(struct demuxer *demuxer, void (*cb)(void *ctx), void *c
 {
     struct demux_internal *in = demuxer->in;
     pthread_mutex_lock(&in->lock);
+    assert(cb == NULL || !in->wakeup_cb);
     in->wakeup_cb = cb;
     in->wakeup_cb_ctx = ctx;
     pthread_mutex_unlock(&in->lock);
@@ -2930,6 +2931,7 @@ void demux_set_stream_wakeup_cb(struct sh_stream *sh,
                                 void (*cb)(void *ctx), void *ctx)
 {
     pthread_mutex_lock(&sh->ds->in->lock);
+    assert(cb == NULL || !sh->ds->wakeup_cb);
     sh->ds->wakeup_cb = cb;
     sh->ds->wakeup_cb_ctx = ctx;
     sh->ds->need_wakeup = true;

@@ -418,6 +418,7 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
 {
     struct seek_params *seek = &mpctx->seek;
     mpctx->osd_force_update = true;
+    mpctx->force_sub_update = false;
 
     mp_wakeup_core(mpctx);
 
@@ -1211,9 +1212,14 @@ void run_playloop(struct MPContext *mpctx)
 
     uint64_t update_osd_msg_after = mach_absolute_time();
 
-    if (mpctx->video_status == STATUS_EOF)
-        update_subtitles(mpctx, mpctx->playback_pts);
-
+    // If either video not playing or we explicitly need to force-update
+    // subs, call the method.
+    mpctx->force_sub_update = mpctx->force_sub_update && mpctx->paused;
+    if (mpctx->video_status == STATUS_EOF || mpctx->force_sub_update) {
+        bool ok = force_update_subtitles(mpctx, mpctx->playback_pts, mpctx->force_sub_update);
+        mpctx->force_sub_update = mpctx->force_sub_update && !ok;
+    }
+        
     uint64_t update_subtitles_after = mach_absolute_time();
 
     handle_eof(mpctx);

@@ -292,8 +292,7 @@ bool sub_read_packets(struct dec_sub *sub, double video_pts, bool force)
         double min_pts = sub->opts->sub_delay < 0 || force ? video_pts : MP_NOPTS_VALUE;
 
         struct demux_packet *pkt;
-        int st = force ? demux_read_packet_sync_until(sub->sh, min_pts, &pkt) 
-                       : demux_read_packet_async_until(sub->sh, min_pts, &pkt);
+        int st = demux_read_packet_async_until(sub->sh, min_pts, &pkt);
         // Note: If minpts not set, "wait/retry" (st==0) happens with non-interleaved
         // streams only, and then caller should retry later
         // (relying on demux callback is preferred) until a new enough packet has been seen
