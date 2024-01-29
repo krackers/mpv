@@ -2338,6 +2338,9 @@ static struct demuxer *open_given_type(struct mpv_global *global,
             // This allows us to use demux cache on auto even when stream cache is disabled.
             use_demux_cache = demuxer->is_streaming || demuxer->is_network || stream->caching;
         }
+        // Never use demux cache for "fully read" streams. These are effectively
+        // already cached by the underlying demuxer impl (currently only libavformat)
+        use_demux_cache = use_demux_cache && !demuxer->fully_read;
         int seekable = opts->seekable_cache;
         if (use_demux_cache) {
             in->min_secs = MPMAX(in->min_secs, opts->min_secs_cache);
