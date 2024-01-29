@@ -1207,9 +1207,6 @@ void write_video(struct MPContext *mpctx)
     schedule_frame(mpctx, frame);
 
     video_after_schedule_frame = mach_absolute_time();
-
-    update_vo_osd_msg(mpctx);
-
     video_after_update_osd_msg = mach_absolute_time();
 
     uint64_t bef = mach_absolute_time();
