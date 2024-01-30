@@ -629,6 +629,8 @@ static void flip_page(struct vo *vo)
 
     // Wait for next vsync after flush
     // int64_t flp_count_before_flush = ctx->flip_count;
+    // TODO: Should also use gpu fence to make sure commands itself retired.
+    // See opengl vo.
     while (ctx->pending_swap_count > 1) {
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             printf("Bail on swap\n");
