@@ -275,6 +275,8 @@ struct demux_queue {
     // least index_distance from entry i
     int num_index;          // valid index[] entries
     double index_distance;  // minimum keyframe distance to add index element
+
+    // TODO: This should be a ring buffer instead of an array. See upstream mpv.
     struct demux_packet *index[MAX_INDEX_ENTRIES];
 };
 
