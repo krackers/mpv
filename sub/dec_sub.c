@@ -288,7 +288,7 @@ bool sub_read_packets(struct dec_sub *sub, double video_pts, bool force)
         // Extend read-ahead by as much as needed. Note that video_pts has been
         // adjusted at beginning of this function to take into account sub-delay.
         // (Use this mechanism only if sub_delay matters to avoid corner cases,
-        //  or if we explicitly requested blocking behavior.)
+        //  or if we explicitly requested readahead behavior.)
         double min_pts = sub->opts->sub_delay < 0 || force ? video_pts : MP_NOPTS_VALUE;
 
         struct demux_packet *pkt;
