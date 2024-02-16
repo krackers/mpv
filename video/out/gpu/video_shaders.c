@@ -358,6 +358,11 @@ void pass_linearize(struct gl_shader_cache *sc, enum mp_csp_trc trc)
                              pow((color.rgb + vec3(0.055))/vec3(1.055), vec3(2.4)),
                              lessThan(vec3(0.04045), color.rgb));)
         break;
+    // TODO: We should have an option for how to interpret bt1886.
+    // Either 2.4, sRGB, 2.2, or 1.961 (for people who want to match QT).
+    // We should also try to make behavior consistent with ICC profiles,
+    // although ICC profiles allow for custom contrast which is something
+    // I don't know how to implement as a simple shader.
     case MP_CSP_TRC_BT_1886:
         GLSL(color.rgb = pow(color.rgb, vec3(2.4));)
         break;

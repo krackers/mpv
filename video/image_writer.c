@@ -67,6 +67,11 @@ const struct m_option image_writer_opts[] = {
     OPT_INTRANGE("png-compression", png_compression, 0, 0, 9),
     OPT_INTRANGE("png-filter", png_filter, 0, 0, 5),
     OPT_FLAG("high-bit-depth", high_bit_depth, 0),
+    // TODO: This currently is really broken with gpu screenshots, images
+    // are always tagged sRGB regardless of what was actually rendered.
+    // SW screenshots should be fine I think, they will be tagged as source colorspace.
+    // Basically we should try to propagate the colorspace information of the dst
+    // back into here. If tag_csp is false we should always try to render as sRGB version.
     OPT_FLAG("tag-colorspace", tag_csp, 0),
     {0},
 };
