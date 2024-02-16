@@ -1215,8 +1215,8 @@ void run_playloop(struct MPContext *mpctx)
     // If either video not playing or we explicitly need to force-update
     // subs, call the method.
     bool force = mpctx->force_sub_update = mpctx->force_sub_update && mpctx->paused;
-    if ((!mpctx->paused && mpctx->video_status == STATUS_EOF) || force) {
-        bool ok = update_subtitles(mpctx, mpctx->playback_pts);
+    if (mpctx->video_status == STATUS_EOF || force) {
+        bool ok = update_subtitles(mpctx, mpctx->playback_pts, force);
         mpctx->force_sub_update = force && !ok;
     }
         

@@ -80,10 +80,9 @@ void uninit_sub_all(struct MPContext *mpctx)
         uninit_sub(mpctx, mpctx->tracks[n]);
 }
 
-// If force is set, try to read-ahead packets even for a lazy stream.
-// If called when paused, readahead will be attempted even for lazy streams.
+// If force-readahead is set, try to read-ahead packets even for a lazy stream.
 static bool update_subtitle(struct MPContext *mpctx, double video_pts,
-                            struct track *track)
+                            struct track *track, bool force_readahead)
 {
     struct dec_sub *dec_sub = track ? track->d_sub : NULL;
 
@@ -113,7 +112,7 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
     // a lazy stream so we will exit early. In reality however we need to keep
     // retrying, so we re-use the forced min_pts read mechanism to indicate
     // that we should not return eof until video_pts is reached.
-    if (!sub_read_packets(dec_sub, video_pts, /*force=*/ mpctx->paused))
+    if (!sub_read_packets(dec_sub, video_pts, force_readahead))
         return false;
 
     // Handle displaying subtitles on terminal; never done for secondary subs
@@ -125,12 +124,11 @@ static bool update_subtitle(struct MPContext *mpctx, double video_pts,
 
 // Return true if the subtitles for the given PTS are ready; false if the player
 // should wait for new demuxer data, and then should retry.
-// If called when paused, readahead and sub display will be attempted even for lazy streams.
-bool update_subtitles(struct MPContext *mpctx, double video_pts) {
+bool update_subtitles(struct MPContext *mpctx, double video_pts, bool force_readahead) {
     bool ok = true;
     for (int n = 0; n < NUM_PTRACKS; n++) {
         struct track *track = mpctx->current_track[n][STREAM_SUB];
-        ok &= update_subtitle(mpctx, video_pts, track);
+        ok &= update_subtitle(mpctx, video_pts, track, force_readahead);
     }
 
     if (ok && mpctx->video_out) {
@@ -143,7 +141,7 @@ bool update_subtitles(struct MPContext *mpctx, double video_pts) {
             vo_redraw(mpctx->video_out);
             // Force an arbitrary minimum FPS
             mp_set_timeout(mpctx, 0.1);
-        } else if (mpctx->paused) {
+        } else if (force_readahead && mpctx->paused) {
             // Similarly if we force-update subtitles when paused,
             // we need to queue a vo redraw to be able to see it.
             printf("Force VO Redraw\n");
@@ -152,7 +150,7 @@ bool update_subtitles(struct MPContext *mpctx, double video_pts) {
     }
 
     if (mpctx->paused) {
-        printf("Called update sub when paused. Ret %d\n", ok);
+        printf("Called update sub when paused. Forced %d, Ret %d\n", force_readahead, ok);
     }
     return ok;
 }
@@ -221,9 +219,10 @@ void reinit_sub(struct MPContext *mpctx, struct track *track)
     // (where reads might block for a long-time) since we don't allow is_streaming
     // tracks to be force-read.
     if (mpctx->playback_initialized) {
-        bool ok = update_subtitles(mpctx, mpctx->playback_pts);
+        bool force_readahead = mpctx->paused;
+        bool ok = update_subtitles(mpctx, mpctx->playback_pts, force_readahead);
         // If we need to retry later, signal playloop to call update_subtitles again.
-        mpctx->force_sub_update = mpctx->paused && !ok;
+        mpctx->force_sub_update = force_readahead && !ok;
     }
   
 }

@@ -209,7 +209,7 @@ static void filter_update_subtitles(void *ctx, double pts)
     struct MPContext *mpctx = ctx;
 
     if (osd_get_render_subs_in_filter(mpctx->osd))
-        update_subtitles(mpctx, pts);
+        update_subtitles(mpctx, pts, /*force_readahead=*/ false);
 }
 
 // (track=NULL creates a blank chain, used for lavfi-complex)
@@ -1137,7 +1137,7 @@ void write_video(struct MPContext *mpctx)
     // Enforce timing subtitles to video frames.
     osd_set_force_video_pts(mpctx->osd, MP_NOPTS_VALUE);
 
-    if (!update_subtitles(mpctx, mpctx->next_frames[0]->pts)) {
+    if (!update_subtitles(mpctx, mpctx->next_frames[0]->pts, /*force_readahead=*/ false)) {
         printf("Video frame delayed due to waiting on subtitles.\n");
         MP_VERBOSE(mpctx, "Video frame delayed due to waiting on subtitles.\n");
         // Note that this is due to packet not ready.
