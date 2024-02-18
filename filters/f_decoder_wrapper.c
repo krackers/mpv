@@ -210,8 +210,8 @@ bool mp_decoder_wrapper_reinit(struct mp_decoder_wrapper *d)
 
         p->decoder = driver->create(p->f, p->codec, sel->decoder);
         if (p->decoder) {
-            p->public.decoder_desc =
-                talloc_asprintf(p, "%s (%s)", sel->decoder, sel->desc);
+            const char *desc = sel->desc && sel->desc[0] ? sel->desc : sel->decoder;
+            p->public.decoder_desc = talloc_strdup(p, desc);
             MP_VERBOSE(p, "Selected codec: %s\n", p->public.decoder_desc);
             break;
         }
