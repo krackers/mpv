@@ -564,6 +564,8 @@ static inline bool m_option_equal(const m_option_t *opt, void *a, void *b)
     return opt->type->equal(opt, a, b);
 }
 
+bool m_obj_settings_equal(struct m_obj_settings *a, struct m_obj_settings *b);
+
 int m_option_required_params(const m_option_t *opt);
 
 extern const char m_option_path_separator;
