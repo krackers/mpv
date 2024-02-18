@@ -1256,6 +1256,8 @@ const m_option_type_t m_option_type_string = {
 #define OP_CLR 4
 #define OP_TOGGLE 5
 #define OP_APPEND 6
+#define OP_REMOVE 7
+
 
 static void free_str_list(void *dst)
 {
@@ -1399,6 +1401,12 @@ static int parse_str_list_impl(struct mp_log *log, const m_option_t *opt,
     } else if (bstr_endswith0(name, "-set")) {
         op = OP_NONE;
     } else if (bstr_endswith0(name, "-toggle")) {
+        op = OP_TOGGLE;
+    } else if (bstr_endswith0(name, "-remove")) {
+        op = OP_REMOVE;
+    }
+
+    if (op == OP_TOGGLE || op == OP_REMOVE) {
         if (dst) {
             char **list = VAL(dst);
             int index = find_list_bstr(list, param);
@@ -1410,6 +1418,8 @@ static int parse_str_list_impl(struct mp_log *log, const m_option_t *opt,
                 return 1;
             }
         }
+        if (op == OP_REMOVE)
+            return 1; // ignore if not found
         op = OP_ADD;
         multi = false;
     }
@@ -1605,6 +1615,7 @@ const m_option_type_t m_option_type_string_list = {
         {"pre"},
         {"set"},
         {"toggle"},
+        {"remove"},
         {0}
     },
 };
@@ -1650,6 +1661,14 @@ static int parse_keyvalue_list(struct mp_log *log, const m_option_t *opt,
         append = true;
     } else if (bstr_endswith0(name, "-append")) {
         append = full_value = true;
+    } else if (bstr_endswith0(name, "-remove")) {
+        lst = dst ? VAL(dst) : NULL;
+        int index = dst ? keyvalue_list_find_key(lst, param) : -1;
+        if (index >= 0) {
+            keyvalue_list_del_key(lst, index);
+            VAL(dst) = lst;
+        }
+        return 1;
     }
 
     if (append && dst) {
@@ -1782,6 +1801,7 @@ const m_option_type_t m_option_type_keyvalue_list = {
         {"add"},
         {"append"},
         {"set"},
+        {"remove"},
         {0}
     },
 };
@@ -3190,7 +3210,8 @@ done: ;
 // Parse a single entry for -vf-del (return 0 if not applicable)
 // mark_del is bounded by the number of items in dst
 static int parse_obj_settings_del(struct mp_log *log, struct bstr opt_name,
-                                  struct bstr *param, void *dst, bool *mark_del)
+                                  struct bstr *param, int op,
+                                  void *dst, bool *mark_del)
 {
     bstr s = *param;
     if (bstr_eatstart0(&s, "@")) {
@@ -3213,6 +3234,9 @@ static int parse_obj_settings_del(struct mp_log *log, struct bstr opt_name,
         *param = s;
         return 1;
     }
+
+    if (op == OP_REMOVE)
+        return 0;
 
     bstr rest;
     long long id = bstrtoll(s, &rest, 0);
@@ -3257,6 +3281,8 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
         op = OP_PRE;
     } else if (bstr_endswith0(name, "-del")) {
         op = OP_DEL;
+    } else if (bstr_endswith0(name, "-remove")) {
+        op = OP_REMOVE;
     } else if (bstr_endswith0(name, "-clr")) {
         op = OP_CLR;
     } else if (bstr_endswith0(name, "-toggle")) {
@@ -3272,6 +3298,8 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
                 " Append the given list to the current list\n\n"
                 "  %s-pre\n"
                 " Prepend the given list to the current list\n\n"
+                "  %s-remove\n"
+                " Remove the given filter from the current list\n\n"
                 "  %s-del x,y,...\n"
                 " Remove the given elements. Take the list element index (starting from 0).\n"
                 " Negative index can be used (i.e. -1 is the last element).\n"
@@ -3281,7 +3309,7 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
                 "  %s-clr\n"
                 " Clear the current list.\n\n",
                 opt->name, opt->name, opt->name, opt->name, opt->name,
-                opt->name, opt->name, opt->name);
+                opt->name, opt->name, opt->name, opt->name);
 
         return M_OPT_EXIT;
     }
@@ -3316,7 +3344,7 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
         if (dst)
             free_obj_settings_list(dst);
         return 0;
-    } else if (op == OP_DEL) {
+    } else if (op == OP_DEL || op == OP_REMOVE) {
         mark_del = talloc_zero_array(NULL, bool, num_items + 1);
     }
 
@@ -3325,8 +3353,8 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
 
     while (param.len > 0) {
         int r = 0;
-        if (op == OP_DEL)
-            r = parse_obj_settings_del(log, name, &param, dst, mark_del);
+        if (op == OP_DEL || op == OP_REMOVE)
+            r = parse_obj_settings_del(log, name, &param, op, dst, mark_del);
         if (r == 0) {
             r = parse_obj_settings(log, name, op, &param, ol, dst ? &res : NULL);
         }
@@ -3420,7 +3448,7 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
                 }
             }
             talloc_free(res);
-        } else if (op == OP_DEL) {
+        } else if (op == OP_DEL || op == OP_REMOVE) {
             for (int n = num_items - 1; n >= 0; n--) {
                 if (mark_del[n])
                     obj_settings_list_del_at(&list, n);
@@ -3428,7 +3456,8 @@ static int parse_obj_settings_list(struct mp_log *log, const m_option_t *opt,
             for (int n = 0; res && res[n].name; n++) {
                 int found = obj_settings_find_by_content(list, &res[n]);
                 if (found < 0) {
-                    mp_warn(log, "Option %.*s: Item not found\n", BSTR_P(name));
+                    if (op == OP_DEL)
+                        mp_warn(log, "Option %.*s: Item not found\n", BSTR_P(name));
                 } else {
                     obj_settings_list_del_at(&list, found);
                 }
@@ -3642,6 +3671,7 @@ const m_option_type_t m_option_type_obj_settings_list = {
         {"pre"},
         {"set"},
         {"toggle"},
+        {"remove"},
         {0}
     },
 };
