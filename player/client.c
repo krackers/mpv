@@ -1201,7 +1201,7 @@ static void getproperty_fn(void *arg)
     struct getproperty_request *req = arg;
     const struct m_option *type = get_mp_type_get(req->format);
 
-    union m_option_value xdata = {0};
+    union m_option_value xdata = m_option_value_default;
     void *data = req->data ? req->data : &xdata;
 
     int err = -1;
@@ -1353,6 +1353,8 @@ int mpv_observe_property(mpv_handle *ctx, uint64_t userdata,
         .format = format,
         .changed = true,
         .need_new_value = true,
+        .new_value = m_option_value_default,
+        .user_value = m_option_value_default,
     };
     MP_TARRAY_APPEND(ctx, ctx->properties, ctx->num_properties, prop);
     ctx->property_event_masks |= prop->event_mask;
@@ -1440,7 +1442,7 @@ static void update_prop(void *p)
     struct mpv_handle *ctx = prop->client;
 
     const struct m_option *type = get_mp_type_get(prop->format);
-    union m_option_value val = {0};
+    union m_option_value val = m_option_value_default;
 
     struct getproperty_request req = {
         .mpctx = ctx->mpctx,
