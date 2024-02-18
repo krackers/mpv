@@ -45,8 +45,6 @@
 
 extern const char mp_help_text[];
 
-static const union m_option_value default_value;
-
 // Profiles allow to predefine some sets of options that can then
 // be applied later on with the internal -profile option.
 #define MAX_PROFILE_DEPTH 20
@@ -511,7 +509,7 @@ static void init_obj_settings_list(struct m_config *config,
 static void init_opt_inplace(const struct m_option *opt, void *dst,
                              const void *src)
 {
-    union m_option_value temp = {0};
+    union m_option_value temp = m_option_value_default;
     if (src)
         memcpy(&temp, src, opt->type->size);
     memset(dst, 0, opt->type->size);
@@ -534,7 +532,7 @@ static void m_config_add_option(struct m_config *config,
         .name = arg->name,
         .shadow_offset = -1,
         .group = parent ? parent->group : 0,
-        .default_data = &default_value,
+        .default_data = &m_option_value_default,
         .is_hidden = !!arg->deprecation_message,
     };
 
@@ -955,7 +953,7 @@ int m_config_set_option_cli(struct m_config *config, struct bstr name,
                BSTR_P(name), BSTR_P(param), flags);
     }
 
-    union m_option_value val = {0};
+    union m_option_value val = m_option_value_default;
 
     // Some option types are "impure" and work on the existing data.
     // (Prime examples: --vf-add, --sub-file)
@@ -989,7 +987,7 @@ int m_config_set_option_node(struct m_config *config, bstr name,
 
     // Do this on an "empty" type to make setting the option strictly overwrite
     // the old value, as opposed to e.g. appending to lists.
-    union m_option_value val = {0};
+    union m_option_value val = m_option_value_default;
 
     if (data->format == MPV_FORMAT_STRING) {
         bstr param = bstrof0(data->u.string);
