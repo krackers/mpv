@@ -263,11 +263,15 @@ class LibmpvHelper: LogHelper {
     }
 
     func deinitMPV(_ destroy: Bool = false) {
-        if destroy {
-            mpv_destroy(mpvHandle)
-        }
+        precondition(mpvRenderContext == nil, "Render context not nil")
+        let oldHandle = mpvHandle
         mpvHandle = nil
         log = nil
+        if destroy && oldHandle != nil {
+            DispatchQueue.global(qos: .default).async {
+                mpv_destroy(oldHandle)
+            } 
+        }
     }
 
     // *(char **) MPV_FORMAT_STRING on mpv_event_property
