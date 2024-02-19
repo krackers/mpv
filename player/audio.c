@@ -40,6 +40,8 @@
 #include "core.h"
 #include "command.h"
 
+#pragma clang diagnostic error "-Wfloat-conversion"
+
 enum {
     AD_OK = 0,
     AD_EOF = -2,
@@ -142,7 +144,7 @@ static float compute_replaygain(struct MPContext *mpctx)
             rgain = MPMIN(rgain, 1.0 / peak);
             MP_VERBOSE(mpctx, "...with clipping prevention: %f\n", rgain);
         }
-    } else if (opts->rgain_fallback) {
+    } else if (opts->rgain_fallback != 0) {
         rgain = db_gain(opts->rgain_fallback);
         MP_VERBOSE(mpctx, "Applying fallback gain: %f\n", rgain);
     }
@@ -676,7 +678,7 @@ static bool copy_output(struct MPContext *mpctx, struct ao_chain *ao_c,
             if (curpts != MP_NOPTS_VALUE) {
                 double remaining =
                     (endpts - curpts - mpctx->opts->audio_delay) * rate;
-                maxsamples = MPCLAMP(remaining, 0, INT_MAX);
+                maxsamples = (int) MPCLAMP(remaining, 0, INT_MAX);
             }
         }
 
@@ -865,7 +867,7 @@ void fill_audio_out_buffers(struct MPContext *mpctx)
         mpctx->audio_drop_throttle < drop_limit &&
         mpctx->audio_status == STATUS_PLAYING)
     {
-        int samples = ceil(opts->sync_audio_drop_size * play_samplerate);
+        int samples = (int) ceil(opts->sync_audio_drop_size * play_samplerate);
         samples = (samples + align / 2) / align * align;
 
         skip_duplicate = mpctx->last_av_difference >= 0 ? -samples : samples;
