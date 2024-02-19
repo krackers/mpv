@@ -237,6 +237,11 @@ enum ra_vartype {
     RA_VARTYPE_COUNT
 };
 
+struct ra_tex_binding {
+    struct ra_tex *tex;
+    bool sample_linear; // For RA_VARTYPE_TEX only
+};
+
 // Returns the host size of a ra_vartype, or 0 for abstract vartypes (e.g. tex)
 size_t ra_vartype_size(enum ra_vartype type);
 

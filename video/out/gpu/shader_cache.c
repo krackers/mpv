@@ -22,7 +22,7 @@
 union uniform_val {
     float f[9];         // RA_VARTYPE_FLOAT
     int i[4];           // RA_VARTYPE_INT
-    struct ra_tex *tex; // RA_VARTYPE_TEX, RA_VARTYPE_IMG_*
+    struct ra_tex_binding tex; // RA_VARTYPE_TEX, RA_VARTYPE_IMG_*
     struct ra_buf *buf; // RA_VARTYPE_BUF_*
 };
 
@@ -312,6 +312,13 @@ static void update_uniform_params(struct gl_shader_cache *sc, struct sc_uniform 
 void gl_sc_uniform_texture(struct gl_shader_cache *sc, char *name,
                            struct ra_tex *tex)
 {
+    gl_sc_uniform_sampled_texture(sc, name, tex, tex->params.src_linear);
+}
+
+
+void gl_sc_uniform_sampled_texture(struct gl_shader_cache *sc, char *name,
+                           struct ra_tex *tex, bool linearly_sample)
+{
     const char *glsl_type = "sampler2D";
     if (tex->params.dimensions == 1) {
         glsl_type = "sampler1D";
@@ -329,7 +336,8 @@ void gl_sc_uniform_texture(struct gl_shader_cache *sc, char *name,
     u->input.type = RA_VARTYPE_TEX;
     u->glsl_type = glsl_type;
     u->input.binding = gl_sc_next_binding(sc, u->input.type);
-    u->v.tex = tex;
+    u->v.tex.tex = tex;
+    u->v.tex.sample_linear = linearly_sample;
 }
 
 void gl_sc_uniform_image2D_wo(struct gl_shader_cache *sc, const char *name,
@@ -341,7 +349,7 @@ void gl_sc_uniform_image2D_wo(struct gl_shader_cache *sc, const char *name,
     u->input.type = RA_VARTYPE_IMG_W;
     u->glsl_type = "writeonly image2D";
     u->input.binding = gl_sc_next_binding(sc, u->input.type);
-    u->v.tex = tex;
+    u->v.tex.tex = tex;
 }
 
 void gl_sc_ssbo(struct gl_shader_cache *sc, char *name, struct ra_buf *buf,
@@ -701,7 +709,7 @@ static void add_uniforms(struct gl_shader_cache *sc, bstr *dst)
         case RA_VARTYPE_IMG_W: {
             // For better compatibility, we have to explicitly label the
             // type of data we will be reading/writing to this image.
-            const char *fmt = u->v.tex->params.format->glsl_format;
+            const char *fmt = u->v.tex.tex->params.format->glsl_format;
 
             if (sc->ra->glsl_vulkan) {
                 if (fmt) {
