@@ -1711,6 +1711,10 @@ static void pass_sample_separated(struct gl_video *p, struct image src,
 
     // First pass (scale only in the y dir)
     src.transform = t_y;
+    // Convolution filters don't need linear sampling, so using nearest is
+    // often faster.
+    // See https://github.com/mpv-player/mpv/commit/02df9886ea239a8efa578677d44ee9b5f74be422
+    src.sample_linear = false;
     sampler_prelude(p->sc, pass_bind(p, src));
     GLSLF("// first pass\n");
     pass_sample_separated_gen(p->sc, scaler, 0, 1);
@@ -1720,6 +1724,7 @@ static void pass_sample_separated(struct gl_video *p, struct image src,
     // Second pass (scale only in the x dir)
     src = image_wrap(scaler->sep_fbo, src.type, src.components);
     src.transform = t_x;
+    src.sample_linear = false;
     pass_describe(p, "%s second pass", scaler->conf.kernel.name);
     sampler_prelude(p->sc, pass_bind(p, src));
     pass_sample_separated_gen(p->sc, scaler, 1, 0);
@@ -1992,7 +1997,9 @@ static void gl_video_setup_hooks(struct gl_video *p)
             .hook_tex = {"LUMA", "CHROMA", "RGB", "XYZ"},
             .bind_tex = {"HOOKED"},
             .hook = deband_hook,
-            .input_sample_linear = true,
+            // Apparently the deband algorithm works better if nearest neighbor sampling
+            // is used. See https://github.com/haasn/libplacebo/commit/ac4db19cfdfef9dd3dc6bf242f63cea8c5317c25
+            .input_sample_linear = false,
         });
     }
 
