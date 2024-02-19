@@ -106,6 +106,7 @@ struct image {
     struct ra_tex *tex;
     int w, h; // logical size (after transformation)
     struct gl_transform transform; // rendering transformation
+    bool sample_linear; // Whether to use linear interpolation when sampling from texture
 };
 
 // A named image, for user scripting purposes
@@ -120,6 +121,8 @@ struct tex_hook {
     const char *save_tex;
     const char *hook_tex[SHADER_MAX_HOOKS];
     const char *bind_tex[SHADER_MAX_BINDS];
+    bool input_sample_linear; // Whether the filter wants to linearly sample the texture it hooks (GL_LINEAR).
+
     int components; // how many components are relevant (0 = same as input)
     void *priv; // this gets talloc_freed when the tex_hook is removed
     void (*hook)(struct gl_video *p, struct image img, // generates GLSL
@@ -632,6 +635,7 @@ static struct image image_wrap(struct ra_tex *tex, enum plane_type type,
         .h = tex ? tex->params.h : 1,
         .transform = identity_trans,
         .components = components,
+        .sample_linear = tex->params.src_linear
     };
 }
 
@@ -754,6 +758,7 @@ static void pass_get_images(struct gl_video *p, struct video_image *vimg,
             .multiplier = tex_mul,
             .w = t->w,
             .h = t->h,
+            .sample_linear = t->tex->params.src_linear
         };
 
         for (int i = 0; i < 4; i++)
@@ -1083,7 +1088,7 @@ static void pass_prepare_src_tex(struct gl_video *p)
         char *texture_off = mp_tprintf(32, "texture_off%d", n);
         char *pixel_size = mp_tprintf(32, "pixel_size%d", n);
 
-        gl_sc_uniform_texture(sc, texture_name, s->tex);
+        gl_sc_uniform_sampled_texture(sc, texture_name, s->tex, s->sample_linear);
         float f[2] = {1, 1};
         if (!s->tex->params.non_normalized) {
             f[0] = s->tex->params.w;
@@ -1393,6 +1398,7 @@ static bool pass_hook_setup_binds(struct gl_video *p, const char *name,
 
         // This is a special name that means "currently hooked texture"
         if (strcmp(bind_name, "HOOKED") == 0) {
+            img.sample_linear = hook->input_sample_linear;
             int id = pass_bind(p, img);
             hook_prelude(p, "HOOKED", id, img);
             hook_prelude(p, name, id, img);
@@ -1418,7 +1424,7 @@ static bool pass_hook_setup_binds(struct gl_video *p, const char *name,
             p->num_pass_imgs -= t;
             return false;
         }
-
+        bind_img.sample_linear = hook->input_sample_linear;
         hook_prelude(p, bind_name, pass_bind(p, bind_img), bind_img);
 
 next_bind: ;
@@ -1937,6 +1943,7 @@ static bool add_user_hook(void *priv, struct gl_user_shader_hook hook)
     struct tex_hook texhook = {
         .save_tex = bstr_dupas0(copy, hook.save_tex),
         .components = hook.components,
+        .input_sample_linear = true,
         .hook = user_hook,
         .cond = user_hook_cond,
         .priv = copy,
@@ -1985,6 +1992,7 @@ static void gl_video_setup_hooks(struct gl_video *p)
             .hook_tex = {"LUMA", "CHROMA", "RGB", "XYZ"},
             .bind_tex = {"HOOKED"},
             .hook = deband_hook,
+            .input_sample_linear = true,
         });
     }
 
@@ -1993,6 +2001,7 @@ static void gl_video_setup_hooks(struct gl_video *p)
             .hook_tex = {"MAIN"},
             .bind_tex = {"HOOKED"},
             .hook = unsharp_hook,
+            .input_sample_linear = true,
         });
     }
 
@@ -3346,6 +3355,7 @@ static void reinterleave_vdpau(struct gl_video *p,
                 .transform = identity_trans,
                 .w = w,
                 .h = h,
+                .sample_linear = src[t]->params.src_linear
             });
         }
 
