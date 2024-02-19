@@ -414,6 +414,7 @@ static double vsync_stddef(struct vo *vo, double ref_vsync)
 }
 
 #define MAX_VSYNC_SAMPLES 200
+#define DELAY_VSYNC_SAMPLES 5
 
 // Check if we should switch to measured average display FPS if it seems
 // "better" then the system-reported one. (Note that small differences are
@@ -501,9 +502,22 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
         return;
     }
 
-    in->num_successive_vsyncs++;
-    if (in->num_successive_vsyncs <= 2)
+    if (++in->num_successive_vsyncs <= DELAY_VSYNC_SAMPLES) {
+        // Note that because base_vsync is still used for a/v sync calculations
+        // (particularly the delay remaining)
+        // it should still be populated. The only difference is that unlike
+        // regular case where this statistic is "smoothed" (always incremented)
+        // by nominal vsync interval unless a major discontinuity happens,
+        // for this interim period we always set it to the actual vsync.
+        in->base_vsync = vsync_time;
         return;
+    }
+    
+    if (in->base_vsync != 0) {
+        in->base_vsync += in->vsync_interval;
+    } else {
+        in->base_vsync = vsync_time;
+    }
 
     if (in->num_vsync_samples >= MAX_VSYNC_SAMPLES)
         in->num_vsync_samples -= 1;
@@ -511,11 +525,6 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
                         vsync_time - prev_vsync);
     in->drop_point = MPMIN(in->drop_point + 1, in->num_vsync_samples);
     in->num_total_vsync_samples += 1;
-    if (in->base_vsync != 0) {
-        in->base_vsync += in->vsync_interval;
-    } else {
-        in->base_vsync = vsync_time;
-    }
 
     double avg = 0;
     for (int n = 0; n < in->num_vsync_samples; n++)
