@@ -124,6 +124,9 @@ class VideoLayer: CAOpenGLLayer {
 
     func uninit() {
         // Unblock any currently blocked VO thread
+        // This is actually a bit racy, and should ideally be done
+        // within libmpv itself since it's possible for it to become blocked
+        // again after this call.
         self.libmpv.reportRenderPresent()
         self.libmpv.reportRenderFlip(time: 0)
 
