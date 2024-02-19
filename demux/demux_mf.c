@@ -15,6 +15,7 @@
  * License along with mpv.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -79,8 +80,6 @@ static mf_t *open_mf_pattern(void *talloc_ctx, struct mp_log *log, char *filenam
                 }
             }
             fclose(lst_f);
-
-            mp_info(log, "number of files: %d\n", mf->nr_of_files);
             goto exit_mf;
         }
         mp_info(log, "%s is not indirect filelist\n", filename + 1);
@@ -102,18 +101,17 @@ static mf_t *open_mf_pattern(void *talloc_ctx, struct mp_log *log, char *filenam
             }
             talloc_free(fname2);
         }
-        mp_info(log, "number of files: %d\n", mf->nr_of_files);
-
         goto exit_mf;
     }
 
-    char *fname = talloc_size(mf, strlen(filename) + 32);
+    size_t fname_avail = strlen(filename) + 32;
+    char *fname = talloc_size(mf, fname_avail);
 
 #if HAVE_GLOB
     if (!strchr(filename, '%')) {
-        strcpy(fname, filename);
-        if (!strchr(filename, '*'))
-            strcat(fname, "*");
+        // append * if none present
+        snprintf(fname, fname_avail, "%s%c", filename,
+            strchr(filename, '*') ? 0 : '*');
 
         mp_info(log, "search expr: %s\n", fname);
 
@@ -128,16 +126,54 @@ static mf_t *open_mf_pattern(void *talloc_ctx, struct mp_log *log, char *filenam
                 continue;
             mf_add(mf, gg.gl_pathv[i]);
         }
-        mp_info(log, "number of files: %d\n", mf->nr_of_files);
         globfree(&gg);
         goto exit_mf;
     }
 #endif
 
+    // We're using arbitrary user input as printf format with 1 int argument.
+    // Any format which uses exactly 1 int argument would be valid, but for
+    // simplicity we reject all conversion specifiers except %% and simple
+    // integer specifier: %[.][NUM]d where NUM is 1-3 digits (%.d is valid)
+    const char *f = filename;
+    int MAXDIGS = 3, nspec = 0, c;
+    bool bad_spec = false;
+
+    while (nspec < 2 && (c = *f++)) {
+        if (c != '%')
+            continue;
+        if (*f == '%') {  // '%%', represents explicit % in the output.
+            f++; // Skipping forwards as doesn't require further attention.
+            continue;
+        }
+        // Now c == '%' and *f != '%', thus we have entered territory of format
+        // specifiers which we are interested in.
+        nspec++;
+        if (*f == '.')
+            f++;
+        for (int ndig = 0; mp_isdigit(*f) && ndig < MAXDIGS; ndig++, f++); // noop
+        if (*f != 'd') {
+            bad_spec = true; // not int, or beyond our validation capacity
+            break;
+        }
+        f++; // *f is 'd'
+    }
+
+    // nspec==0 (zero specifiers) is rejected because fname wouldn't advance.
+    if (bad_spec || nspec != 1) {
+        mp_err(log,
+               "unsupported expr format: '%s' - exactly one format specifier of the form %%[.][NUM]d is expected\n",
+               filename);
+        goto exit_mf;
+    }
+
     mp_info(log, "search expr: %s\n", filename);
 
     while (error_count < 5) {
-        sprintf(fname, filename, count++);
+        if (snprintf(fname, fname_avail, filename, count++) >= fname_avail) {
+            mp_err(log, "format result too long: '%s'\n", filename);
+            goto exit_mf;
+        }
         if (!mp_path_exists(fname)) {
             error_count++;
             mp_verbose(log, "file not found: '%s'\n", fname);
@@ -146,9 +182,8 @@ static mf_t *open_mf_pattern(void *talloc_ctx, struct mp_log *log, char *filenam
         }
     }
 
-    mp_info(log, "number of files: %d\n", mf->nr_of_files);
-
 exit_mf:
+    mp_info(log, "number of files: %d\n", mf->nr_of_files);
     return mf;
 }
 
@@ -262,6 +297,8 @@ static const struct {
     { "pic",            "pictor" },
     { "xface",          "xface" },
     { "xwd",            "xwd" },
+    { "webp",           "webp" },
+    { "svg",            "svg" },
     {0}
 };
 
