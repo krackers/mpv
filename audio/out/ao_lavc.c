@@ -144,7 +144,7 @@ static int init(struct ao *ao)
     }
 
     // enough frames for at least 0.25 seconds
-    ac->framecount = ceil(ao->samplerate * 0.25 / ac->aframesize);
+    ac->framecount = (int) ceil(ao->samplerate * 0.25 / ac->aframesize);
     // but at least one!
     ac->framecount = FFMAX(ac->framecount, 1);
 
@@ -221,7 +221,7 @@ static void encode(struct ao *ao, double apts, void **data)
 
         frame->linesize[0] = frame->nb_samples * ao->sstride;
 
-        frame->pts = rint(apts * av_q2d(av_inv_q(encoder->time_base)));
+        frame->pts = (int) rint(apts * av_q2d(av_inv_q(encoder->time_base)));
 
         int64_t frame_pts = av_rescale_q(frame->pts, encoder->time_base,
                                          ac->worst_time_base);

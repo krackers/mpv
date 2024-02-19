@@ -171,7 +171,7 @@ static void drain(struct ao *ao)
         ao->driver->drain(ao);
     } else {
         double time = unlocked_get_delay(ao);
-        mp_sleep_us(MPMIN(time, maxbuffer) * 1e6);
+        mp_sleep_us((int64_t)(MPMIN(time, maxbuffer) * 1e6));
     }
 
 done:
@@ -380,7 +380,7 @@ static void *playthread(void *arg)
                     !mp_audio_buffer_samples(p->buffer))
                 {
                     double now = mp_time_sec();
-                    if (!p->expected_end_time)
+                    if (p->expected_end_time == 0)
                         p->expected_end_time = now + unlocked_get_delay(ao);
                     if (p->expected_end_time < now) {
                         p->still_playing = false;

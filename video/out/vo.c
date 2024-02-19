@@ -137,7 +137,7 @@ struct vo_internal {
     int64_t *vsync_samples;
     int num_vsync_samples;
     int64_t num_total_vsync_samples;
-    double prev_vsync;
+    int64_t prev_vsync;
     double base_vsync;
     int drop_point;
     double estimated_vsync_interval;
@@ -506,7 +506,7 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
                         vsync_time - prev_vsync);
     in->drop_point = MPMIN(in->drop_point + 1, in->num_vsync_samples);
     in->num_total_vsync_samples += 1;
-    if (in->base_vsync) {
+    if (in->base_vsync != 0) {
         in->base_vsync += in->vsync_interval;
     } else {
         in->base_vsync = vsync_time;
@@ -1297,7 +1297,7 @@ static int64_t get_current_frame_end(struct vo *vo)
         return -1;
 
     int64_t frame_duration = in->current_frame->display_synced ? 
-    							in->current_frame->num_vsyncs * in->vsync_interval
+    							(int64_t)(in->current_frame->num_vsyncs * in->vsync_interval)
     						: in->current_frame->duration;
 
     return in->current_frame->pts + MPMAX(frame_duration, 0);
@@ -1432,8 +1432,8 @@ double vo_get_display_delay(struct vo *vo)
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
     assert (!in->frame_queued);
-    int64_t res = 0;
-    if (in->base_vsync && in->vsync_interval > 1 && in->current_frame) {
+    double res = 0;
+    if (in->base_vsync != 0 && in->vsync_interval > 1 && in->current_frame) {
         res = in->base_vsync;
         int extra = !!in->rendering;
         res += (in->current_frame->num_vsyncs + extra) * in->vsync_interval;
@@ -1441,7 +1441,7 @@ double vo_get_display_delay(struct vo *vo)
             res = 0;
     }
     pthread_mutex_unlock(&in->lock);
-    return res ? (res - mp_time_us()) / 1e6 : 0;
+    return (res != 0) ? (res - mp_time_us()) / 1e6 : 0;
 }
 
 void vo_discard_timing_info(struct vo *vo)

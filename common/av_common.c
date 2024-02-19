@@ -194,7 +194,7 @@ void mp_set_av_packet(AVPacket *dst, struct demux_packet *mpkt, AVRational *tb)
         dst->flags |= mpkt->avpacket->flags;
     }
     if (mpkt && tb && tb->num > 0 && tb->den > 0)
-        dst->duration = mpkt->duration / av_q2d(*tb);
+        dst->duration = (int64_t)(mpkt->duration / av_q2d(*tb));
     dst->pts = mp_pts_to_av(mpkt ? mpkt->pts : MP_NOPTS_VALUE, tb);
     dst->dts = mp_pts_to_av(mpkt ? mpkt->dts : MP_NOPTS_VALUE, tb);
 }

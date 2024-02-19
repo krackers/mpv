@@ -34,6 +34,7 @@ def __add_generic_flags__(ctx):
                                  "-Werror=format",
                                  "-Werror=incompatible-pointer-types",
                                  "-Werror=int-conversion",
+                                 "-Werror=float-conversion",
                                  "-Wno-error=deprecated-declarations",
                                  "-Wno-error=vla",
                                  "-Wno-error=unused-variable",

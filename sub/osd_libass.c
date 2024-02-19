@@ -107,7 +107,7 @@ static void update_playres(struct ass_state *ass, struct mp_osd_res *vo_res)
         aspect = aspect / vo_res->display_par;
 
     track->PlayResY = ass->res_y ? ass->res_y : MP_ASS_FONT_PLAYRESY;
-    track->PlayResX = ass->res_x ? ass->res_x : track->PlayResY * aspect;
+    track->PlayResX = ass->res_x ? ass->res_x : (int) (track->PlayResY * aspect);
 
     // Force libass to clear its internal cache - it doesn't check for
     // PlayRes changes itself.
@@ -268,7 +268,7 @@ void osd_get_text_size(struct osd_state *osd, int *out_screen_h, int *out_font_h
     struct osd_object *obj = osd->objs[OSDTYPE_OSD];
     ASS_Style *style = prepare_osd_ass(osd, obj);
     *out_screen_h = obj->ass.track->PlayResY - style->MarginV;
-    *out_font_h = style->FontSize;
+    *out_font_h = (int) style->FontSize;
     pthread_mutex_unlock(&osd->lock);
 }
 
@@ -300,8 +300,8 @@ static void ass_draw_stop(struct ass_draw *d)
 
 static void ass_draw_c(struct ass_draw *d, float x, float y)
 {
-    int ix = round(x * (1 << (d->scale - 1)));
-    int iy = round(y * (1 << (d->scale - 1)));
+    int ix = (int) round(x * (1 << (d->scale - 1)));
+    int iy = (int) round(y * (1 << (d->scale - 1)));
     d->text = talloc_asprintf_append(d->text, " %d %d", ix, iy);
 }
 

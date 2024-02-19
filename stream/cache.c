@@ -465,7 +465,7 @@ static int cache_get_cached_control(stream_t *cache, int cmd, void *arg)
         return STREAM_OK;
     case STREAM_CTRL_GET_TIME_LENGTH:
         *(double *)arg = s->stream_time_length;
-        return s->stream_time_length ? STREAM_OK : STREAM_UNSUPPORTED;
+        return (s->stream_time_length != 0) ? STREAM_OK : STREAM_UNSUPPORTED;
     case STREAM_CTRL_GET_SIZE:
         if (s->stream_size < 0)
             return STREAM_UNSUPPORTED;

@@ -455,7 +455,7 @@ void mp_aframe_clip_timestamps(struct mp_aframe *f, double start, double end)
             if (f->pts >= end) {
                 f->av_frame->nb_samples = 0;
             } else {
-                int new = (end - f->pts) * rate;
+                int new = (int)((end - f->pts) * rate);
                 f->av_frame->nb_samples = MPCLAMP(new, 0, f->av_frame->nb_samples);
             }
         }
@@ -466,7 +466,7 @@ void mp_aframe_clip_timestamps(struct mp_aframe *f, double start, double end)
                 f->av_frame->nb_samples = 0;
                 f->pts = f_end;
             } else {
-                int skip = (start - f->pts) * rate;
+                int skip = (int)((start - f->pts) * rate);
                 skip = MPCLAMP(skip, 0, f->av_frame->nb_samples);
                 mp_aframe_skip_samples(f, skip);
             }

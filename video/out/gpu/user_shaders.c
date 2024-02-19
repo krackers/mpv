@@ -98,7 +98,7 @@ bool eval_szexpr(struct mp_log *log, void *priv,
             }
 
             switch (expr[i].val.op) {
-            case SZEXP_OP_NOT: stack[idx-1] = !stack[idx-1]; break;
+            case SZEXP_OP_NOT: stack[idx-1] = !(stack[idx-1] != 0); break;
             default: abort();
             }
             continue;

@@ -100,7 +100,7 @@ static void vf_format_process(struct mp_filter *f)
             out->color.light = MP_CSP_LIGHT_AUTO;
         }
     }
-    if (p->sig_peak)
+    if (p->sig_peak != 0)
         out->color.sig_peak = p->sig_peak;
     if (p->light)
         out->color.light = p->light;

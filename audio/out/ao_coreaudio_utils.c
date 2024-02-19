@@ -233,7 +233,7 @@ int ca_asbd_to_mp_format(const AudioStreamBasicDescription *asbd)
 {
     for (int fmt = 1; fmt < AF_FORMAT_COUNT; fmt++) {
         AudioStreamBasicDescription mp_asbd = {0};
-        ca_fill_asbd_raw(&mp_asbd, fmt, asbd->mSampleRate, asbd->mChannelsPerFrame);
+        ca_fill_asbd_raw(&mp_asbd, fmt, (int) asbd->mSampleRate, asbd->mChannelsPerFrame);
         if (ca_asbd_equals(&mp_asbd, asbd))
             return af_fmt_is_spdif(fmt) ? AF_FORMAT_S_AC3 : fmt;
     }
@@ -307,7 +307,7 @@ bool ca_asbd_is_better(AudioStreamBasicDescription *req,
 
 int64_t ca_frames_to_us(struct ao *ao, uint32_t frames)
 {
-    return frames / (float) ao->samplerate * 1e6;
+    return (int64_t) (frames / (float) ao->samplerate * 1e6);
 }
 
 #if HAVE_COREAUDIO
@@ -319,7 +319,7 @@ int64_t ca_get_latency(const AudioTimeStamp *ts)
     if (now > out)
         return 0;
 
-    return (out - now) * 1e-3;
+    return (int64_t) ((out - now) * 1e-3);
 }
 
 bool ca_stream_supports_compressed(struct ao *ao, AudioStreamID stream)
@@ -448,7 +448,7 @@ int64_t ca_get_device_latency_us(struct ao *ao, AudioDeviceID device)
         MP_VERBOSE(ao, "Device sample rate: %f\n", sample_rate);
     }
 
-    return latency_frames / sample_rate * 1e6;
+    return (int64_t) (latency_frames / sample_rate * 1e6);
 }
 
 static OSStatus ca_change_format_listener(

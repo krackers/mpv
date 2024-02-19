@@ -72,9 +72,9 @@ void mp_ass_set_style(ASS_Style *style, double res_y,
     style->Outline = opts->border_size * scale;
     style->Shadow = opts->shadow_offset * scale;
     style->Spacing = opts->spacing * scale;
-    style->MarginL = opts->margin_x * scale;
+    style->MarginL = (int) opts->margin_x * scale;
     style->MarginR = style->MarginL;
-    style->MarginV = opts->margin_y * scale;
+    style->MarginV = (int) opts->margin_y * scale;
     style->ScaleX = 1.;
     style->ScaleY = 1.;
     style->Alignment = 1 + (opts->align_x + 1) + (opts->align_y + 2) % 3 * 4;

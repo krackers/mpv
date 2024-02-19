@@ -108,7 +108,7 @@ static int init(struct ao *ao)
 
     // A "buffer" for this many seconds of audio
     int bursts = (int)(ao->samplerate * priv->bufferlen + 1) / priv->outburst;
-    priv->buffersize = priv->outburst * bursts + priv->latency;
+    priv->buffersize = (int)(priv->outburst * bursts + priv->latency);
 
     priv->last_time = mp_time_sec();
 
@@ -127,7 +127,7 @@ static void wait_drain(struct ao *ao)
     struct priv *priv = ao->priv;
     drain(ao);
     if (!priv->paused)
-        mp_sleep_us(1000000.0 * priv->buffered / ao->samplerate / priv->speed);
+        mp_sleep_us((int64_t)(1000000.0 * priv->buffered / ao->samplerate / priv->speed));
 }
 
 // stop playing and empty buffers (for seeking)
@@ -163,7 +163,7 @@ static int get_space(struct ao *ao)
     struct priv *priv = ao->priv;
 
     drain(ao);
-    int samples = priv->buffersize - priv->latency - priv->buffered;
+    int samples = (int)(priv->buffersize - priv->latency - priv->buffered);
     return samples / priv->outburst * priv->outburst;
 }
 
@@ -180,9 +180,9 @@ static int play(struct ao *ao, void **data, int samples, int flags)
     priv->playing_final = flags & AOPLAY_FINAL_CHUNK;
     if (priv->playing_final) {
         // Last audio chunk - don't round to outburst.
-        accepted = MPMIN(priv->buffersize - priv->buffered, samples);
+        accepted = (int) MPMIN(priv->buffersize - priv->buffered, samples);
     } else {
-        int maxbursts = (priv->buffersize - priv->buffered) / priv->outburst;
+        int maxbursts =  (int)((priv->buffersize - priv->buffered) / priv->outburst);
         int playbursts = samples / priv->outburst;
         int bursts = playbursts > maxbursts ? maxbursts : playbursts;
         accepted = bursts * priv->outburst;

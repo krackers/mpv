@@ -372,7 +372,7 @@ static void push_file_content(js_State *J, const char *fname, int limit)
 // utils.read_file(..). args: fname [,max]. returns [up to max] bytes as string.
 static void script_read_file(js_State *J)
 {
-    int limit = js_isundefined(J, 2) ? -1 : js_tonumber(J, 2);
+    int limit = js_isundefined(J, 2) ? -1 : (int) js_tonumber(J, 2);
     push_file_content(J, js_tostring(J, 1), limit);
 }
 
@@ -686,7 +686,7 @@ static void script__observe_property(js_State *J)
                              MPV_FORMAT_STRING, MPV_FORMAT_DOUBLE};
 
     mpv_format f = mf[checkopt(J, 3, "none", fmts, "observe type")];
-    int e = mpv_observe_property(jclient(J), js_tonumber(J, 1),
+    int e = mpv_observe_property(jclient(J), (int) js_tonumber(J, 1),
                                              js_tostring(J, 2),
                                              f);
     push_status(J, e);
@@ -695,7 +695,7 @@ static void script__observe_property(js_State *J)
 // args: id
 static void script__unobserve_property(js_State *J)
 {
-    int e = mpv_unobserve_property(jclient(J), js_tonumber(J, 1));
+    int e = mpv_unobserve_property(jclient(J), (int) js_tonumber(J, 1));
     push_status(J, e);
 }
 
@@ -719,8 +719,8 @@ static void script_get_time_ms(js_State *J)
 static void script_set_osd_ass(js_State *J)
 {
     struct script_ctx *ctx = jctx(J);
-    int res_x = js_tonumber(J, 1);
-    int res_y = js_tonumber(J, 2);
+    int res_x = (int) js_tonumber(J, 1);
+    int res_y = (int) js_tonumber(J, 2);
     const char *text = js_tostring(J, 3);
     osd_set_external(ctx->mpctx->osd, ctx->client, res_x, res_y, (char *)text);
     mp_wakeup_core(ctx->mpctx);
@@ -742,7 +742,7 @@ static void push_nums_obj(js_State *J, const char * const names[],
 static void script_get_osd_size(js_State *J)
 {
     struct mp_osd_res r = osd_get_vo_res(jctx(J)->mpctx->osd);
-    double ar = 1.0 * r.w / MPMAX(r.h, 1) / (r.display_par ? r.display_par : 1);
+    double ar = 1.0 * r.w / MPMAX(r.h, 1) / (r.display_par != 0 ? r.display_par : 1);
     const char * const names[] = {"width", "height", "aspect", NULL};
     const double vals[] = {r.w, r.h, ar};
     push_nums_obj(J, names, vals);
@@ -772,8 +772,8 @@ static void script_input_set_section_mouse_area(js_State *J)
 {
     char *section = (char *)js_tostring(J, 1);
     mp_input_set_section_mouse_area(jctx(J)->mpctx->input, section,
-        js_tonumber(J, 2), js_tonumber(J, 3),   // x0, y0
-        js_tonumber(J, 4), js_tonumber(J, 5));  // x1, y1
+        (int) js_tonumber(J, 2), (int) js_tonumber(J, 3),   // x0, y0
+        (int) js_tonumber(J, 4), (int) js_tonumber(J, 5));  // x1, y1
     push_success(J);
 }
 
@@ -1125,7 +1125,7 @@ static int jsL_checkint(js_State *J, int idx)
     double d = js_tonumber(J, idx);
     if (!(d >= INT_MIN && d <= INT_MAX))
         js_error(J, "integer out of range at index %d", idx);
-    return d;
+    return (int) d;
 }
 
 static int64_t jsL_checkint64(js_State *J, int idx)
@@ -1133,7 +1133,7 @@ static int64_t jsL_checkint64(js_State *J, int idx)
     double d = js_tonumber(J, idx);
     if (!(d >= INT64_MIN && d <= INT64_MAX))
         js_error(J, "integer out of range at index %d", idx);
-    return d;
+    return (int64_t) d;
 }
 
 // From the js stack value/array/object at index idx
@@ -1150,7 +1150,7 @@ static void makenode(void *ta_ctx, mpv_node *dst, js_State *J, int idx)
         double val = js_tonumber(J, idx);
         if (same_as_int64(val)) {  // use int, because we can
             dst->format = MPV_FORMAT_INT64;
-            dst->u.int64 = val;
+            dst->u.int64 = (int64_t) val;
         } else {
             dst->format = MPV_FORMAT_DOUBLE;
             dst->u.double_ = val;

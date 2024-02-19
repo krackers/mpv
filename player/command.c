@@ -2555,7 +2555,7 @@ static int get_frame_count(struct MPContext *mpctx)
     if (len < 0 || fps <= 0)
         return 0;
 
-    return len * fps;
+    return (int)(len * fps);
 }
 
 static int mp_property_frame_number(void *ctx, struct m_property *prop,
@@ -2759,7 +2759,7 @@ static int mp_property_window_scale(void *ctx, struct m_property *prop,
     switch (action) {
     case M_PROPERTY_SET: {
         double scale = *(double *)arg;
-        int s[2] = {vid_w * scale, vid_h * scale};
+        int s[2] = {(int)(vid_w * scale), (int)(vid_h * scale)};
         if (s[0] > 0 && s[1] > 0)
             vo_control(vo, VOCTRL_SET_UNFS_WINDOW_SIZE, s);
         goto generic;
@@ -3528,7 +3528,7 @@ static int mp_property_packet_bitrate(void *ctx, struct m_property *prop,
 
     // Same story, but used kilobits for some reason.
     if (old)
-        return m_property_int64_ro(action, arg, rate / 1000.0 + 0.5);
+        return m_property_int64_ro(action, arg, (int64_t)(rate / 1000.0 + 0.5));
 
     if (action == M_PROPERTY_PRINT) {
         rate /= 1000;
@@ -3539,7 +3539,7 @@ static int mp_property_packet_bitrate(void *ctx, struct m_property *prop,
         }
         return M_PROPERTY_OK;
     }
-    return m_property_int64_ro(action, arg, rate);
+    return m_property_int64_ro(action, arg, (int64_t) rate);
 }
 
 static int mp_property_cwd(void *ctx, struct m_property *prop,
@@ -4421,16 +4421,16 @@ static void show_property_osd(MPContext *mpctx, const char *name, int osd_mode)
     mp_property_do(name, M_PROPERTY_GET_CONSTRICTED_TYPE, &prop, mpctx);
     if ((osd_mode & MP_ON_OSD_BAR) && (prop.flags & CONF_RANGE) == CONF_RANGE) {
         if (prop.type == CONF_TYPE_INT) {
-            int n = prop.min;
+            int n = (int) prop.min;
             if (disp.osd_progbar)
-                n = disp.marker;
+                n = (int) disp.marker;
             int i;
             if (mp_property_do(name, M_PROPERTY_GET, &i, mpctx) > 0)
                 set_osd_bar(mpctx, disp.osd_progbar, prop.min, prop.max, n, i);
         } else if (prop.type == CONF_TYPE_FLOAT) {
             float n = prop.min;
             if (disp.osd_progbar)
-                n = disp.marker;
+                n = (int) disp.marker;
             float f;
             if (mp_property_do(name, M_PROPERTY_GET, &f, mpctx) > 0)
                 set_osd_bar(mpctx, disp.osd_progbar, prop.min, prop.max, n, f);

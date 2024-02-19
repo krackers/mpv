@@ -298,14 +298,14 @@ static void raw_seek(demuxer_t *demuxer, double seek_pts, int flags)
     stream_t *s = demuxer->stream;
     int64_t end = 0;
     stream_control(s, STREAM_CTRL_GET_SIZE, &end);
-    int64_t pos = seek_pts * p->frame_rate * p->frame_size;
+    double pos = seek_pts * p->frame_rate * p->frame_size;
     if (flags & SEEK_FACTOR)
         pos = end * seek_pts;
     if (pos < 0)
         pos = 0;
     if (end && pos > end)
         pos = end;
-    stream_seek(s, (pos / p->frame_size) * p->frame_size);
+    stream_seek(s, (int64_t)(pos / p->frame_size) * p->frame_size);
 }
 
 const demuxer_desc_t demuxer_desc_rawaudio = {

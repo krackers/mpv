@@ -66,7 +66,7 @@ double rel_time_to_abs(struct MPContext *mpctx, struct m_rel_time t)
             return length * (t.pos / 100.0);
         break;
     case REL_TIME_CHAPTER:
-        chapter_start_pts = chapter_start_time(mpctx, t.pos);
+        chapter_start_pts = chapter_start_time(mpctx, (int) t.pos);
         if (chapter_start_pts != MP_NOPTS_VALUE){
             /*
              * rel_time_to_abs always returns rebased timetamps,

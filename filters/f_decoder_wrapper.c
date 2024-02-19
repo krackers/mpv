@@ -230,7 +230,7 @@ bool mp_decoder_wrapper_reinit(struct mp_decoder_wrapper *d)
 
 static bool is_valid_peak(float sig_peak)
 {
-    return !sig_peak || (sig_peak >= 1 && sig_peak <= 100);
+    return sig_peak == 0 || (sig_peak >= 1 && sig_peak <= 100);
 }
 
 static void fix_image_params(struct priv *p,
@@ -661,7 +661,7 @@ struct mp_decoder_wrapper *mp_decoder_wrapper_create(struct mp_filter *parent,
 
         MP_VERBOSE(p, "Container reported FPS: %f\n", p->public.fps);
 
-        if (p->opts->force_fps) {
+        if (p->opts->force_fps != 0) {
             p->public.fps = p->opts->force_fps;
             MP_INFO(p, "FPS forced to %5.3f.\n", p->public.fps);
             MP_INFO(p, "Use --no-correct-pts to force FPS based timing.\n");
