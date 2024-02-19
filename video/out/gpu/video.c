@@ -1728,7 +1728,7 @@ static void pass_dispatch_sample_polar(struct gl_video *p, struct scaler *scaler
     if ((p->ra->caps & reqs) != reqs)
         goto fallback;
 
-    int bound = ceil(scaler->kernel->radius_cutoff);
+    int bound = (int) ceil(scaler->kernel->radius_cutoff);
     int offset = bound - 1; // padding top/left
     int padding = offset + bound; // total padding
 
@@ -1897,7 +1897,7 @@ static bool user_hook_cond(struct gl_video *p, struct image img, void *priv)
     float res = false;
     struct szexp_ctx ctx = {p, img};
     eval_szexpr(p->log, &ctx, szexp_lookup, shader->cond, &res);
-    return res;
+    return res != 0;
 }
 
 static void user_hook(struct gl_video *p, struct image img,
@@ -2461,7 +2461,7 @@ static void pass_colormanage(struct gl_video *p, struct mp_colorspace src, bool 
 
     // If there's no specific signal peak known for the output display, infer
     // it from the chosen transfer function
-    if (!dst.sig_peak)
+    if (dst.sig_peak == 0)
         dst.sig_peak = mp_trc_nom_peak(dst.gamma);
 
     bool detect_peak = p->opts.compute_hdr_peak >= 0 && mp_trc_is_hdr(src.gamma);
@@ -2564,7 +2564,7 @@ static void pass_dither(struct gl_video *p)
                 if (fmt->ctype == RA_CTYPE_UNORM) {
                     uint16_t *t = temp = talloc_array(NULL, uint16_t, size * size);
                     for (int n = 0; n < size * size; n++)
-                        t[n] = p->last_dither_matrix[n] * UINT16_MAX;
+                        t[n] = (uint16_t) (p->last_dither_matrix[n] * UINT16_MAX);
                     tex_data = t;
                 }
             } else {
@@ -2774,8 +2774,8 @@ static bool pass_render_frame(struct gl_video *p, struct mp_image *mpi,
         // Adjust margins for scale
         double scale[2];
         get_scale_factors(p, true, scale);
-        rect.ml *= scale[0]; rect.mr *= scale[0];
-        rect.mt *= scale[1]; rect.mb *= scale[1];
+        rect.ml = (int) (rect.ml * scale[0]); rect.mr = (int) (rect.mr * scale[0]);
+        rect.mt = (int) (rect.mt * scale[1]); rect.mb = (int) (rect.mb * scale[1]);
         // We should always blend subtitles in non-linear light
         if (p->use_linear) {
             pass_delinearize(p->sc, p->image_params.color.gamma);
@@ -2917,7 +2917,7 @@ static void gl_video_interpolate_frame(struct gl_video *p, struct vo_frame *t,
         size = 2;
     } else {
         assert(tscale->kernel && !tscale->kernel->polar);
-        size = ceil(tscale->kernel->size);
+        size = (int) ceil(tscale->kernel->size);
     }
 
     int radius = size/2;
@@ -3500,7 +3500,7 @@ static bool check_dumb_mode(struct gl_video *p)
     // otherwise, use auto-detection
     if (o->target_prim || o->target_trc || o->linear_scaling ||
         o->correct_downscaling || o->sigmoid_upscaling || o->interpolation ||
-        o->blend_subs || o->deband || o->unsharp)
+        o->blend_subs || o->deband || o->unsharp != 0)
         return false;
     // check remaining scalers (tscale is already implicitly excluded above)
     for (int i = 0; i < SCALER_COUNT; i++) {
@@ -3898,7 +3898,7 @@ void gl_video_configure_queue(struct gl_video *p, struct vo *vo)
             // is added!
             double radius = kernel->f.radius;
             radius = radius > 0 ? radius : p->opts.scaler[SCALER_TSCALE].radius;
-            queue_size += 1 + ceil(radius);
+            queue_size += (int) (1 + ceil(radius));
         } else {
             // Oversample/linear case
             queue_size += 2;

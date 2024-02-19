@@ -47,7 +47,7 @@ char *mp_format_time_fmt(const char *fmt, double time)
         return talloc_strdup(NULL, "unknown");
     char *sign = time < 0 ? "-" : "";
     time = time < 0 ? -time : time;
-    long long int itime = time;
+    long long int itime = (long long) time;
     long long int h, m, tm, s;
     int ms = lrint((time - itime) * 1000);
     if (ms >= 1000) {

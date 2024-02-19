@@ -78,7 +78,7 @@ bool mp_init_filter(struct filter_kernel *filter, const int *sizes,
         }
         return true;
     }
-    int size = ceil(2.0 * src_radius);
+    int size = (int) ceil(2.0 * src_radius);
     // round up to smallest available size that's still large enough
     if (size < sizes[0])
         size = sizes[0];

@@ -538,7 +538,7 @@ static const VSFrameRef *VS_CC infiltGetFrame(int frameno, int activationReason,
             struct mp_image vsframe = map_vs_frame(p, ret, true);
             mp_image_copy(&vsframe, img);
             int res = 1e6;
-            int dur = img->pkt_duration * res + 0.5;
+            int dur = (int) (img->pkt_duration * res + 0.5);
             set_vs_frame_props(p, ret, img, dur, res);
             break;
         }

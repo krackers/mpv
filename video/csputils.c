@@ -115,7 +115,7 @@ void mp_colorspace_merge(struct mp_colorspace *orig, struct mp_colorspace *new)
         orig->primaries = new->primaries;
     if (!orig->gamma)
         orig->gamma = new->gamma;
-    if (!orig->sig_peak)
+    if (orig->sig_peak == 0)
         orig->sig_peak = new->sig_peak;
     if (!orig->light)
         orig->light = new->light;

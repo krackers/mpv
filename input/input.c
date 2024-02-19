@@ -693,7 +693,7 @@ static bool process_wheel(struct input_ctx *ictx, int code, double *scale,
     // scale value crosses 1.0. Non-scalable input commands will be ran that
     // many times.
     state->unit_accum += *scale * dir;
-    *scale_units = trunc(state->unit_accum * dir);
+    *scale_units = (int) trunc(state->unit_accum * dir);
     state->unit_accum -= *scale_units * dir;
     return true;
 }
@@ -827,8 +827,8 @@ void mp_input_set_mouse_pos_artificial(struct input_ctx *ictx, int x, int y)
         x = MPCLAMP(x, dst->x0, dst->x1) - dst->x0;
         y = MPCLAMP(y, dst->y0, dst->y1) - dst->y0;
         if (ictx->mouse_src_mangle) {
-            x = x * 1.0 / (dst->x1 - dst->x0) * (src->x1 - src->x0) + src->x0;
-            y = y * 1.0 / (dst->y1 - dst->y0) * (src->y1 - src->y0) + src->y0;
+            x = (int) (x * 1.0 / (dst->x1 - dst->x0) * (src->x1 - src->x0) + src->x0);
+            y = (int) (y * 1.0 / (dst->y1 - dst->y0) * (src->y1 - src->y0) + src->y0);
         }
         MP_TRACE(ictx, "-> %d/%d\n", x, y);
     }

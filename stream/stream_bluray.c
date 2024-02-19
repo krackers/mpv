@@ -186,7 +186,7 @@ static int bluray_stream_control(stream_t *s, int cmd, void *arg)
         const BLURAY_TITLE_INFO *ti = b->title_info;
         if (!ti)
             return STREAM_UNSUPPORTED;
-        int chapter = *(double *)arg;
+        int chapter = (int) *(double *)arg;
         double time = MP_NOPTS_VALUE;
         if (chapter >= 0 || chapter < ti->chapter_count)
             time = BD_TIME_TO_MP(ti->chapters[chapter].start);

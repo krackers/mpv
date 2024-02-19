@@ -733,7 +733,7 @@ int encode_lavc_getstatus(struct encode_lavc_context *ctx,
     if (p->frames) {
         snprintf(buf, bufsize, "{%.1fmin %.1ffps %.1fMB}",
                  minutes, fps, megabytes);
-    } else if (p->audioseconds) {
+    } else if (p->audioseconds != 0) {
         snprintf(buf, bufsize, "{%.1fmin %.2fx %.1fMB}",
                  minutes, x, megabytes);
     } else {

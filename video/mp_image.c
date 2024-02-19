@@ -638,7 +638,7 @@ char *mp_image_params_to_str_buf(char *b, size_t bs,
                         m_opt_choice_str(mp_csp_trc_names, p->color.gamma),
                         m_opt_choice_str(mp_csp_levels_names, p->color.levels),
                         m_opt_choice_str(mp_csp_light_names, p->color.light));
-        if (p->color.sig_peak)
+        if (p->color.sig_peak != 0)
             mp_snprintf_cat(b, bs, " SP=%f", p->color.sig_peak);
         mp_snprintf_cat(b, bs, " CL=%s",
                         m_opt_choice_str(mp_chroma_names, p->chroma_location));
@@ -805,7 +805,7 @@ void mp_image_params_guess_csp(struct mp_image_params *params)
         params->color.gamma = MP_CSP_TRC_AUTO;
     }
 
-    if (!params->color.sig_peak) {
+    if (params->color.sig_peak == 0) {
         if (params->color.gamma == MP_CSP_TRC_HLG) {
             params->color.sig_peak = 1000 / MP_REF_WHITE; // reference display
         } else {
@@ -903,7 +903,7 @@ struct mp_image *mp_image_from_av_frame(struct AVFrame *src)
 
     // Otherwise, try getting the mastering metadata if available
     sd = av_frame_get_side_data(src, AV_FRAME_DATA_MASTERING_DISPLAY_METADATA);
-    if (!dst->params.color.sig_peak && sd) {
+    if (dst->params.color.sig_peak == 0 && sd) {
         AVMasteringDisplayMetadata *mdm = (AVMasteringDisplayMetadata *)sd->data;
         if (mdm->has_luminance)
             dst->params.color.sig_peak = av_q2d(mdm->max_luminance) / MP_REF_WHITE;
@@ -1004,12 +1004,12 @@ struct AVFrame *mp_image_to_av_frame(struct mp_image *src)
         new_ref->icc_profile = NULL;
     }
 
-    if (src->params.color.sig_peak) {
+    if (src->params.color.sig_peak != 0) {
         AVContentLightMetadata *clm =
             av_content_light_metadata_create_side_data(dst);
         if (!clm)
             abort();
-        clm->MaxCLL = src->params.color.sig_peak * MP_REF_WHITE;
+        clm->MaxCLL = (unsigned int) src->params.color.sig_peak * MP_REF_WHITE;
     }
 
     // Add back side data, but only for types which are not specially handled
