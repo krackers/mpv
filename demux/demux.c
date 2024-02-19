@@ -43,6 +43,8 @@
 #include "stheader.h"
 #include "cue.h"
 
+#pragma clang diagnostic error "-Wfloat-conversion"
+
 // Demuxer list
 extern const struct demuxer_desc demuxer_desc_edl;
 extern const struct demuxer_desc demuxer_desc_cue;

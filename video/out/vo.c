@@ -46,6 +46,8 @@
 #include "osdep/io.h"
 #include "osdep/threads.h"
 
+#pragma clang diagnostic error "-Wfloat-conversion"
+
 extern uint64_t mach_absolute_time(void);
 extern double mach_timebase_ratio;
 
@@ -137,8 +139,11 @@ struct vo_internal {
     int64_t *vsync_samples;
     int num_vsync_samples;
     int64_t num_total_vsync_samples;
-    double prev_vsync;
-    double base_vsync;
+    int64_t prev_vsync;              // Actual last vsync timestamp in mp_time units
+    double base_vsync;               // "Smoothed" last vsync timestamp. This increments by
+                                     // vsync_interval every vsync, except for major jumps when
+                                     // is reset to prev_vsync.
+
     int drop_point;
     double estimated_vsync_interval;
     double estimated_vsync_jitter;
@@ -506,7 +511,7 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
                         vsync_time - prev_vsync);
     in->drop_point = MPMIN(in->drop_point + 1, in->num_vsync_samples);
     in->num_total_vsync_samples += 1;
-    if (in->base_vsync) {
+    if (in->base_vsync != 0) {
         in->base_vsync += in->vsync_interval;
     } else {
         in->base_vsync = vsync_time;
@@ -1289,15 +1294,16 @@ void vo_seek_reset(struct vo *vo)
     pthread_mutex_unlock(&in->lock);
 }
 
-// Muist be called locked. Returns time in us, relative to mp_time
-static int64_t get_current_frame_end(struct vo *vo)
+// Muist be called locked. Assumes that we have finished rendering.
+// Returns time in us, relative to mp_time
+static double get_current_frame_end(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
     if (!in->current_frame || in->rendering)
         return -1;
 
-    int64_t frame_duration = in->current_frame->display_synced ? 
-    							in->current_frame->num_vsyncs * in->vsync_interval
+    double frame_duration = in->current_frame->display_synced ? 
+                            (in->current_frame->num_vsyncs * in->vsync_interval)
     						: in->current_frame->duration;
 
     return in->current_frame->pts + MPMAX(frame_duration, 0);
@@ -1322,7 +1328,7 @@ double vo_still_displaying(struct vo *vo)
         // and gone to sleep. So we need the user to manually
         // poll themselves.
         int64_t now = mp_time_us();
-        int64_t frame_end = get_current_frame_end(vo);
+        double frame_end = get_current_frame_end(vo);
         ret = now < frame_end ? (frame_end - now)/1e6 : 0;
     }
     pthread_mutex_unlock(&vo->in->lock);
@@ -1432,8 +1438,8 @@ double vo_get_display_delay(struct vo *vo)
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
     assert (!in->frame_queued);
-    int64_t res = 0;
-    if (in->base_vsync && in->vsync_interval > 1 && in->current_frame) {
+    double res = 0;
+    if (in->base_vsync != 0 && in->vsync_interval > 1 && in->current_frame) {
         res = in->base_vsync;
         int extra = !!in->rendering;
         res += (in->current_frame->num_vsyncs + extra) * in->vsync_interval;
@@ -1441,7 +1447,7 @@ double vo_get_display_delay(struct vo *vo)
             res = 0;
     }
     pthread_mutex_unlock(&in->lock);
-    return res ? (res - mp_time_us()) / 1e6 : 0;
+    return res != 0 ? (res - mp_time_us()) / 1e6 : 0;
 }
 
 void vo_discard_timing_info(struct vo *vo)
