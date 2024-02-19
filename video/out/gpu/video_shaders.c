@@ -157,7 +157,7 @@ void pass_sample_polar(struct gl_shader_cache *sc, struct scaler *scaler,
     gl_sc_uniform_texture(sc, "lut", scaler->lut);
 
     GLSLF("// scaler samples\n");
-    int bound = ceil(scaler->kernel->radius_cutoff);
+    int bound = (int) ceil(scaler->kernel->radius_cutoff);
     for (int y = 1-bound; y <= bound; y += 2) {
         for (int x = 1-bound; x <= bound; x += 2) {
             // First we figure out whether it's more efficient to use direct
@@ -207,7 +207,7 @@ void pass_sample_polar(struct gl_shader_cache *sc, struct scaler *scaler,
 void pass_compute_polar(struct gl_shader_cache *sc, struct scaler *scaler,
                         int components, int bw, int bh, int iw, int ih)
 {
-    int bound = ceil(scaler->kernel->radius_cutoff);
+    int bound = (int) ceil(scaler->kernel->radius_cutoff);
     int offset = bound - 1; // padding top/left
 
     GLSL(color = vec4(0.0);)
@@ -574,7 +574,7 @@ static const float sdr_avg = 0.25;
 
 // The threshold for which to consider an average luminance difference to be
 // a sign of a scene change.
-static const int scene_threshold = 0.2 * MP_REF_WHITE;
+static const int scene_threshold = (int) (0.2 * MP_REF_WHITE);
 
 static void hdr_update_peak(struct gl_shader_cache *sc)
 {

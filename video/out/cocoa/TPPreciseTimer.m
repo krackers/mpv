@@ -124,7 +124,7 @@ static void thread_signal(int signal) {
         if ( (double)(mach_absolute_time() * timebase_ratio) >= time-_spinLockTime ) {
             
             // Spin lock until it's time
-            uint64_t end = time / timebase_ratio;
+            uint64_t end = (uint64_t) (time / timebase_ratio);
             //printf("---\n");
             while ( _spinLockTime > 0 && mach_absolute_time() < end ) {
                 if (_spinLockSleepRatio > 0)

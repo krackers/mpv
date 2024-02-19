@@ -370,9 +370,9 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
         // Work around a bug in libass. MarginV, MarginL, MarginR are usually scaled
         // with the PlayRes size, but unlike font libass doesn't automatically scale
         // margins on override for us. This is not exact since margin is int, not float.
-        style.MarginV *= track->PlayResY / 288.0;
-        style.MarginL *= track->PlayResX / 384.0;
-        style.MarginR *= track->PlayResX / 384.0;
+        style.MarginV *= (int) (track->PlayResY / 288.0);
+        style.MarginL *= (int) (track->PlayResX / 384.0);
+        style.MarginR *= (int) (track->PlayResX / 384.0);
 
         // We similarly want to ensure the border size (in px) remains visually constant
         // regardless of the underlying content. Libass takes
@@ -467,8 +467,8 @@ static long long find_timestamp(struct sd *sd, double pts)
 
     // Try to fix small gaps and overlaps.
     ASS_Track *track = priv->ass_track;
-    int threshold = SUB_GAP_THRESHOLD * 1000;
-    int keep = SUB_GAP_KEEP * 1000;
+    int threshold = (int) (SUB_GAP_THRESHOLD * 1000);
+    int keep = (int) (SUB_GAP_KEEP * 1000);
 
     // Find the "current" event.
     ASS_Event *ev[2] = {0};
@@ -759,7 +759,7 @@ static int control(struct sd *sd, enum sd_ctrl cmd, void *arg)
     case SD_CTRL_SUB_STEP: {
         double *a = arg;
         long long ts = llrint(a[0] * 1000.0);
-        long long res = ass_step_sub(ctx->ass_track, ts, a[1]);
+        long long res = ass_step_sub(ctx->ass_track, ts, (int) a[1]);
         if (!res)
             return false;
         a[0] += res / 1000.0;

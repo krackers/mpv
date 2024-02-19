@@ -208,7 +208,7 @@ static int lmuvalue_to_lux(uint64_t v)
     double term2 = -3.4 * power_c2 * pow(v,2);
     double term1 =  3.9 * power_c1 * v;
 
-    int lux = ceil(term4 + term3 + term2 + term1 - 0.19);
+    int lux = (int) ceil(term4 + term3 + term2 + term1 - 0.19);
     return lux > 0 ? lux : 0;
 }
 
@@ -739,14 +739,14 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
     run_on_main_thread(vo, ^{
         NSRect r = [s->current_screen frame];
         r = [s->current_screen convertRectToBacking:r];
-        struct mp_rect screenrc = {0, 0, r.size.width, r.size.height};
+        struct mp_rect screenrc = {0, 0, (int) r.size.width, (int) r.size.height};
         struct vo_win_geometry geo;
         vo_calc_window_geometry2(vo, &screenrc, [s->current_screen backingScaleFactor], &geo);
         vo_apply_window_geometry(vo, &geo);
 
         //flip y coordinates
-        geo.win.y1 = r.size.height - geo.win.y1;
-        geo.win.y0 = r.size.height - geo.win.y0;
+        geo.win.y1 = (int) (r.size.height - geo.win.y1);
+        geo.win.y0 = (int) (r.size.height - geo.win.y0);
 
         uint32_t width = vo->dwidth;
         uint32_t height = vo->dheight;
@@ -780,8 +780,8 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
 
         // Use the actual size of the new window
         NSRect frame = [s->video frameInPixels];
-        vo->dwidth  = s->vo_dwidth  = frame.size.width;
-        vo->dheight = s->vo_dheight = frame.size.height;
+        vo->dwidth  = s->vo_dwidth  = (int) frame.size.width;
+        vo->dheight = s->vo_dheight = (int) frame.size.height;
 
         s->update_context = 1;
 
@@ -844,9 +844,9 @@ int cocoa_set_realtime(struct mp_log *log, double periodFraction) {
     int ret;
     thread_port_t threadport = pthread_mach_thread_np(pthread_self());
 
-    ttcpolicy.period=period;
-    ttcpolicy.computation=computation;
-    ttcpolicy.constraint=constraint;
+    ttcpolicy.period= (int) period;
+    ttcpolicy.computation= (int) computation;
+    ttcpolicy.constraint= (int) constraint;
     ttcpolicy.preemptible=1;
 
     if ((ret=thread_policy_set(threadport,
@@ -868,7 +868,7 @@ void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
     // if (diff > 500330) {
     //     printf("\tSkipped vsync %llu\n", diff);
     // }
-    info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
+    info->last_queue_display_time = (int64_t) (mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6));
     // last_time = s->last_vsync_time;
 }
 
@@ -995,8 +995,8 @@ static int vo_cocoa_control_on_main_thread(struct vo *vo, int request, void *arg
                        s->unfs_window : [s->view frame];
         if(!vo->opts->hidpi_window_scale)
             rect = [s->current_screen convertRectToBacking:rect];
-        sz[0] = rect.size.width;
-        sz[1] = rect.size.height;
+        sz[0] = (int) rect.size.width;
+        sz[1] = (int) rect.size.height;
         return VO_TRUE;
     }
     case VOCTRL_SET_UNFS_WINDOW_SIZE: {
@@ -1004,7 +1004,7 @@ static int vo_cocoa_control_on_main_thread(struct vo *vo, int request, void *arg
         NSRect r = NSMakeRect(0, 0, sz[0], sz[1]);
         if(vo->opts->hidpi_window_scale)
             r = [s->current_screen convertRectToBacking:r];
-        queue_new_video_size(vo, r.size.width, r.size.height);
+        queue_new_video_size(vo, (int) r.size.width, (int) r.size.height);
         return VO_TRUE;
     }
     case VOCTRL_GET_WIN_STATE: {
@@ -1089,7 +1089,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     BOOL movable = NO;
     if (!self.vout->cocoa->fullscreen) {
-        movable = !mp_input_test_dragging(self.vout->input_ctx, p.x, p.y);
+        movable = !mp_input_test_dragging(self.vout->input_ctx, (int) p.x, (int) p.y);
     }
 
     [self.vout->cocoa->window setMovableByWindowBackground:movable];

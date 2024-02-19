@@ -901,7 +901,7 @@ bool mp_cancel_test(struct mp_cancel *c)
 bool mp_cancel_wait(struct mp_cancel *c, double timeout)
 {
     struct pollfd fd = { .fd = c->wakeup_pipe[0], .events = POLLIN };
-    poll(&fd, 1, timeout * 1000);
+    poll(&fd, 1, (int) (timeout * 1000));
     return fd.revents & POLLIN;
 }
 

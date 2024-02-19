@@ -26,6 +26,8 @@
 #include "osdep/timer.h"
 #include "options/m_option.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 struct priv {
     int64_t last_vsync;
 

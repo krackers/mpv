@@ -643,7 +643,7 @@ static int script_set_property_bool(lua_State *L)
 
 static bool is_int(double d)
 {
-    int64_t v = d;
+    int64_t v = (int64_t) d;
     return d == (double)v;
 }
 
@@ -657,7 +657,7 @@ static int script_set_property_number(lua_State *L)
     // way around.
     int res;
     if (is_int(d)) {
-        res = mpv_set_property(ctx->client, p, MPV_FORMAT_INT64, &(int64_t){d});
+        res = mpv_set_property(ctx->client, p, MPV_FORMAT_INT64, &(int64_t){ (int64_t) d});
     } else {
         res = mpv_set_property(ctx->client, p, MPV_FORMAT_DOUBLE, &d);
     }
@@ -676,7 +676,7 @@ static void makenode(void *tmp, mpv_node *dst, lua_State *L, int t)
         double d = lua_tonumber(L, t);
         if (is_int(d)) {
             dst->format = MPV_FORMAT_INT64;
-            dst->u.int64 = d;
+            dst->u.int64 = (int64_t) d;
         } else {
             dst->format = MPV_FORMAT_DOUBLE;
             dst->u.double_ = d;
@@ -936,7 +936,7 @@ static mpv_format check_property_format(lua_State *L, int arg)
 static int script_raw_observe_property(lua_State *L)
 {
     struct script_ctx *ctx = get_ctx(L);
-    uint64_t id = luaL_checknumber(L, 1);
+    uint64_t id = (uint64_t) luaL_checknumber(L, 1);
     const char *name = luaL_checkstring(L, 2);
     mpv_format format = check_property_format(L, 3);
     return check_error(L, mpv_observe_property(ctx->client, id, name, format));
@@ -945,7 +945,7 @@ static int script_raw_observe_property(lua_State *L)
 static int script_raw_unobserve_property(lua_State *L)
 {
     struct script_ctx *ctx = get_ctx(L);
-    uint64_t id = luaL_checknumber(L, 1);
+    uint64_t id = (uint64_t) luaL_checknumber(L, 1);
     lua_pushnumber(L, mpv_unobserve_property(ctx->client, id));
     return 1;
 }
@@ -988,7 +988,7 @@ static int script_get_osd_size(lua_State *L)
     struct MPContext *mpctx = get_mpctx(L);
     struct mp_osd_res vo_res = osd_get_vo_res(mpctx->osd);
     double aspect = 1.0 * vo_res.w / MPMAX(vo_res.h, 1) /
-                    (vo_res.display_par ? vo_res.display_par : 1);
+                    (vo_res.display_par != 0 ? vo_res.display_par : 1);
     lua_pushnumber(L, vo_res.w);
     lua_pushnumber(L, vo_res.h);
     lua_pushnumber(L, aspect);

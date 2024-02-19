@@ -43,6 +43,8 @@
 #include "filters/user_filters.h"
 #include "options/m_option.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 struct f_opts {
     float scale_nominal;
     float ms_stride;

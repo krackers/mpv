@@ -81,7 +81,7 @@ static void makegauss(struct ctx *k, unsigned int sizeb)
             int cy = (int)gy - k->gauss_radius;
             int sq = cx * cx + cy * cy;
             double e = exp(-sqrt(sq) * sigma);
-            uint64_t v = e / gauss_size2 * UINT64_MAX;
+            uint64_t v = (uint64_t) (e / gauss_size2 * UINT64_MAX);
             k->gauss[XY(k, gx, gy)] =
                 k->gauss[XY(k, gy, gx)] =
                 k->gauss[XY(k, gx, gauss_size - 1 - gy)] =

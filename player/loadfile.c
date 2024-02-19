@@ -137,7 +137,7 @@ static void print_stream(struct MPContext *mpctx, struct track *t)
     if (t->type == STREAM_VIDEO) {
         if (s && s->codec->disp_w)
             APPEND(b, " %dx%d", s->codec->disp_w, s->codec->disp_h);
-        if (s && s->codec->fps)
+        if (s && s->codec->fps != 0)
             APPEND(b, " %.3ffps", s->codec->fps);
     } else if (t->type == STREAM_AUDIO) {
         if (s && s->codec->channels.num)
