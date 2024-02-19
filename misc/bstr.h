@@ -278,7 +278,7 @@ static inline void bstr_free(struct bstr *s) {
 
 
 // Returns a new bstr allocated on ta_ctx with the input bstrs joined with joiner.
-static bstr0 bstr_join_lines(void *ta_ctx, bstr *parts, int num_parts, char joiner)
+static inline bstr0 bstr_join_lines(void *ta_ctx, bstr *parts, int num_parts, char joiner)
 {
     if (num_parts <= 0) {
         return bstr_new(ta_ctx);

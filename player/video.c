@@ -46,6 +46,8 @@
 #include "command.h"
 #include "screenshot.h"
 
+#pragma clang diagnostic error "-Wfloat-conversion"
+
 enum {
     // update_video() - code also uses: <0 error, 0 eof, >0 progress
     VD_ERROR = -1,
@@ -317,7 +319,7 @@ static void check_framedrop(struct MPContext *mpctx, struct vo_chain *vo_c)
             return;
         double frame_time =  1.0 / fps;
         // try to drop as many frames as we appear to be behind
-        vo_c->track->dec->attempt_framedrops =
+        vo_c->track->dec->attempt_framedrops = (int)
             MPCLAMP((mpctx->last_av_difference - 0.010) / frame_time, 0, 100);
     }
 }
@@ -844,7 +846,7 @@ static void handle_display_sync_frame(struct MPContext *mpctx,
     // If we are too far ahead/behind, attempt to drop/repeat frames.
     // Tolerate some desync to avoid frame dropping due to jitter.
     if (drop && fabs(av_diff) >= 0.020 && fabs(av_diff) / vsync >= 1)
-        drop_repeat = -av_diff / vsync; // round towards 0
+        drop_repeat = (int) (-av_diff / vsync); // round towards 0
 
     // We can only drop all frames at most. We can repeat much more frames,
     // but we still limit it to 10 times the original frames to avoid that
@@ -1101,7 +1103,7 @@ void write_video(struct MPContext *mpctx)
     if (!vo->params || !mp_image_params_equal(&p, vo->params)) {
         // Changing config deletes the current frame; wait until it's finished.
         double wait_status = vo_still_displaying(vo);
-        if (wait_status) {
+        if (wait_status != 0) {
             if (request_queue_time > 0) {
                 printf("VO Still displaying, wait status %f\n", wait_status);
             }
@@ -1199,7 +1201,7 @@ void write_video(struct MPContext *mpctx)
         diff /= mpctx->video_speed;
         if (mpctx->time_frame < 0)
             diff += mpctx->time_frame;
-        frame->duration = MPCLAMP(diff, 0, 10) * 1e6;
+        frame->duration = (int) (MPCLAMP(diff, 0, 10) * 1e6);
     }
 
     mpctx->video_pts = mpctx->next_frames[0]->pts;
