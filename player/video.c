@@ -858,7 +858,7 @@ static void handle_display_sync_frame(struct MPContext *mpctx,
 
     // Estimate the video position, so we can calculate a good A/V difference
     // value below. This is used to estimate A/V drift.
-    double time_left = vo_get_delay(vo);
+    double time_left = vo_get_display_delay(vo);
 
     // We also know that the timing is (necessarily) off, because we have to
     // align frame timings on the vsync boundaries. This is unavoidable, and
@@ -1100,10 +1100,15 @@ void write_video(struct MPContext *mpctx)
     struct mp_image_params p = mpctx->next_frames[0]->params;
     if (!vo->params || !mp_image_params_equal(&p, vo->params)) {
         // Changing config deletes the current frame; wait until it's finished.
-        if (vo_still_displaying(vo)) {
+        double wait_status = vo_still_displaying(vo);
+        if (wait_status) {
             if (request_queue_time > 0) {
-                printf("VO Still displaying\n");
+                printf("VO Still displaying, wait status %f\n", wait_status);
             }
+            if (wait_status > 0) {
+                mp_set_timeout(mpctx, wait_status);
+            }
+
             return;
         }
 
