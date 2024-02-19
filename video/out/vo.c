@@ -1289,22 +1289,44 @@ void vo_seek_reset(struct vo *vo)
     pthread_mutex_unlock(&in->lock);
 }
 
-// Return true if there is still a frame being displayed (or queued).
-// If this returns true, a wakeup some time in the future is guaranteed.
-bool vo_still_displaying(struct vo *vo)
+// Muist be called locked. Returns time in us, relative to mp_time
+static int64_t get_current_frame_end(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
+    if (!in->current_frame || in->rendering)
+        return -1;
+
+    int64_t frame_duration = in->current_frame->display_synced ? 
+    							in->current_frame->num_vsyncs * in->vsync_interval
+    						: in->current_frame->duration;
+
+    return in->current_frame->pts + MPMAX(frame_duration, 0);
+}
+
+// If 0, VO can be reconfigured freely without dropping frames.
+// If > 0, frame is rendered but not yet finished displaying for its duration.
+//          Caller should wait the number of secs and retry.
+// If < 0 (-1), then frame is still rendering. The VO thread will wakeup core when state changes.
+double vo_still_displaying(struct vo *vo)
+{
+    double ret = 0;
+    struct vo_internal *in = vo->in;
     pthread_mutex_lock(&vo->in->lock);
-    int64_t now = mp_time_us();
-    int64_t frame_end = 0;
-    if (in->current_frame) {
-        frame_end = in->current_frame->pts + MPMAX(in->current_frame->duration, 0);
-        if (in->current_frame->display_synced)
-            frame_end = in->current_frame->num_vsyncs > 0 ? INT64_MAX : 0;
+    if (!in->hasframe) {
+        ret = 0;
+    } else if (in->rendering || in->frame_queued) {
+        // In these cases, VO thread will wakeup core
+        ret = -1;
+    } else {
+        // In this case, VO thread has finished rendering
+        // and gone to sleep. So we need the user to manually
+        // poll themselves.
+        int64_t now = mp_time_us();
+        int64_t frame_end = get_current_frame_end(vo);
+        ret = now < frame_end ? (frame_end - now)/1e6 : 0;
     }
-    bool working = now < frame_end || in->rendering || in->frame_queued;
     pthread_mutex_unlock(&vo->in->lock);
-    return working && in->hasframe;
+    return ret;
 }
 
 // Whether at least 1 frame was queued or rendered since last seek or reconfig.
@@ -1405,7 +1427,7 @@ double vo_get_estimated_vsync_jitter(struct vo *vo)
 // This can only be called while no new frame is queued (after
 // vo_is_ready_for_frame). Returns 0 for non-display synced frames, or if the
 // deadline for continuous display was missed.
-double vo_get_delay(struct vo *vo)
+double vo_get_display_delay(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
