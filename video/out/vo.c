@@ -1225,6 +1225,8 @@ static void *vo_thread(void *ptr)
             continue;
         }
 
+        if (wait_until <= now)
+            continue;
         wait_vo(vo, wait_until);
         last_wait_until = wait_until - now;
 
