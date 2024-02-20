@@ -229,17 +229,18 @@ struct ra_layout std430_layout(struct ra_renderpass_input *inp)
 }
 
 // Resize a texture to a new desired size and format if necessary
-bool ra_tex_resize(struct ra *ra, struct mp_log *log, struct ra_tex **tex,
-                   int w, int h, const struct ra_format *fmt)
+bool ra_tex_resize(struct ra *ra, struct mp_log *log, struct ra_tex **tex, 
+                    struct ra_tex_params *base_params)
 {
     if (*tex) {
         struct ra_tex_params cur_params = (*tex)->params;
-        if (cur_params.w == w && cur_params.h == h && cur_params.format == fmt)
+        if (cur_params.w == base_params->w && cur_params.h == base_params->h && cur_params.format == base_params->format)
             return true;
     }
 
-    mp_dbg(log, "Resizing texture: %dx%d\n", w, h);
+    mp_dbg(log, "Resizing texture: %dx%d\n", base_params->w, base_params->h);
 
+    const struct ra_format *fmt = base_params->format;
     if (!fmt || !fmt->renderable || !fmt->linear_filter) {
         mp_err(log, "Format %s not supported.\n", fmt ? fmt->name : "(unset)");
         return false;
@@ -247,12 +248,12 @@ bool ra_tex_resize(struct ra *ra, struct mp_log *log, struct ra_tex **tex,
 
     ra_tex_free(ra, tex);
     struct ra_tex_params params = {
-        .dimensions = 2,
-        .w = w,
-        .h = h,
-        .d = 1,
+        .dimensions = base_params->dimensions,
+        .w = base_params->w,
+        .h = base_params->h,
+        .d = base_params->d,
         .format = fmt,
-        .src_linear = true,
+        .src_linear = base_params->src_linear,
         .render_src = true,
         .render_dst = true,
         .storage_dst = true,

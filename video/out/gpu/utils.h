@@ -91,7 +91,7 @@ struct ra_layout std140_layout(struct ra_renderpass_input *inp);
 struct ra_layout std430_layout(struct ra_renderpass_input *inp);
 
 bool ra_tex_resize(struct ra *ra, struct mp_log *log, struct ra_tex **tex,
-                   int w, int h, const struct ra_format *fmt);
+                    struct ra_tex_params *base_params);
 
 // A wrapper around ra_timer that does result pooling, averaging etc.
 struct timer_pool;

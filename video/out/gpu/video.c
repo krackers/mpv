@@ -1246,7 +1246,14 @@ static void finish_pass_fbo(struct gl_video *p, struct ra_fbo fbo,
 static void finish_pass_tex(struct gl_video *p, struct ra_tex **dst_tex,
                             int w, int h)
 {
-    if (!ra_tex_resize(p->ra, p->log, dst_tex, w, h, p->fbo_format)) {
+    if (!ra_tex_resize(p->ra, p->log, dst_tex, &(struct ra_tex_params)
+                                                {.dimensions = 2,
+                                                 .w = w,
+                                                 .h = h,
+                                                 .d = 1,
+                                                 .format = p->fbo_format,
+                                                 .src_linear = true,
+                                                })) {
         cleanup_binds(p);
         gl_sc_reset(p->sc);
         return;
@@ -3114,8 +3121,14 @@ void gl_video_render_frame(struct gl_video *p, struct vo_frame *frame,
                     if (fmt->dummy_format)
                         fmt = p->fbo_format;
                     bool r = ra_tex_resize(p->ra, p->log, &p->output_tex,
-                                           fbo.tex->params.w, fbo.tex->params.h,
-                                           fmt);
+                                            &(struct ra_tex_params)
+                                                {.dimensions = 2,
+                                                 .w = fbo.tex->params.w,
+                                                 .h = fbo.tex->params.h,
+                                                 .d = 1,
+                                                 .format = fmt,
+                                                 .src_linear = true,
+                                                });
                     if (r) {
                         dest_fbo = (struct ra_fbo) { p->output_tex };
                         p->output_tex_valid = true;
@@ -3356,7 +3369,14 @@ static void reinterleave_vdpau(struct gl_video *p,
 
         int comps = n == 0 ? 1 : 2;
         const struct ra_format *fmt = ra_find_unorm_format(p->ra, 1, comps);
-        ra_tex_resize(p->ra, p->log, tex, w, h * 2, fmt);
+        ra_tex_resize(p->ra, p->log, tex, &(struct ra_tex_params)
+                                                {.dimensions = 2,
+                                                .w = w,
+                                                .h = h * 2,
+                                                .d = 1,
+                                                .format = fmt,
+                                                .src_linear = true,
+                                                });
         struct ra_fbo fbo = { *tex };
         finish_pass_fbo(p, fbo, true, &(struct mp_rect){0, 0, w, h * 2});
 
@@ -3480,7 +3500,14 @@ static bool test_fbo(struct gl_video *p, const struct ra_format *fmt)
 {
     MP_VERBOSE(p, "Testing FBO format %s\n", fmt->name);
     struct ra_tex *tex = NULL;
-    bool success = ra_tex_resize(p->ra, p->log, &tex, 16, 16, fmt);
+    bool success = ra_tex_resize(p->ra, p->log, &tex, &(struct ra_tex_params)
+                                                        {.dimensions = 2,
+                                                         .w = 16,
+                                                         .h = 16,
+                                                         .d = 1,
+                                                         .format = fmt,
+                                                         .src_linear = true,
+                                                        });
     ra_tex_free(p->ra, &tex);
     return success;
 }
