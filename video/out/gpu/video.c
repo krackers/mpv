@@ -1385,11 +1385,8 @@ static void saved_img_store(struct gl_video *p, const char *name,
 static bool pass_hook_setup_binds(struct gl_video *p, const char *name,
                                   struct image img, struct tex_hook *hook)
 {
-    for (int t = 0; t < SHADER_MAX_BINDS; t++) {
+    for (int t = 0; t < SHADER_MAX_BINDS && hook->bind_tex[t]; t++) {
         char *bind_name = (char *)hook->bind_tex[t];
-
-        if (!bind_name)
-            continue;
 
         // This is a special name that means "currently hooked texture"
         if (strcmp(bind_name, "HOOKED") == 0) {
@@ -1450,8 +1447,8 @@ static struct image pass_hook(struct gl_video *p, const char *name,
         struct tex_hook *hook = &p->tex_hooks[i];
 
         // Figure out if this pass hooks this texture
-        for (int h = 0; h < SHADER_MAX_HOOKS; h++) {
-            if (hook->hook_tex[h] && strcmp(hook->hook_tex[h], name) == 0)
+        for (int h = 0; h < SHADER_MAX_HOOKS && hook->hook_tex[h]; h++) {
+            if (strcmp(hook->hook_tex[h], name) == 0)
                 goto found;
         }
 
@@ -1521,13 +1518,13 @@ static void pass_opt_hook_point(struct gl_video *p, const char *name,
     for (int i = 0; i < p->num_tex_hooks; i++) {
         struct tex_hook *hook = &p->tex_hooks[i];
 
-        for (int h = 0; h < SHADER_MAX_HOOKS; h++) {
-            if (hook->hook_tex[h] && strcmp(hook->hook_tex[h], name) == 0)
+        for (int h = 0; h < SHADER_MAX_HOOKS && hook->hook_tex[h]; h++) {
+            if (strcmp(hook->hook_tex[h], name) == 0)
                 goto found;
         }
 
-        for (int b = 0; b < SHADER_MAX_BINDS; b++) {
-            if (hook->bind_tex[b] && strcmp(hook->bind_tex[b], name) == 0)
+        for (int b = 0; b < SHADER_MAX_BINDS && hook->bind_tex[b]; b++) {
+            if (strcmp(hook->bind_tex[b], name) == 0)
                 goto found;
         }
     }
@@ -1942,9 +1939,9 @@ static bool add_user_hook(void *priv, struct gl_user_shader_hook hook)
         .priv = copy,
     };
 
-    for (int h = 0; h < SHADER_MAX_HOOKS; h++)
+    for (int h = 0; h < SHADER_MAX_HOOKS && hook.hook_tex[h].len; h++)
         texhook.hook_tex[h] = bstr_dupas0(copy, hook.hook_tex[h]);
-    for (int h = 0; h < SHADER_MAX_BINDS; h++)
+    for (int h = 0; h < SHADER_MAX_BINDS && hook.bind_tex[h].len; h++)
         texhook.bind_tex[h] = bstr_dupas0(copy, hook.bind_tex[h]);
 
     MP_TARRAY_APPEND(p, p->tex_hooks, p->num_tex_hooks, texhook);
