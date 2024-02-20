@@ -29,10 +29,22 @@ struct ra_tex *ra_tex_create(struct ra *ra, const struct ra_tex_params *params)
     return ra->fns->tex_create(ra, params);
 }
 
+#include <execinfo.h>
+#include <stdio.h>
+
 void ra_tex_free(struct ra *ra, struct ra_tex **tex)
 {
-    if (*tex)
+    if (*tex) {
+        printf("Freeing tex %p\n", *tex);
+        void* callstack[128];
+        int i, frames = backtrace(callstack, 128);
+        char** strs = backtrace_symbols(callstack, frames);
+        for (i = 0; i < MPMIN(frames, 5); ++i) {
+            printf("%s\n", strs[i]);
+        }
+        free(strs);
         ra->fns->tex_destroy(ra, *tex);
+    }
     *tex = NULL;
 }
 

@@ -963,12 +963,15 @@ static void update_uniform(struct ra *ra, struct ra_renderpass *pass,
         assert(tex->params.render_src);
         gl->ActiveTexture(GL_TEXTURE0 + input->binding);
         gl->BindTexture(tex_gl->target, tex_gl->texture);
-        GLint filter = tex_binding.src_linear ? GL_LINEAR : GL_NEAREST;
+
         if (tex_binding.src_linear != tex->params.src_linear) {
-            // printf("Set filter to linear? %d. Original tex %d\n", tex_binding.src_linear ? 1 : 0, tex->params.src_linear);
+            GLint filter = tex_binding.src_linear ? GL_LINEAR : GL_NEAREST;
+            printf("Set filter to linear? %d. Original tex %d, tex ptr %p\n", tex_binding.src_linear ? 1 : 0, tex->params.src_linear, tex);
+            gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
+            gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
+            tex->params.src_linear = tex_binding.src_linear;
         }
-        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
-        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
+
         break;
     }
     case RA_VARTYPE_BUF_RO: // fall through
