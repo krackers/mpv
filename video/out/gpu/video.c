@@ -1244,7 +1244,7 @@ static void finish_pass_fbo(struct gl_video *p, struct ra_fbo fbo,
 // w, h: required FBO target dimension, and also defines the target rectangle
 //       used for rasterization
 static void finish_pass_tex(struct gl_video *p, struct ra_tex **dst_tex,
-                            int w, int h)
+                            int w, int h, bool linear_filter)
 {
     if (!ra_tex_resize(p->ra, p->log, dst_tex, &(struct ra_tex_params)
                                                 {.dimensions = 2,
@@ -1252,7 +1252,7 @@ static void finish_pass_tex(struct gl_video *p, struct ra_tex **dst_tex,
                                                  .h = h,
                                                  .d = 1,
                                                  .format = p->fbo_format,
-                                                 .src_linear = true,
+                                                 .src_linear = linear_filter,
                                                 })) {
         cleanup_binds(p);
         gl_sc_reset(p->sc);
@@ -1489,7 +1489,7 @@ found:
         int h = lroundf(fabs(sz.y1 - sz.y0));
 
         struct ra_tex **tex = next_hook_tex(p);
-        finish_pass_tex(p, tex, w, h);
+        finish_pass_tex(p, tex, w, h, /*linear_filter=*/ true);
         const char *store_name = hook->save_tex ? hook->save_tex : name;
         struct image saved_img = image_wrap(*tex, img.type, comps);
 
@@ -1544,7 +1544,8 @@ static void pass_opt_hook_point(struct gl_video *p, const char *name,
 
 found: ;
     struct ra_tex **tex = next_hook_tex(p);
-    finish_pass_tex(p, tex, p->texture_w, p->texture_h);
+    // Custom textures assume linearly filtered input texture
+    finish_pass_tex(p, tex, p->texture_w, p->texture_h, /*linear_filter=*/ true);
     struct image img = image_wrap(*tex, PLANE_RGB, p->components);
     img = pass_hook(p, name, img, tex_trans);
     copy_image(p, &(int){0}, img);
@@ -1716,7 +1717,9 @@ static void pass_sample_separated(struct gl_video *p, struct image src,
     GLSLF("// first pass\n");
     pass_sample_separated_gen(p->sc, scaler, 0, 1);
     GLSLF("color *= %f;\n", src.multiplier);
-    finish_pass_tex(p, &scaler->sep_fbo, src.w, h);
+    // Note that filter kernels only sample at integer coordinates, so it suffices to output a texture
+    // with GL_NEAREST set for the second pass
+    finish_pass_tex(p, &scaler->sep_fbo, src.w, h, /*linear_filter=*/ false);
 
     // Second pass (scale only in the x dir)
     src = image_wrap(scaler->sep_fbo, src.type, src.components);
@@ -1779,8 +1782,8 @@ static void pass_sample(struct gl_video *p, struct image img,
                         struct scaler *scaler, const struct scaler_config *conf,
                         double scale_factor, int w, int h)
 {
-    reinit_scaler(p, scaler, conf, scale_factor, filter_sizes);
-
+    // Scaler initialization must happen before we got called.
+    assert(scaler->initialized);
     // Describe scaler
     const char *scaler_opt[] = {
         [SCALER_SCALE] = "scale",
@@ -2042,7 +2045,7 @@ static void pass_read_video(struct gl_video *p)
             GLSLF("// merging plane %d ... into %d\n", n, first);
             copy_image(p, &num, img[n]);
             pass_describe(p, "merging planes");
-            finish_pass_tex(p, &p->merge_tex[n], img[n].w, img[n].h);
+            finish_pass_tex(p, &p->merge_tex[n], img[n].w, img[n].h, /*linear_filter=*/ true);
             img[first] = image_wrap(p->merge_tex[n], img[n].type, num);
             img[n] = (struct image){0};
         }
@@ -2055,7 +2058,7 @@ static void pass_read_video(struct gl_video *p)
             GLSLF("// use_integer fix for plane %d\n", n);
             copy_image(p, &(int){0}, img[n]);
             pass_describe(p, "use_integer fix");
-            finish_pass_tex(p, &p->integer_tex[n], img[n].w, img[n].h);
+            finish_pass_tex(p, &p->integer_tex[n], img[n].w, img[n].h, /*linear_filter=*/ true);
             img[n] = image_wrap(p->integer_tex[n], img[n].type,
                                 img[n].components);
         }
@@ -2172,8 +2175,10 @@ static void pass_read_video(struct gl_video *p)
         // bilinear scaling is a free no-op thanks to GPU sampling
         if (strcmp(conf->kernel.name, "bilinear") != 0) {
             GLSLF("// upscaling plane %d\n", n);
-            pass_sample(p, img[n], scaler, conf, 1.0, p->texture_w, p->texture_h);
-            finish_pass_tex(p, &p->scale_tex[n], p->texture_w, p->texture_h);
+            double scale_factor = 1.0;
+            reinit_scaler(p, scaler, conf, scale_factor, filter_sizes);
+            pass_sample(p, img[n], scaler, conf, scale_factor, p->texture_w, p->texture_h);
+            finish_pass_tex(p, &p->scale_tex[n], p->texture_w, p->texture_h, /*linear_filter=*/ true);
             img[n] = image_wrap(p->scale_tex[n], img[n].type, img[n].components);
         }
 
@@ -2378,7 +2383,10 @@ static void pass_scale_main(struct gl_video *p)
     compute_src_transform(p, &transform);
 
     GLSLF("// main scaling\n");
-    finish_pass_tex(p, &p->indirect_tex, p->texture_w, p->texture_h);
+    reinit_scaler(p, scaler, &scaler_conf, scale_factor, filter_sizes);
+    // Convolution filters don't need linear sampling, so using nearest is
+    // often faster.
+    finish_pass_tex(p, &p->indirect_tex, p->texture_w, p->texture_h, /*linear_filter=*/ !scaler->kernel);
     struct image src = image_wrap(p->indirect_tex, PLANE_RGB, p->components);
     gl_transform_trans(transform, &src.transform);
     pass_sample(p, src, scaler, &scaler_conf, scale_factor, vp_w, vp_h);
@@ -2756,7 +2764,7 @@ static bool pass_render_frame(struct gl_video *p, struct mp_image *mpi,
             .w = p->texture_w, .h = p->texture_h,
             .display_par = scale[1] / scale[0], // counter compensate scaling
         };
-        finish_pass_tex(p, &p->blend_subs_tex, rect.w, rect.h);
+        finish_pass_tex(p, &p->blend_subs_tex, rect.w, rect.h, /*linear_filter=*/ true);
         struct ra_fbo fbo = { p->blend_subs_tex };
         pass_draw_osd(p, OSD_DRAW_SUB_ONLY, vpts, rect, fbo, false);
         pass_read_tex(p, p->blend_subs_tex);
@@ -2788,7 +2796,7 @@ static bool pass_render_frame(struct gl_video *p, struct mp_image *mpi,
             pass_delinearize(p->sc, p->image_params.color.gamma);
             p->use_linear = false;
         }
-        finish_pass_tex(p, &p->blend_subs_tex, p->texture_w, p->texture_h);
+        finish_pass_tex(p, &p->blend_subs_tex, p->texture_w, p->texture_h, /*linear_filter=*/ true);
         struct ra_fbo fbo = { p->blend_subs_tex };
         pass_draw_osd(p, OSD_DRAW_SUB_ONLY, vpts, rect, fbo, false);
         pass_read_tex(p, p->blend_subs_tex);
@@ -2820,7 +2828,7 @@ static void pass_draw_to_screen(struct gl_video *p, struct ra_fbo fbo)
     if (p->pass_compute.active) {
         int o_w = p->dst_rect.x1 - p->dst_rect.x0,
             o_h = p->dst_rect.y1 - p->dst_rect.y0;
-        finish_pass_tex(p, &p->screen_tex, o_w, o_h);
+        finish_pass_tex(p, &p->screen_tex, o_w, o_h, /*linear_filter=*/ true);
         struct image tmp = image_wrap(p->screen_tex, PLANE_RGB, p->components);
         copy_image(p, &(int){0}, tmp);
     }
@@ -2869,7 +2877,7 @@ static bool update_surface(struct gl_video *p, struct mp_image *mpi,
         pass_linearize(p->sc, p->image_params.color.gamma);
     }
 
-    finish_pass_tex(p, &surf->tex, vp_w, vp_h);
+    finish_pass_tex(p, &surf->tex, vp_w, vp_h, /*linear_filter=*/ true);
     surf->id  = id;
     surf->pts = mpi->pts;
     return true;
