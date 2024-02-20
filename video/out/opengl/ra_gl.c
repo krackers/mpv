@@ -306,9 +306,9 @@ static struct ra_tex *gl_tex_create(struct ra *ra,
     gl->BindTexture(tex_gl->target, tex_gl->texture);
 
     GLint filter = params->src_linear ? GL_LINEAR : GL_NEAREST;
-    GLint wrap = params->src_repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE;
     gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
     gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
+    GLint wrap = params->src_repeat ? GL_REPEAT : GL_CLAMP_TO_EDGE;
     gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_S, wrap);
     if (params->dimensions > 1)
         gl->TexParameteri(tex_gl->target, GL_TEXTURE_WRAP_T, wrap);
@@ -948,7 +948,8 @@ static void update_uniform(struct ra *ra, struct ra_renderpass *pass,
         break;
     }
     case RA_VARTYPE_IMG_W: {
-        struct ra_tex *tex = *(struct ra_tex **)val->data;
+        struct ra_tex_binding tex_binding = *(struct ra_tex_binding *)val->data;
+        struct ra_tex *tex = tex_binding.tex;
         struct ra_tex_gl *tex_gl = tex->priv;
         assert(tex->params.storage_dst);
         gl->BindImageTexture(input->binding, tex_gl->texture, 0, GL_FALSE, 0,
@@ -956,11 +957,18 @@ static void update_uniform(struct ra *ra, struct ra_renderpass *pass,
         break;
     }
     case RA_VARTYPE_TEX: {
-        struct ra_tex *tex = *(struct ra_tex **)val->data;
+        struct ra_tex_binding tex_binding = *(struct ra_tex_binding *)val->data;
+        struct ra_tex *tex = tex_binding.tex;
         struct ra_tex_gl *tex_gl = tex->priv;
         assert(tex->params.render_src);
         gl->ActiveTexture(GL_TEXTURE0 + input->binding);
         gl->BindTexture(tex_gl->target, tex_gl->texture);
+        GLint filter = tex_binding.src_linear ? GL_LINEAR : GL_NEAREST;
+        if (tex_binding.src_linear != tex->params.src_linear) {
+            // printf("Set filter to linear? %d. Original tex %d\n", tex_binding.src_linear ? 1 : 0, tex->params.src_linear);
+        }
+        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
+        gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
         break;
     }
     case RA_VARTYPE_BUF_RO: // fall through
@@ -988,7 +996,8 @@ static void disable_binding(struct ra *ra, struct ra_renderpass *pass,
     switch (input->type) {
     case RA_VARTYPE_IMG_W: /* fall  through */
     case RA_VARTYPE_TEX: {
-        struct ra_tex *tex = *(struct ra_tex **)val->data;
+        struct ra_tex_binding tex_binding = *(struct ra_tex_binding *)val->data;
+        struct ra_tex *tex = tex_binding.tex;
         struct ra_tex_gl *tex_gl = tex->priv;
         assert(tex->params.render_src);
         if (input->type == RA_VARTYPE_TEX) {

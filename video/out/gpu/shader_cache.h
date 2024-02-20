@@ -31,6 +31,8 @@ void gl_sc_paddf(struct gl_shader_cache *sc, const char *textf, ...)
 void gl_sc_uniform_dynamic(struct gl_shader_cache *sc);
 void gl_sc_uniform_texture(struct gl_shader_cache *sc, char *name,
                            struct ra_tex *tex);
+void gl_sc_uniform_sampled_texture(struct gl_shader_cache *sc, char *name,
+                           struct ra_tex *tex, bool linearly_sample);
 void gl_sc_uniform_image2D_wo(struct gl_shader_cache *sc, const char *name,
                               struct ra_tex *tex);
 void gl_sc_ssbo(struct gl_shader_cache *sc, char *name, struct ra_buf *buf,
