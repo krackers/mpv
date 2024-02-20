@@ -120,6 +120,8 @@ struct tex_hook {
     const char *save_tex;
     const char *hook_tex[SHADER_MAX_HOOKS];
     const char *bind_tex[SHADER_MAX_BINDS];
+    bool linear_filtered_input; // Whether the filter wants to linearly sample the texture it hooks (GL_LINEAR).
+                                // Setting this to false can enable some optimizations.
     int components; // how many components are relevant (0 = same as input)
     void *priv; // this gets talloc_freed when the tex_hook is removed
     void (*hook)(struct gl_video *p, struct image img, // generates GLSL
@@ -1439,6 +1441,26 @@ static struct ra_tex **next_hook_tex(struct gl_video *p)
     return &p->hook_textures[p->idx_hook_textures++];
 }
 
+bool hook_wants_linear_filter(struct gl_video *p, const char *name) {
+    for (int i = 0; i < p->num_tex_hooks; i++) {
+        struct tex_hook *hook = &p->tex_hooks[i];
+
+        for (int h = 0; h < SHADER_MAX_HOOKS; h++) {
+            if (hook->hook_tex[h] && strcmp(hook->hook_tex[h], name) == 0) {
+                // We only consider the very first hook, since we render to a new FBO after each finishes.
+                if (!hook->linear_filtered_input) {
+                    return false;
+                } else {
+                    return true;
+                }
+            }
+        }
+    }
+    // If nothing maches, then we just assume linear by default since we can't assume who
+    // the downstream consumer will be
+    return true;
+}
+
 // Process hooks for a plane, saving the result and returning a new image
 // If 'trans' is NULL, the shader is forbidden from transforming img
 static struct image pass_hook(struct gl_video *p, const char *name,
@@ -1944,6 +1966,7 @@ static bool add_user_hook(void *priv, struct gl_user_shader_hook hook)
     struct tex_hook texhook = {
         .save_tex = bstr_dupas0(copy, hook.save_tex),
         .components = hook.components,
+        .linear_filtered_input = true,
         .hook = user_hook,
         .cond = user_hook_cond,
         .priv = copy,
@@ -1992,6 +2015,7 @@ static void gl_video_setup_hooks(struct gl_video *p)
             .hook_tex = {"LUMA", "CHROMA", "RGB", "XYZ"},
             .bind_tex = {"HOOKED"},
             .hook = deband_hook,
+            .linear_filtered_input = false,
         });
     }
 
@@ -2000,6 +2024,7 @@ static void gl_video_setup_hooks(struct gl_video *p)
             .hook_tex = {"MAIN"},
             .bind_tex = {"HOOKED"},
             .hook = unsharp_hook,
+            .linear_filtered_input = true,
         });
     }
 
