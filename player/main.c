@@ -385,7 +385,7 @@ int mp_initialize(struct MPContext *mpctx, char **options)
     mpctx->mconfig->option_change_callback_ctx = mpctx;
     MP_VERBOSE(mpctx, "Loaded input config.\n");
     // Run all update handlers.
-    mp_option_change_callback(mpctx, NULL, UPDATE_OPTS_MASK);
+    mp_option_change_callback(mpctx, NULL, UPDATE_OPTS_MASK, /*changed=*/ true);
     MP_VERBOSE(mpctx, "Ran option change handlers.\n");
 
     if (handle_help_options(mpctx))

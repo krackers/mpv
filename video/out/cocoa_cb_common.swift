@@ -516,6 +516,7 @@ class CocoaCB: NSObject {
             let sizeData = data?.assumingMemoryBound(to: Int32.self)
             let size = UnsafeMutableBufferPointer(start: sizeData, count: 2)
             var rect = ccb.window?.unfsContentFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 720)
+            print(String(format: "CCB get window size, hidpi scale %@", String(Bool(ccb.mpv?.opts.hidpi_window_scale ?? 0))))
             if let screen = ccb.window?.currentScreen, !Bool(ccb.mpv?.opts.hidpi_window_scale ?? 0) {
                 rect = screen.convertRectToBacking(rect)
             }
@@ -526,6 +527,7 @@ class CocoaCB: NSObject {
             if let sizeData = data?.assumingMemoryBound(to: Int32.self) {
                 let size = UnsafeBufferPointer(start: sizeData, count: 2)
                 var rect = NSMakeRect(0, 0, CGFloat(size[0]), CGFloat(size[1]))
+                print(String(format: "CCB set window size, hidpi scale %@", String(Bool(opts.hidpi_window_scale))))
                 DispatchQueue.main.async {
                     if let screen = ccb.window?.currentScreen, !Bool(opts.hidpi_window_scale) {
                         rect = screen.convertRectFromBacking(rect)

@@ -816,10 +816,15 @@ int m_config_set_option_raw_direct(struct m_config *config,
     if (config->profile_backup_tmp)
         ensure_backup(config->profile_backup_tmp, config->profile_backup_flags, co);
 
+    // Only bother comparing if we actually have a callback. This excludes startup related parsing.
+    bool changed = config->option_change_callback && !m_option_equal(co->opt, co->data, data);
+    if (config->option_change_callback ) {
+        printf("Set option called, changed? %d, has callback %d, old %d, new %d\n", changed, !!config->option_change_callback, * (int*)co->data, * (int*) data);
+    }
     m_option_copy(co->opt, co->data, data);
 
     m_config_mark_co_flags(co, flags);
-    m_config_notify_change_co(config, co);
+    m_config_notify_change_co(config, co, changed);
 
     return 0;
 }
@@ -1410,7 +1415,8 @@ bool m_config_cache_update(struct m_config_cache *cache)
 }
 
 void m_config_notify_change_co(struct m_config *config,
-                               struct m_config_option *co)
+                               struct m_config_option *co,
+                               bool changed)
 {
     struct m_config_shadow *shadow = config->shadow;
 
@@ -1421,14 +1427,14 @@ void m_config_notify_change_co(struct m_config *config,
         pthread_mutex_unlock(&shadow->lock);
     }
 
-    int changed = co->opt->flags & UPDATE_OPTS_MASK;
+    int flags = co->opt->flags & UPDATE_OPTS_MASK;
 
     int group = co->group;
     while (group >= 0) {
         struct m_config_group *g = &config->groups[group];
         atomic_fetch_add(&g->ts, 1);
         if (g->group)
-            changed |= g->group->change_flags;
+            flags |= g->group->change_flags;
         group = g->parent_group;
     }
 
@@ -1444,7 +1450,7 @@ void m_config_notify_change_co(struct m_config *config,
 
     if (config->option_change_callback) {
         config->option_change_callback(config->option_change_callback_ctx, co,
-                                       changed);
+                                       flags, changed);
     }
 }
 
@@ -1453,7 +1459,7 @@ void m_config_notify_change_opt_ptr(struct m_config *config, void *ptr)
     for (int n = 0; n < config->num_opts; n++) {
         struct m_config_option *co = &config->opts[n];
         if (co->data == ptr) {
-            m_config_notify_change_co(config, co);
+            m_config_notify_change_co(config, co, /*changed=*/ true);
             return;
         }
     }

@@ -89,7 +89,7 @@ typedef struct m_config {
     // Notification after an option was successfully written to.
     // Uses flags as set in UPDATE_OPTS_MASK.
     void (*option_change_callback)(void *ctx, struct m_config_option *co,
-                                   int flags);
+                                   int flags, bool changed);
     void *option_change_callback_ctx;
 
     // For the command line parser
@@ -199,7 +199,7 @@ int m_config_option_requires_param(struct m_config *config, bstr name);
 
 // Notify m_config_cache users that the option has (probably) changed its value.
 void m_config_notify_change_co(struct m_config *config,
-                               struct m_config_option *co);
+                               struct m_config_option *co, bool changed);
 // Like m_config_notify_change_co(), but automatically find the option by its
 // pointer within the global option struct (config->optstruct). In practice,
 // it means it works only on fields in MPContext.opts.

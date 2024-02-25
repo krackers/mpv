@@ -6240,10 +6240,48 @@ static void update_priority(struct MPContext *mpctx)
 #endif
 }
 
-void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
+// If we're not in hidpi mode, then reading and writing sets the actual backing resolution
+// (physical coordinates).
+static void refresh_window_hidpi_scale(struct MPContext *mpctx, bool cur_physical)
+{
+    printf("Refreshed window scale\n");
+    struct vo *vo = mpctx->video_out;
+    if (!vo)
+        return;
+
+    int s[2];
+    if (vo_control(vo, VOCTRL_GET_UNFS_WINDOW_SIZE, s) <= 0 || s[0] < 1 || s[1] < 1)
+        return;
+    printf("Unfixed window size %d %d, is physical coordinates %d\n", s[0], s[1], cur_physical);
+
+    double scale = 0;
+    if (vo_control(vo, VOCTRL_GET_HIDPI_SCALE, &scale) < 1 || scale <= 0) {
+        return;
+    }
+    // If we are currently reading physical coordiantes, then previously that means it was set with
+    // logical coordinates. When it tried to set logical, things were multiplied by the backing
+    // factor, so to get back to the original intended coordinates we need to divide out the hidpi scale.
+    if (cur_physical) {
+        s[0] = s[0] / scale;
+        s[1] = s[1] / scale;
+    } else {
+        // If we are currently reading logical coordinates, when previously things were set with physical
+        // coordinates, then our reading is half of what it should be.
+        s[0] = s[0] * scale;
+        s[1] = s[1] * scale;
+    }
+    printf("Fixed window size %d %d\n", s[0], s[1]);
+    vo_control(vo, VOCTRL_SET_UNFS_WINDOW_SIZE, s);
+}
+
+void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags, bool changed)
 {
     struct MPContext *mpctx = ctx;
+    struct MPOpts *opts = mpctx->opts;
     struct command_ctx *cmd = mpctx->command_ctx;
+
+    bool init = !co;
+    void *opt_ptr = init ? NULL : co->data; // NULL on start
 
     if (flags & UPDATE_TERM)
         mp_update_logging(mpctx, false);
@@ -6274,7 +6312,6 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
         mp_input_update_opts(mpctx->input);
 
         // Rather coarse change-detection, but sufficient effort.
-        struct MPOpts *opts = mpctx->opts;
         if (!bstr_equals(bstrof0(cmd->cur_ipc), bstrof0(opts->ipc_path)) ||
             !bstr_equals(bstrof0(cmd->cur_ipc_input), bstrof0(opts->input_file)))
         {
@@ -6285,6 +6322,10 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
             mp_uninit_ipc(mpctx->ipc_ctx);
             mpctx->ipc_ctx = mp_init_ipc(mpctx->clients, mpctx->global);
         }
+    }
+
+    if (opt_ptr == &opts->vo->hidpi_window_scale && changed) {
+        refresh_window_hidpi_scale(mpctx, /*cur_physical=*/ !opts->vo->hidpi_window_scale);
     }
 
     if (flags & UPDATE_AUDIO)

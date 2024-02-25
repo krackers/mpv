@@ -966,7 +966,7 @@ static void update_uniform(struct ra *ra, struct ra_renderpass *pass,
 
         if (tex_binding.src_linear != tex->params.src_linear) {
             GLint filter = tex_binding.src_linear ? GL_LINEAR : GL_NEAREST;
-            printf("Set filter to linear? %d. Original tex %d, tex ptr %p\n", tex_binding.src_linear ? 1 : 0, tex->params.src_linear, tex);
+            //printf("Set filter to linear? %d. Original tex %d, tex ptr %p\n", tex_binding.src_linear ? 1 : 0, tex->params.src_linear, tex);
             gl->TexParameteri(tex_gl->target, GL_TEXTURE_MIN_FILTER, filter);
             gl->TexParameteri(tex_gl->target, GL_TEXTURE_MAG_FILTER, filter);
             tex->params.src_linear = tex_binding.src_linear;
