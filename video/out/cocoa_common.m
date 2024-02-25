@@ -783,6 +783,8 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
         vo->dwidth  = s->vo_dwidth  = frame.size.width;
         vo->dheight = s->vo_dheight = frame.size.height;
 
+        printf("Set update context\n");
+        // Note that for whatever reason, doing an nsopengl context update here may cause issues.
         s->update_context = 1;
 
     });
@@ -794,6 +796,7 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
 // blocking.
 static void resize_event(struct vo *vo)
 {
+    printf("Resize event called\n");
     struct vo_cocoa_state *s = vo->cocoa;
     NSRect frame = [s->video frameInPixels];
 
@@ -831,8 +834,11 @@ int cocoa_set_qosClass(struct mp_log *log, unsigned int priority) {
     return 1;
 }
 
+
+int realtime = 0;
 int cocoa_set_realtime(struct mp_log *log, double periodFraction) {
     char tname[20];
+    realtime = 1;
     pthread_getname_np(pthread_self(), tname, 20);
     mp_verbose(log, "Setting thread %s to realtime of fraction %f.\n", tname, periodFraction);
 
@@ -871,8 +877,6 @@ void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
     info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
     // last_time = s->last_vsync_time;
 }
-
-int realtime = 0;
 
 int last_swap_time = 0;
 

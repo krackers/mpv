@@ -161,6 +161,7 @@ void mp_get_src_dst_rects(struct mp_log *log, struct mp_vo_opts *opts,
 
     mp_verbose(log, "Window size: %dx%d\n",
                window_w, window_h);
+    mp_verbose(log, "Monitor Aspect: %f\n", monitor_par);
     mp_verbose(log, "Video source: %dx%d (%d:%d)\n",
                video->w, video->h, video->p_w, video->p_h);
     mp_verbose(log, "Video display: (%d, %d) %dx%d -> (%d, %d) %dx%d\n",

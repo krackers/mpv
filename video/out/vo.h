@@ -488,7 +488,7 @@ struct vo {
 
     bool want_redraw;   // redraw as soon as possible
 
-    // current window state
+    // current window state. Note that this may not be set by all backends.
     int dwidth;
     int dheight;
     float monitor_par;

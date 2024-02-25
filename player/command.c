@@ -6258,18 +6258,11 @@ static void refresh_window_hidpi_scale(struct MPContext *mpctx, bool cur_physica
     if (vo_control(vo, VOCTRL_GET_HIDPI_SCALE, &scale) < 1 || scale <= 0) {
         return;
     }
-    // If we are currently reading physical coordiantes, then previously that means it was set with
-    // logical coordinates. When it tried to set logical, things were multiplied by the backing
-    // factor, so to get back to the original intended coordinates we need to divide out the hidpi scale.
-    if (cur_physical) {
-        s[0] = s[0] / scale;
-        s[1] = s[1] / scale;
-    } else {
-        // If we are currently reading logical coordinates, when previously things were set with physical
-        // coordinates, then our reading is half of what it should be.
-        s[0] = s[0] * scale;
-        s[1] = s[1] * scale;
-    }
+    // Convert back and forth between logical and physical coordinates. I.e. if we're currently
+    // reading physical coordinates, then previously we had tried to set the window using
+    // logical coordinates, so recover original logical dimensions by dividing out dpi.
+    s[0] = cur_physical ? s[0] / scale : s[0] * scale;
+    s[1] = cur_physical ? s[1] / scale : s[1] * scale;
     printf("Fixed window size %d %d\n", s[0], s[1]);
     vo_control(vo, VOCTRL_SET_UNFS_WINDOW_SIZE, s);
 }

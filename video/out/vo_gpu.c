@@ -58,12 +58,22 @@ struct gpu_priv {
     CGLContextObj gl_ctx;
 };
 
+#include <execinfo.h>
+#include <stdio.h>
+
 static void resize(struct vo *vo)
 {
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
 
     MP_VERBOSE(vo, "Resize: %dx%d\n", vo->dwidth, vo->dheight);
+    void* callstack[128];
+    int i, frames = backtrace(callstack, 128);
+    char** strs = backtrace_symbols(callstack, frames);
+    for (i = 0; i < MPMIN(frames, 5); ++i) {
+        printf("%s\n", strs[i]);
+    }
+    free(strs);
 
     struct mp_rect src, dst;
     struct mp_osd_res osd;
@@ -187,6 +197,7 @@ static int control(struct vo *vo, uint32_t request, void *data)
     switch (request) {
     case VOCTRL_SET_PANSCAN:
         resize(vo);
+        printf("Vo set panscan\n");
         return VO_TRUE;
     case VOCTRL_SET_EQUALIZER:
         vo->want_redraw = true;
@@ -219,6 +230,7 @@ static int control(struct vo *vo, uint32_t request, void *data)
         return true;
     case VOCTRL_EXTERNAL_RESIZE:
         p->ctx->fns->reconfig(p->ctx);
+        printf("VO event external resize\n");
         resize(vo);
         return true;
     }
@@ -235,8 +247,10 @@ static int control(struct vo *vo, uint32_t request, void *data)
     }
     events |= p->events;
     p->events = 0;
-    if (events & VO_EVENT_RESIZE)
+    if (events & VO_EVENT_RESIZE) {
+        printf("VO event resize\n");
         resize(vo);
+    }
     if (events & VO_EVENT_EXPOSE)
         vo->want_redraw = true;
     vo_event(vo, events);

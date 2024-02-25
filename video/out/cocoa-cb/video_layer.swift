@@ -197,10 +197,13 @@ class VideoLayer: CAOpenGLLayer {
         glGetIntegerv(GLenum(GL_VIEWPORT), &dims)
         surfaceSize = NSSize(width: CGFloat(dims[2]), height: CGFloat(dims[3]))
 
+        print(String(format: "Update surface, gl width %d, bounds width %f", dims[2], bounds.size.width * contentsScale))
+
         if NSEqualSizes(surfaceSize, NSZeroSize) {
             surfaceSize = bounds.size
             surfaceSize.width *= contentsScale
             surfaceSize.height *= contentsScale
+            print(String(format: "Got zero size, returning %f %f, scale %f", surfaceSize.width, surfaceSize.height, contentsScale))
         }
     }
 

@@ -317,6 +317,7 @@ class Window: NSWindow, NSWindowDelegate {
             mpv?.sendVerbose("tried to set too small window size: \(frameRect.size)")
             return
         }
+        print(String(format: "Set frame called, width %d", frameRect.width));
         super.setFrame(frameRect, display: flag)
 
         if let size = unfsContentFrame?.size, keepAspect {

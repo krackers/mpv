@@ -431,6 +431,8 @@ class CocoaCB: NSObject {
         geo.win.y1 = Int32(r.size.height) - geo.win.y1
         geo.win.y0 = Int32(r.size.height) - geo.win.y0
 
+        print(String(format: "Get window geometry %d", geo.win.y0 - geo.win.y1))
+
         let wr = NSMakeRect(CGFloat(geo.win.x0), CGFloat(geo.win.y1),
                             CGFloat(geo.win.x1 - geo.win.x0),
                             CGFloat(geo.win.y0 - geo.win.y1))

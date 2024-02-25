@@ -287,7 +287,7 @@ static struct vo *vo_create(bool probing, struct mpv_global *global,
         .encode_lavc_ctx = ex->encode_lavc_ctx,
         .input_ctx = ex->input_ctx,
         .osd = ex->osd,
-        .monitor_par = 1,
+        .monitor_par = 0,
         .extra = *ex,
         .probing = probing,
         .in = talloc(vo, struct vo_internal),
@@ -611,8 +611,6 @@ static void run_reconfig(void *p)
     MP_VERBOSE(vo, "reconfig to %s\n", mp_image_params_to_str(params));
 
     update_opts(vo);
-
-    mp_image_params_get_dsize(params, &vo->dwidth, &vo->dheight);
 
     talloc_free(vo->params);
     vo->params = talloc_dup(vo, params);
@@ -1134,6 +1132,7 @@ static void *vo_thread(void *ptr)
     int last_wait_until = 0;
 
     while (1) {
+        printf("VO params %d %d %f\n", vo->dwidth, vo->dheight, vo->monitor_par);
         before_process = mach_absolute_time();
         mp_dispatch_queue_process(vo->in->dispatch, 0);
         if (in->terminate)
