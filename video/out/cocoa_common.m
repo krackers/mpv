@@ -785,7 +785,8 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
 
         printf("Set update context\n");
         // Note that for whatever reason, doing an nsopengl context update here may cause issues.
-        s->update_context = 1;
+        [s->nsgl_ctx update];
+        // s->update_context = 1;
 
     });
     return 0;
@@ -947,7 +948,7 @@ static int vo_cocoa_check_events(struct vo *vo)
     pthread_mutex_unlock(&s->lock);
 
     if (events & VO_EVENT_RESIZE) {
-        [s->nsgl_ctx update];
+        // [s->nsgl_ctx update];
     }
 
     return events;
