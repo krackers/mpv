@@ -45,6 +45,8 @@
 #include "core.h"
 #include "command.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 #define sadd(str, append) bstr_xappend0(NULL, str, append)
 #define saddf(str, ...) bstr_xappend_asprintf(NULL, (str), __VA_ARGS__)
 

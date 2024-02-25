@@ -1009,7 +1009,7 @@ struct AVFrame *mp_image_to_av_frame(struct mp_image *src)
             av_content_light_metadata_create_side_data(dst);
         if (!clm)
             abort();
-        clm->MaxCLL = (unsigned int) src->params.color.sig_peak * MP_REF_WHITE;
+        clm->MaxCLL = (unsigned int) (src->params.color.sig_peak * MP_REF_WHITE);
     }
 
     // Add back side data, but only for types which are not specially handled

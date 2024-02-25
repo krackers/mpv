@@ -33,6 +33,8 @@
 #include "common/common.h"
 #include "stream/stream.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 #define HEADER "# mpv EDL v0\n"
 
 struct tl_part {

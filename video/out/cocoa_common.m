@@ -49,6 +49,8 @@
 
 #include "common/msg.h"
 
+
+
 static CVReturn displayLinkCallback(CVDisplayLinkRef displayLink, const CVTimeStamp* now,
                                     const CVTimeStamp* outputTime, CVOptionFlags flagsIn,
                                     CVOptionFlags* flagsOut, void* displayLinkContext);
@@ -798,8 +800,8 @@ static void resize_event(struct vo *vo)
     NSRect frame = [s->video frameInPixels];
 
     pthread_mutex_lock(&s->lock);
-    s->vo_dwidth  = frame.size.width;
-    s->vo_dheight = frame.size.height;
+    s->vo_dwidth  = (int) frame.size.width;
+    s->vo_dheight = (int) frame.size.height;
     if (!s->in_live_resize) {
         s->pending_events |= VO_EVENT_RESIZE | VO_EVENT_EXPOSE;
         vo_wakeup(vo);
@@ -1099,7 +1101,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     [self recalcMovableByWindowBackground:point];
     if (!self.vout->cocoa->window_is_dragged)
-        mp_input_set_mouse_pos(self.vout->input_ctx, point.x, point.y);
+        mp_input_set_mouse_pos(self.vout->input_ctx, (int) point.x, (int) point.y);
 }
 
 - (void)putKey:(int)mpkey withModifiers:(int)modifiers

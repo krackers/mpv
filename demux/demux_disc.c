@@ -149,7 +149,7 @@ static void add_streams(demuxer_t *demuxer)
             {
                 struct mp_image_params f = {.w = src->codec->disp_w,
                                             .h = src->codec->disp_h};
-                mp_image_params_set_dsize(&f, 1728 * ar, 1728);
+                mp_image_params_set_dsize(&f, (int) (1728 * ar), 1728);
                 sh->codec->par_w = f.p_w;
                 sh->codec->par_h = f.p_h;
             }

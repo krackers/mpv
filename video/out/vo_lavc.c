@@ -220,7 +220,7 @@ static void draw_frame(struct vo *vo, struct vo_frame *voframe)
     if (!frame)
         abort();
 
-    frame->pts = rint(outpts * av_q2d(av_inv_q(avc->time_base)));
+    frame->pts = (int64_t) rint(outpts * av_q2d(av_inv_q(avc->time_base)));
     frame->pict_type = 0; // keep this at unknown/undefined
     frame->quality = avc->global_quality;
     encoder_encode(enc, frame);

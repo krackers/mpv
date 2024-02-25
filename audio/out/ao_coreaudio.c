@@ -56,7 +56,7 @@ static int64_t ca_get_hardware_latency(struct ao *ao) {
             &size);
     CHECK_CA_ERROR("cannot get audio unit latency");
 
-    uint64_t audiounit_latency_us = audiounit_latency_sec * 1e6;
+    uint64_t audiounit_latency_us = (uint64_t) (audiounit_latency_sec * 1e6);
     uint64_t device_latency_us    = ca_get_device_latency_us(ao, p->device);
 
     MP_VERBOSE(ao, "audiounit latency [us]: %lld\n", audiounit_latency_us);

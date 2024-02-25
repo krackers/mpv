@@ -26,6 +26,8 @@
 #include "vo.h"
 #include "sub/osd.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 static void aspect_calc_panscan(struct mp_vo_opts *opts,
                                 int w, int h, int d_w, int d_h, int unscaled,
                                 int window_w, int window_h, double monitor_par,

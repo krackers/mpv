@@ -558,7 +558,7 @@ static int control(struct sd *sd, enum sd_ctrl cmd, void *arg)
     switch (cmd) {
     case SD_CTRL_SUB_STEP: {
         double *a = arg;
-        double res = step_sub(sd, a[0], a[1]);
+        double res = step_sub(sd, a[0], (int) a[1]);
         if (res == MP_NOPTS_VALUE)
             return false;
         a[0] = res;

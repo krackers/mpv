@@ -45,6 +45,8 @@
 #include "m_option.h"
 #include "m_config.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 #if HAVE_DOS_PATHS
 #define OPTION_PATH_SEPARATOR ';'
 #else

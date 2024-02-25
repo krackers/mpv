@@ -468,7 +468,7 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
     uint64_t vsync_time = (time > 0 ? mp_time_us() - (mp_raw_time_us() - time) : mp_time_us());
 
     if (ctx->last_vsync_time > 0) {
-        ctx->vsync_interval = ctx->vsync_interval > 0 ? (vsync_time - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : vsync_time - ctx->last_vsync_time;
+        ctx->vsync_interval = (uint64_t) (ctx->vsync_interval > 0 ? (vsync_time - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : vsync_time - ctx->last_vsync_time);
     }
 
     if (vsync_time - ctx->last_vsync_time > 17000) {

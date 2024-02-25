@@ -289,7 +289,7 @@ static void drain(struct ao *ao)
     if (IS_PLAYING(state)) {
         atomic_store(&p->draining, true);
         // Wait for lower bound.
-        mp_sleep_us((uint64_t) mp_ring_buffered(p->buffers[0]) / (double)ao->bps * 1e6);
+        mp_sleep_us((uint64_t) (mp_ring_buffered(p->buffers[0]) / (double)ao->bps * 1e6));
         // And then poll for actual end. (Unfortunately, this code considers
         // audio APIs which do not want you to use mutexes in the audio
         // callback, and an extra semaphore would require slightly more effort.)

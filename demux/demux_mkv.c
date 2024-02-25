@@ -582,7 +582,7 @@ static void parse_trackcolour(struct demuxer *demuxer, struct mkv_track *track,
         MP_VERBOSE(demuxer, "|    + MaxCLL: %"PRIu64"\n", colour->max_cll);
     }
     // if MaxCLL is unavailable, try falling back to the mastering metadata
-    if (!track->color.sig_peak && colour->n_mastering_metadata) {
+    if (track->color.sig_peak == 0 && colour->n_mastering_metadata) {
         struct ebml_mastering_metadata *mastering = &colour->mastering_metadata;
 
         if (mastering->n_luminance_max) {
@@ -1610,7 +1610,7 @@ static int demux_mkv_open_audio(demuxer_t *demuxer, mkv_track_t *track)
     unsigned char *extradata = track->private_data;
     unsigned int extradata_len = track->private_size;
 
-    if (!track->a_osfreq)
+    if (track->a_osfreq == 0)
         track->a_osfreq = track->a_sfreq;
     sh_a->bits_per_coded_sample = track->a_bps ? track->a_bps : 16;
     sh_a->samplerate = (uint32_t) track->a_osfreq;
@@ -1728,7 +1728,7 @@ static int demux_mkv_open_audio(demuxer_t *demuxer, mkv_track_t *track)
         sh_a->codec = "aac";
 
         /* Recreate the 'private data' (not needed for plain A_AAC) */
-        int srate_idx = aac_get_sample_rate_index(track->a_sfreq);
+        int srate_idx = aac_get_sample_rate_index((uint32_t) track->a_sfreq);
         const char *tail = "";
         if (strlen(track->codec_id) >= 12)
             tail = &track->codec_id[12];
@@ -1747,7 +1747,7 @@ static int demux_mkv_open_audio(demuxer_t *demuxer, mkv_track_t *track)
             /* HE-AAC (aka SBR AAC) */
             extradata_len = 5;
 
-            srate_idx = aac_get_sample_rate_index(sh_a->samplerate);
+            srate_idx = aac_get_sample_rate_index((uint32_t) sh_a->samplerate);
             extradata[2] = AAC_SYNC_EXTENSION_TYPE >> 3;
             extradata[3] = ((AAC_SYNC_EXTENSION_TYPE & 0x07) << 5) | 5;
             extradata[4] = (1 << 7) | (srate_idx << 3);
@@ -1765,6 +1765,8 @@ static int demux_mkv_open_audio(demuxer_t *demuxer, mkv_track_t *track)
     if (!sh_a->codec)
         goto error;
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-conversion"
     const char *codec = sh_a->codec;
     if (!strcmp(codec, "mp2") || !strcmp(codec, "mp3") ||
         !strcmp(codec, "truehd") || !strcmp(codec, "eac3"))
@@ -1810,6 +1812,8 @@ static int demux_mkv_open_audio(demuxer_t *demuxer, mkv_track_t *track)
         // output 48000.
         sh_a->samplerate = 48000;
     }
+
+#pragma clang diagnostic pop
 
     // Some files have broken default DefaultDuration set, which will lead to
     // audio packets with incorrect timestamps. This follows FFmpeg commit
@@ -2486,8 +2490,8 @@ static void mkv_parse_and_add_packet(demuxer_t *demuxer, mkv_track_t *track,
     }
 
     double tb = track->parse_timebase;
-    int64_t pts = dp->pts == MP_NOPTS_VALUE ? AV_NOPTS_VALUE : dp->pts * tb;
-    int64_t dts = dp->dts == MP_NOPTS_VALUE ? AV_NOPTS_VALUE : dp->dts * tb;
+    int64_t pts = (dp->pts ==  MP_NOPTS_VALUE) ? AV_NOPTS_VALUE : (int64_t) (dp->pts * tb);
+    int64_t dts = (dp->dts == MP_NOPTS_VALUE) ? AV_NOPTS_VALUE : (int64_t) (dp->dts * tb);
     bool copy_sidedata = true;
 
     while (dp->len) {
@@ -2690,7 +2694,7 @@ static int handle_block(demuxer_t *demuxer, struct block_info *block_info)
              * for packets after the first one (rather than all pts
              * values being the same). Also, don't use it for extra
              * packets resulting from parsing. */
-            if (i == 0 || track->default_duration)
+            if (i == 0 || track->default_duration != 0)
                 dp->pts = current_pts + i * track->default_duration;
             if (stream->codec->avi_dts)
                 MPSWAP(double, dp->pts, dp->dts);
@@ -2698,9 +2702,7 @@ static int handle_block(demuxer_t *demuxer, struct block_info *block_info)
                 dp->duration = block_duration / 1e9;
             if (stream->type == STREAM_AUDIO) {
                 unsigned int srate = stream->codec->samplerate;
-                demux_packet_set_padding(dp,
-                    mkv_d->a_skip_preroll ? track->codec_delay * srate : 0,
-                    block_info->discardpadding / 1e9 * srate);
+                demux_packet_set_padding(dp, (int) (mkv_d->a_skip_preroll ? track->codec_delay * srate : 0), (int) (block_info->discardpadding / 1e9 * srate));
                 mkv_d->a_skip_preroll = 0;
             }
             if (block_info->additions) {
@@ -3016,7 +3018,7 @@ static struct mkv_index *seek_with_cues(struct demuxer *demuxer, int seek_id,
             double secs = mkv_d->opts->subtitle_preroll_secs;
             if (mkv_d->index_has_durations)
                 secs = MPMAX(secs, mkv_d->opts->subtitle_preroll_secs_index);
-            int64_t pre = MPMIN(INT64_MAX, secs * 1e9 / mkv_d->tc_scale);
+            int64_t pre = (int64_t) MPMIN(INT64_MAX, secs * 1e9 / mkv_d->tc_scale);
             int64_t min_tc = pre < index->timecode ? index->timecode - pre : 0;
             uint64_t prev_target = 0;
             int64_t prev_tc = 0;
@@ -3090,7 +3092,7 @@ static void demux_mkv_seek(demuxer_t *demuxer, double seek_pts, int flags)
         mkv_index_t *index = NULL;
 
         seek_pts = FFMAX(seek_pts, 0);
-        int64_t target_timecode = seek_pts * 1e9 + 0.5;
+        int64_t target_timecode = (int64_t) (seek_pts * 1e9 + 0.5);
 
         if (create_index_until(demuxer, target_timecode) >= 0) {
             int seek_id = st_active[STREAM_VIDEO] ? v_tnum : a_tnum;
@@ -3114,7 +3116,7 @@ static void demux_mkv_seek(demuxer_t *demuxer, double seek_pts, int flags)
         read_deferred_cues(demuxer);
 
         int64_t size = stream_get_size(s);
-        int64_t target_filepos = size * MPCLAMP(seek_pts, 0, 1);
+        int64_t target_filepos = (int64_t) (size * MPCLAMP(seek_pts, 0, 1));
 
         mkv_index_t *index = NULL;
         if (mkv_d->index_complete) {

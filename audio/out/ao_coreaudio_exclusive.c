@@ -359,7 +359,7 @@ static int init(struct ao *ao)
         goto coreaudio_error;
     }
 
-    ao->samplerate = p->stream_asbd.mSampleRate;
+    ao->samplerate = (int) p->stream_asbd.mSampleRate;
 
     if (ao->channels.num != p->stream_asbd.mChannelsPerFrame) {
         ca_get_active_chmap(ao, p->device, p->stream_asbd.mChannelsPerFrame,

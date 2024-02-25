@@ -46,6 +46,8 @@
 #include "command.h"
 #include "screenshot.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 enum {
     // update_video() - code also uses: <0 error, 0 eof, >0 progress
     VD_ERROR = -1,
@@ -317,7 +319,7 @@ static void check_framedrop(struct MPContext *mpctx, struct vo_chain *vo_c)
             return;
         double frame_time =  1.0 / fps;
         // try to drop as many frames as we appear to be behind
-        vo_c->track->dec->attempt_framedrops =
+        vo_c->track->dec->attempt_framedrops = (int)
             MPCLAMP((mpctx->last_av_difference - 0.010) / frame_time, 0, 100);
     }
 }

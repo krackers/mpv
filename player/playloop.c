@@ -50,6 +50,8 @@
 #include "command.h"
 #include <IOKit/pwr_mgt/IOPMLib.h>
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 
 // Wait until mp_wakeup_core() is called, since the last time
 // mp_wait_events() was called.

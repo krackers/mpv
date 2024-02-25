@@ -27,6 +27,8 @@
 #include "common/msg.h"
 #include "timer.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 double mach_timebase_ratio;
 
 void mp_sleep_us(int64_t us)

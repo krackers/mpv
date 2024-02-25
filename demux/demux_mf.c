@@ -36,6 +36,8 @@
 #include "stheader.h"
 #include "codec_tags.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 #define MF_MAX_FILE_SIZE (1024 * 1024 * 256)
 
 typedef struct mf {

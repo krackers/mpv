@@ -20,6 +20,8 @@
 
 #include "video/mp_image.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 static void calc_monitor_aspect(struct mp_vo_opts *opts, int scr_w, int scr_h,
                                 double *pixelaspect, int *w, int *h)
 {

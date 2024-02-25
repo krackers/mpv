@@ -18,7 +18,7 @@
 #include "player/client.h"
 #import "macosx_touchbar.h"
 
-#pragma clang diagnostic error "-Wno-error=float-conversion"
+#pragma clang diagnostic ignored "-Wfloat-conversion"
 
 
 @implementation TouchBar

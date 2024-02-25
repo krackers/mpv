@@ -82,7 +82,7 @@ static void update_subtitle_speed(struct dec_sub *sub)
         sub->sub_speed *= sub->codec->frame_based / sub->video_fps;
     }
 
-    if (opts->sub_fps && sub->video_fps)
+    if (opts->sub_fps != 0 && sub->video_fps != 0)
         sub->sub_speed *= opts->sub_fps / sub->video_fps;
 
     sub->sub_speed *= opts->sub_speed;

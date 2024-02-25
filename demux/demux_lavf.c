@@ -65,6 +65,8 @@
 // libavformat (almost) always reads data in blocks of this size.
 #define BIO_BUFFER_SIZE 32768
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 #define OPT_BASE_STRUCT struct demux_lavf_opts
 struct demux_lavf_opts {
     int probesize;

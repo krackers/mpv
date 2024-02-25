@@ -40,6 +40,8 @@
 #include "core.h"
 #include "command.h"
 
+#pragma clang diagnostic ignored "-Wfloat-conversion"
+
 enum {
     AD_OK = 0,
     AD_EOF = -2,
