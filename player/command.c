@@ -2472,10 +2472,11 @@ static int mp_property_hwdec_interop(void *ctx, struct m_property *prop,
     return res;
 }
 
-/// Helper to set vo flags.
+
+/// Helpers to interface with VO
 /** \ingroup PropertyImplHelper
  */
-static int mp_property_vo_flag(struct m_property *prop, int action, void *arg,
+static int mp_property_vo_option(struct m_property *prop, int action, void *arg,
                                int vo_ctrl, int *vo_var, MPContext *mpctx)
 {
     int old = *vo_var;
@@ -2487,13 +2488,15 @@ static int mp_property_vo_flag(struct m_property *prop, int action, void *arg,
     return res;
 }
 
+//------
+
 /// Fullscreen state (RW)
 static int mp_property_fullscreen(void *ctx, struct m_property *prop,
                                   int action, void *arg)
 {
     MPContext *mpctx = ctx;
     int oldval = mpctx->opts->vo->fullscreen;
-    int r = mp_property_vo_flag(prop, action, arg, VOCTRL_FULLSCREEN,
+    int r = mp_property_vo_option(prop, action, arg, VOCTRL_FULLSCREEN,
                                 &mpctx->opts->vo->fullscreen, mpctx);
     if (oldval && oldval != mpctx->opts->vo->fullscreen)
         mpctx->mouse_event_ts--; // Show mouse cursor
@@ -2522,7 +2525,7 @@ static int mp_property_ontop(void *ctx, struct m_property *prop,
                              int action, void *arg)
 {
     MPContext *mpctx = ctx;
-    return mp_property_vo_flag(prop, action, arg, VOCTRL_ONTOP,
+    return mp_property_vo_option(prop, action, arg, VOCTRL_ONTOP,
                                &mpctx->opts->vo->ontop, mpctx);
 }
 
@@ -2531,7 +2534,7 @@ static int mp_property_border(void *ctx, struct m_property *prop,
                               int action, void *arg)
 {
     MPContext *mpctx = ctx;
-    return mp_property_vo_flag(prop, action, arg, VOCTRL_BORDER,
+    return mp_property_vo_option(prop, action, arg, VOCTRL_BORDER,
                                &mpctx->opts->vo->border, mpctx);
 }
 
@@ -2539,7 +2542,7 @@ static int mp_property_all_workspaces(void *ctx, struct m_property *prop,
                                       int action, void *arg)
 {
     MPContext *mpctx = ctx;
-    return mp_property_vo_flag(prop, action, arg, VOCTRL_ALL_WORKSPACES,
+    return mp_property_vo_option(prop, action, arg, VOCTRL_ALL_WORKSPACES,
                                &mpctx->opts->vo->all_workspaces, mpctx);
 }
 
@@ -2790,6 +2793,9 @@ static int mp_property_win_minimized(void *ctx, struct m_property *prop,
     struct vo *vo = mpctx->video_out;
     if (!vo)
         return M_PROPERTY_UNAVAILABLE;
+    int ret;
+    if ((ret = m_property_flag_ro_validate(action, arg)) != M_PROPERTY_VALID)
+        return ret;
 
     int state = 0;
     if (vo_control(vo, VOCTRL_GET_WIN_STATE, &state) < 1)
@@ -2840,7 +2846,12 @@ static int mp_property_hidpi_scale(void *ctx, struct m_property *prop,
     MPContext *mpctx = ctx;
     struct vo *vo = mpctx->video_out;
     double scale = 0;
-    if (!vo || vo_control(vo, VOCTRL_GET_HIDPI_SCALE, &scale) < 1 || scale <= 0)
+    if (!vo)
+        return M_PROPERTY_UNAVAILABLE;
+    int ret;
+    if ((ret = m_property_double_ro_validate(action, arg)) != M_PROPERTY_VALID)
+        return ret;
+    if (vo_control(vo, VOCTRL_GET_HIDPI_SCALE, &scale) < 1 || scale <= 0)
         return M_PROPERTY_UNAVAILABLE;
     return m_property_double_ro(action, arg, scale);
 }

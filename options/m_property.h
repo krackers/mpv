@@ -174,12 +174,133 @@ char* m_properties_expand_string(const struct m_property *prop_list,
                                  const char *str, void *ctx);
 
 // Trivial helpers for implementing properties.
-int m_property_flag_ro(int action, void* arg, int var);
-int m_property_int_ro(int action, void* arg, int var);
-int m_property_int64_ro(int action, void* arg, int64_t var);
-int m_property_float_ro(int action, void* arg, float var);
-int m_property_double_ro(int action, void* arg, double var);
-int m_property_strdup_ro(int action, void* arg, const char *var);
+
+inline int m_property_flag_ro_validate(int action, void* arg) {
+    switch (action) {
+    case M_PROPERTY_GET:
+        return M_PROPERTY_VALID;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_FLAG};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+inline int m_property_flag_ro(int action, void* arg, int var)
+{
+    int ret = m_property_flag_ro_validate(action, arg);
+    if (ret != M_PROPERTY_VALID)
+        return ret;
+
+    *(int *)arg = !!var;
+    return M_PROPERTY_OK;
+}
+
+inline int m_property_int_ro(int action, void *arg, int var)
+{
+    switch (action) {
+    case M_PROPERTY_GET:
+        *(int *)arg = var;
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_INT};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+inline int m_property_int64_ro(int action, void* arg, int64_t var)
+{
+    switch (action) {
+    case M_PROPERTY_GET:
+        *(int64_t *)arg = var;
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_INT64};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+inline int m_property_float_ro(int action, void *arg, float var)
+{
+    switch (action) {
+    case M_PROPERTY_GET:
+        *(float *)arg = var;
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_FLOAT};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+inline int m_property_double_ro_validate(int action, void* arg) {
+    switch (action) {
+    case M_PROPERTY_GET:
+        return M_PROPERTY_VALID;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_DOUBLE};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+inline int m_property_double_ro(int action, void *arg, double var)
+{
+    int ret = m_property_double_ro_validate(action, arg);
+    if (ret != M_PROPERTY_VALID) {
+        return ret;
+    }
+    *(double *)arg = var;
+    return M_PROPERTY_OK;
+}
+
+inline int m_property_strdup_ro(int action, void* arg, const char *var)
+{
+    if (!var)
+        return M_PROPERTY_UNAVAILABLE;
+    switch (action) {
+    case M_PROPERTY_GET:
+        *(char **)arg = talloc_strdup(NULL, var);
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_STRING};
+        return M_PROPERTY_OK;
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
+}
+
+
+// If *action is M_PROPERTY_KEY_ACTION, but the associated path is "", then
+// make this into a top-level action.
+inline static void m_property_unkey(int *action, void **arg)
+{
+    if (*action == M_PROPERTY_KEY_ACTION) {
+        struct m_property_action_arg *ka = *arg;
+        if (!ka->key[0]) {
+            *action = ka->action;
+            *arg = ka->arg;
+        }
+    }
+}
+
+inline int m_property_read_sub_validate(void *ctx, struct m_property *prop,
+                                 int action, void *arg)
+{
+    m_property_unkey(&action, &arg);
+    switch (action) {
+    case M_PROPERTY_GET_TYPE:
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_NODE};
+        return M_PROPERTY_OK;
+    case M_PROPERTY_GET:
+    case M_PROPERTY_PRINT:
+    case M_PROPERTY_KEY_ACTION:
+        return M_PROPERTY_VALID;
+    default:
+        return M_PROPERTY_NOT_IMPLEMENTED;
+    };
+}
 
 struct m_sub_property {
     // Name of the sub-property - this will be prefixed with the parent
@@ -212,8 +333,6 @@ struct m_sub_property {
 
 int m_property_read_sub(const struct m_sub_property *props, int action, void *arg);
 
-int m_property_read_sub_validate(void *ctx, struct m_property *prop,
-                                 int action, void *arg);
                                  
 // Used with m_property_read_list().
 // Get an entry. item is the 0-based index of the item. This behaves like a
