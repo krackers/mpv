@@ -56,6 +56,10 @@ struct mpv_render_context {
     struct mpv_global *global;
     struct mp_client_api *client_api;
 
+    // Note that an atomic was likely used here since this needs to be called before
+    // render context is potentially active. And we cannot have it acquire a lock on render context
+    // because client_api_lock is after render_context_lock in the locking hierarchy.
+    // And having an atomic is probably easier than creating an entirely new mutex just for this.
     atomic_bool in_use;
 
     // --- Immutable after init
@@ -80,6 +84,7 @@ struct mpv_render_context {
 
     // --- Protected by lock
     struct vo_frame *next_frame;    // next frame to draw
+    bool shutting_down;            // Set if we shouold no longer block render/flush/present 
     int64_t render_count;          // incremented when next frame can be shown
     int64_t flush_count;          // incremented when client does glFlush() for drawable
     int64_t present_count;
@@ -268,6 +273,14 @@ void mp_render_context_set_control_callback(mpv_render_context *ctx,
     pthread_mutex_unlock(&ctx->control_lock);
 }
 
+static void mpv_render_context_stop_flip(mpv_render_context *ctx)
+{
+    pthread_mutex_lock(&ctx->lock);
+    ctx->shutting_down = true;
+    pthread_mutex_unlock(&ctx->lock);
+    pthread_cond_broadcast(&ctx->video_wait);
+}
+
 void mpv_render_context_uninit(mpv_render_context *ctx) {
     if (!ctx)
         return;
@@ -284,6 +297,8 @@ void mpv_render_context_uninit(mpv_render_context *ctx) {
         // In theory, this races with vo_libmpv exiting and another VO being
         // used, which is a harmless grotesque corner case.
         kill_video_async(ctx->client_api);
+
+        mpv_render_context_stop_flip(ctx);
 
         while (atomic_load(&ctx->in_use)) {
             // As a nasty detail, we need to wait until the VO is released, but
@@ -503,8 +518,8 @@ void mpv_render_context_report_present(mpv_render_context *ctx)
     ctx->present_count += 1;
     pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);
-
 }
+
 
 uint64_t mpv_render_context_update(mpv_render_context *ctx)
 {
@@ -593,7 +608,7 @@ static void flip_page(struct vo *vo)
 
     struct timespec ts = mp_rel_time_to_timespec(0.2);
     // Wait until frame was rendered
-    while (ctx->next_frame) {
+    while (ctx->next_frame && !ctx->shutting_down) {
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             if (ctx->next_frame) {
                 MP_VERBOSE(vo, "mpv_render_context_render() not being called "
@@ -615,7 +630,7 @@ static void flip_page(struct vo *vo)
     uint64_t befvsync = ctx->last_vsync_time;
 
     uint64_t flush_bef = mach_absolute_time();
-    while (ctx->expected_flush_count > ctx->flush_count) {
+    while ((ctx->expected_flush_count > ctx->flush_count) && !ctx->shutting_down) {
         if (!ctx->flush_count)
             break;
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
@@ -623,7 +638,7 @@ static void flip_page(struct vo *vo)
             goto done;
         }
     }
-    while (ctx->expected_present_count > ctx->present_count) {
+    while ((ctx->expected_present_count > ctx->present_count) && !ctx->shutting_down) {
         if (!ctx->present_count)
             break;
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
@@ -642,7 +657,7 @@ static void flip_page(struct vo *vo)
     // int64_t flp_count_before_flush = ctx->flip_count;
     // TODO: Should also use gpu fence to make sure commands itself retired.
     // See opengl vo.
-    while (ctx->pending_swap_count > 1) {
+    while ((ctx->pending_swap_count > 1) && !ctx->shutting_down) {
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             printf("Bail on swap\n");
             MP_VERBOSE(vo, "mpv_render_report_swap() not being called.\n");
@@ -661,7 +676,7 @@ static void flip_page(struct vo *vo)
 done:
 
     // Cleanup after the API user is not reacting, or is being unusually slow.
-    if (ctx->next_frame) {
+    if (ctx->next_frame && !ctx->shutting_down) {
         printf("Render timeout\n");
         talloc_free(ctx->cur_frame);
         ctx->cur_frame = ctx->next_frame;
