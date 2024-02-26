@@ -44,7 +44,6 @@ typedef struct mp_vo_opts {
 
     int64_t WinID;
 
-    float force_monitor_aspect;
     float monitor_pixel_aspect;
     int force_window_position;
 
