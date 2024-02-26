@@ -2748,35 +2748,39 @@ static int mp_property_window_scale(void *ctx, struct m_property *prop,
     MPContext *mpctx = ctx;
     struct vo *vo = mpctx->video_out;
     if (!vo)
-        goto generic;
+        return M_PROPERTY_UNAVAILABLE;
 
     struct mp_image_params params = get_video_out_params(mpctx);
     int vid_w, vid_h;
     mp_image_params_get_dsize(&params, &vid_w, &vid_h);
     if (vid_w < 1 || vid_h < 1)
-        goto generic;
+        return M_PROPERTY_UNAVAILABLE;
 
     switch (action) {
     case M_PROPERTY_SET: {
         double scale = *(double *)arg;
         int s[2] = {vid_w * scale, vid_h * scale};
         if (s[0] > 0 && s[1] > 0)
-            vo_control(vo, VOCTRL_SET_UNFS_WINDOW_SIZE, s);
-        goto generic;
+            return vo_control(vo, VOCTRL_SET_UNFS_WINDOW_SIZE, s) > 0 ? M_PROPERTY_OK : M_PROPERTY_ERROR;
+        return M_PROPERTY_ERROR;
     }
     case M_PROPERTY_GET: {
         int s[2];
         if (vo_control(vo, VOCTRL_GET_UNFS_WINDOW_SIZE, s) <= 0 ||
             s[0] < 1 || s[1] < 1)
-            goto generic;
+            return M_PROPERTY_UNAVAILABLE;
         double xs = (double)s[0] / vid_w;
         double ys = (double)s[1] / vid_h;
         *(double *)arg = (xs + ys) / 2;
         return M_PROPERTY_OK;
     }
+    case M_PROPERTY_GET_TYPE: {
+        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_DOUBLE};
+        return M_PROPERTY_OK;
+        
     }
-generic:
-    return mp_property_generic_option(mpctx, prop, action, arg);
+    }
+    return M_PROPERTY_NOT_IMPLEMENTED;
 }
 
 static int mp_property_win_minimized(void *ctx, struct m_property *prop,
