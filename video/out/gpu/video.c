@@ -46,6 +46,7 @@
 // scale/cscale arguments that map directly to shader filter routines.
 // Note that the convolution filters are not included in this list.
 static const char *const fixed_scale_filters[] = {
+    "glnearest", // Version of nearest-neighbor ran on GPU instead of conv kernel
     "bilinear",
     "bicubic_fast",
     "oversample",
@@ -1794,24 +1795,31 @@ static void pass_sample(struct gl_video *p, struct image img,
                   scaler->conf.kernel.name, plane_names[img.type]);
 
     bool is_separated = scaler->kernel && !scaler->kernel->polar;
+    bool glnearest = false;
+     // Dispatch the scaler. They're all wildly different.
+    const char *name = scaler->conf.kernel.name;
 
     // Set up the transformation+prelude and bind the texture, for everything
     // other than separated scaling (which does this in the subfunction)
-    if (!is_separated)
+    if (!is_separated) {
+        if (!scaler->kernel && strcmp(name, "glnearest") == 0) {
+            glnearest = true;
+            img.sample_linear = false;
+        }
         sampler_prelude(p->sc, pass_bind(p, img));
+    }
 
-    // Dispatch the scaler. They're all wildly different.
-    const char *name = scaler->conf.kernel.name;
-    if (strcmp(name, "bilinear") == 0) {
-        GLSL(color = texture(tex, pos);)
-    } else if (strcmp(name, "bicubic_fast") == 0) {
-        pass_sample_bicubic_fast(p->sc);
-    } else if (strcmp(name, "oversample") == 0) {
-        pass_sample_oversample(p->sc, scaler, w, h);
-    } else if (scaler->kernel && scaler->kernel->polar) {
+   
+    if (scaler->kernel && scaler->kernel->polar) {
         pass_dispatch_sample_polar(p, scaler, img, w, h);
     } else if (scaler->kernel) {
         pass_sample_separated(p, img, scaler, w, h);
+    } else if (strcmp(name, "oversample") == 0) {
+        pass_sample_oversample(p->sc, scaler, w, h);
+    } else if (strcmp(name, "bilinear") == 0 || glnearest) {
+        GLSL(color = texture(tex, pos);)
+    } else if (strcmp(name, "bicubic_fast") == 0) {
+        pass_sample_bicubic_fast(p->sc);
     } else {
         // Should never happen
         abort();
