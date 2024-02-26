@@ -93,7 +93,9 @@ struct mpv_render_context {
     uint64_t vsync_interval;
     struct vo_frame *cur_frame;
     struct mp_image_params img_params;
-    int vp_w, vp_h;
+    int vp_w, vp_h; // Note that we can't use vo->dwidth/vo->dheight directly
+                    // since render is called from non-vo thread
+    float vp_par;
     bool flip;
     bool imgfmt_supported[IMGFMT_END - IMGFMT_START];
     bool need_reconfig;
@@ -383,16 +385,17 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
         if (ctx->vo && (ctx->vp_w != vp_w || ctx->vp_h != vp_h ||
                         ctx->need_resize))
         {
+            m_config_cache_update(ctx->vo_opts_cache);
+
             ctx->vp_w = vp_w;
             ctx->vp_h = vp_h;
-
-            m_config_cache_update(ctx->vo_opts_cache);
+            ctx->vp_par = 1.0 / ctx->vo_opts->monitor_pixel_aspect;
 
             struct mp_rect src, dst;
             struct mp_osd_res osd;
             mp_get_src_dst_rects(ctx->log, ctx->vo_opts, ctx->vo->driver->caps,
                                 &ctx->img_params, vp_w, abs(vp_h),
-                                1.0, &src, &dst, &osd);
+                                ctx->vp_par, &src, &dst, &osd);
 
             ctx->renderer->fns->resize(ctx->renderer, &src, &dst, &osd);
         }
@@ -574,6 +577,13 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
 
 extern uint64_t mach_absolute_time(void);
 
+// Called locked
+static inline void update_vo_params(struct vo *vo, struct mpv_render_context *ctx) {
+    vo->dwidth = ctx->vp_w;
+    vo->dheight = ctx->vp_h;
+    vo->monitor_par = ctx->vp_par;
+}
+
 static void flip_page(struct vo *vo)
 {
     struct vo_priv *p = vo->priv;
@@ -596,6 +606,7 @@ static void flip_page(struct vo *vo)
     // Unblock mpv_render_context_render().
     ctx->render_count += 1;
     pthread_cond_broadcast(&ctx->video_wait);
+    update_vo_params(vo, ctx);
 
     if (ctx->redrawing)
         goto done; // do not block for redrawing

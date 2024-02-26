@@ -618,6 +618,8 @@ static void run_reconfig(void *p)
 
     update_opts(vo);
 
+    // Seed some "initial" values. VO backends can overwrite
+    // with their actual values.
     mp_image_params_get_dsize(params, &vo->dwidth, &vo->dheight);
 
     talloc_free(vo->params);

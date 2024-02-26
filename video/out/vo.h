@@ -488,7 +488,7 @@ struct vo {
 
     bool want_redraw;   // redraw as soon as possible
 
-    // current window state
+    // current window state, for use by VO backends.
     int dwidth;
     int dheight;
     float monitor_par;
