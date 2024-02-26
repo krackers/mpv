@@ -22,8 +22,21 @@
 #include <inttypes.h>
 #include "config.h"
 
+// Intentionally don't define relaxed_store. This usually has no use since it cannot establish
+// a happen before relation with another thread, and if there is no other consumer then it doesn't 
+// make sense to use an atomic at at all.
+// By contrast relaxed loads make sense if you are consuming a variable from the same thread it's written by.
+#define atomic_load_relaxed(var) atomic_load_explicit(var, memory_order_relaxed)
+#define atomic_store_rel(var, val) atomic_store_explicit(var, val, memory_order_release)
+#define atomic_inc_acqrel(var, inc) atomic_fetch_add_explicit(var, inc, memory_order_acq_rel)
+// See https://stackoverflow.com/questions/51978573/memory-ordering-or-read-modify-write-operation-with-read-write-only-memory-ord
+// For this variant. Basically the load part is done in relaxed.
+#define atomic_inc_rel(var, inc) atomic_fetch_add_explicit(var, inc, memory_order_release)
+#define atomic_load_acq(var) atomic_load_explicit(var, memory_order_acquire)
+
 #if HAVE_STDATOMIC
 #include <stdatomic.h>
+typedef _Atomic double mp_atomic_double;
 typedef _Atomic float mp_atomic_float;
 typedef _Atomic int64_t mp_atomic_int64;
 #else
@@ -39,6 +52,7 @@ typedef struct { uint_least32_t v;     } atomic_uint_least32_t;
 typedef struct { unsigned long long v; } atomic_ullong;
 
 typedef struct { float v;              } mp_atomic_float;
+typedef struct { double v;              } mp_atomic_double;
 typedef struct { int64_t v;            } mp_atomic_int64;
 
 #define ATOMIC_VAR_INIT(x) \
@@ -48,6 +62,7 @@ typedef struct { int64_t v;            } mp_atomic_int64;
 #define memory_order_seq_cst 2
 
 #define atomic_load_explicit(p, e) atomic_load(p)
+#define atomic_store_explicit(p, e) atomic_store(p)
 
 #include <pthread.h>
 

@@ -145,16 +145,16 @@ struct vo_internal {
                                      // is reset to prev_vsync.
 
     int drop_point;
-    double estimated_vsync_interval;
-    double estimated_vsync_jitter;
+    mp_atomic_double estimated_vsync_interval;
+    mp_atomic_double estimated_vsync_jitter;
     bool expecting_vsync;
     int64_t num_successive_vsyncs;
 
     int64_t flip_queue_offset; // queue flip events at most this much in advance
     int64_t timing_offset;     // same (but from options; not VO configured)
 
-    int64_t delayed_count;
-    int64_t drop_count;
+    mp_atomic_int64 delayed_count;
+    mp_atomic_int64 drop_count;
     bool dropped_frame;             // the previous frame was dropped
 
     struct vo_frame *current_frame; // last frame queued to the VO
@@ -166,7 +166,7 @@ struct vo_internal {
     int req_frames;                 // VO's requested value of num_frames
     uint64_t current_frame_id;
 
-    double display_fps;
+    mp_atomic_double display_fps;
     double reported_display_fps;
 };
 
@@ -424,32 +424,34 @@ static void check_estimated_display_fps(struct vo *vo)
     struct vo_internal *in = vo->in;
 
     bool use_estimated = false;
+    double estimated_vsync_interval = atomic_load_relaxed(&in->estimated_vsync_interval);
+
     if (in->num_total_vsync_samples >= MAX_VSYNC_SAMPLES / 2 &&
-        in->estimated_vsync_interval <= 1e6 / 20.0 &&
-        in->estimated_vsync_interval >= 1e6 / 99.0)
+        estimated_vsync_interval <= 1e6 / 20.0 &&
+        estimated_vsync_interval >= 1e6 / 99.0)
     {
         for (int n = 0; n < in->num_vsync_samples; n++) {
-            if (fabs(in->vsync_samples[n] - in->estimated_vsync_interval)
-                >= in->estimated_vsync_interval / 4) {
-                MP_TRACE(vo, "Vsync sample with fps %f skewed from estimate %f. Ignoring sample run.\n", 1e6/in->vsync_samples[n], 1e6/in->estimated_vsync_interval);
+            if (fabs(in->vsync_samples[n] - estimated_vsync_interval)
+                >= estimated_vsync_interval / 4) {
+                MP_TRACE(vo, "Vsync sample with fps %f skewed from estimate %f. Ignoring sample run.\n", 1e6/in->vsync_samples[n], 1e6/estimated_vsync_interval);
                 return;
             }
         }
-        double mjitter = vsync_stddef(vo, in->estimated_vsync_interval);
+        double mjitter = vsync_stddef(vo, estimated_vsync_interval);
         double njitter = vsync_stddef(vo, in->nominal_vsync_interval);
-        MP_TRACE(vo, "jitter with estimated (%f) %f ; jitter with nominal (%f) %f\n", 1e6/in->estimated_vsync_interval, mjitter,  1e6/in->nominal_vsync_interval,  njitter);
+        MP_TRACE(vo, "jitter with estimated (%f) %f ; jitter with nominal (%f) %f\n", 1e6/estimated_vsync_interval, mjitter,  1e6/in->nominal_vsync_interval,  njitter);
         if (mjitter * 1.01 < njitter)
             use_estimated = true;
         if (use_estimated == (in->vsync_interval == in->nominal_vsync_interval)) {
             if (use_estimated) {
                 MP_VERBOSE(vo, "adjusting display FPS to a value closer to %.3f Hz\n",
-                        1e6 / in->estimated_vsync_interval);
+                        1e6 / estimated_vsync_interval);
             } else {
                 MP_VERBOSE(vo, "switching back to assuming display fps = %.3f Hz\n",
-                        1e6 / in->nominal_vsync_interval);
+                        1e6 / estimated_vsync_interval);
             }
         }
-        in->vsync_interval = use_estimated ? in->estimated_vsync_interval
+        in->vsync_interval = use_estimated ? estimated_vsync_interval
                                     : in->nominal_vsync_interval;
     } else {
         in->vsync_interval = in->nominal_vsync_interval;
@@ -479,7 +481,7 @@ static void vsync_skip_detection(struct vo *vo)
         // (it's up to the driver what this is supposed to mean), but no reason
         // to treat it differently.
         in->base_vsync = in->prev_vsync;
-        in->delayed_count += 1;
+        atomic_inc_rel(&in->delayed_count, 1);
         in->drop_point = 0;
         MP_STATS(vo, "vo-delayed");
     }
@@ -529,14 +531,14 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
     double avg = 0;
     for (int n = 0; n < in->num_vsync_samples; n++)
         avg += in->vsync_samples[n];
-    in->estimated_vsync_interval = avg / in->num_vsync_samples;
-    in->estimated_vsync_jitter =
-        vsync_stddef(vo, in->vsync_interval) / in->vsync_interval;
+    atomic_store_rel(&in->estimated_vsync_interval, avg / in->num_vsync_samples);
+    atomic_store_rel(&in->estimated_vsync_jitter,
+        vsync_stddef(vo, in->vsync_interval) / in->vsync_interval);
 
     check_estimated_display_fps(vo);
-    int64_t prev_vsync_skips = in->delayed_count;
+    int64_t prev_vsync_skips = atomic_load_relaxed(&in->delayed_count);
     vsync_skip_detection(vo);
-    int64_t skipped_vsyncs = in->delayed_count - prev_vsync_skips;
+    int64_t skipped_vsyncs = atomic_load_relaxed(&in->delayed_count) - prev_vsync_skips;
     // If a vsync is delayed, we just skip the repeat frame.
     // This is a bit of a hack to compensate for the fact that timing is only done for fresh frames in video.c
     // We should in fact ideally get skipped vsyncs from presentation feedback mechanism.
@@ -549,8 +551,6 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
         printf("Vsync skip detected, cur num vsyncs: %d\n", in->current_frame->num_vsyncs);
     }
 
-
-    MP_STATS(vo, "value %f jitter", in->estimated_vsync_jitter);
     MP_STATS(vo, "value %f vsync-diff", in->vsync_samples[0] / 1e6);
 }
 
@@ -576,10 +576,10 @@ static void update_display_fps(struct vo *vo)
     if (display_fps <= 0)
         display_fps = in->reported_display_fps;
 
-    if (in->display_fps != display_fps) {
+    if (atomic_load_relaxed(&in->display_fps) != display_fps) {
         in->nominal_vsync_interval =  display_fps > 0 ? 1e6 / display_fps : 0;
         in->vsync_interval = MPMAX(in->nominal_vsync_interval, 1);
-        in->display_fps = display_fps;
+        atomic_store_rel(&in->display_fps, display_fps);
 
         MP_VERBOSE(vo, "Assuming %f FPS for display sync.\n", display_fps);
 
@@ -711,8 +711,8 @@ static void forget_frames(struct vo *vo)
     struct vo_internal *in = vo->in;
     in->hasframe = false;
     in->hasframe_rendered = false;
-    in->drop_count = 0;
-    in->delayed_count = 0;
+    atomic_store_rel(&in->drop_count, 0);
+    atomic_store_rel(&in->delayed_count, 0);
     talloc_free(in->frame_queued);
     in->frame_queued = NULL;
     in->current_frame_id += VO_MAX_REQ_FRAMES + 1;
@@ -942,12 +942,12 @@ bool vo_render_frame_external(struct vo *vo)
     bool request_redraw = in->request_redraw;
 
     if (in->dropped_frame) {
-        in->drop_count += 1;
+        atomic_inc_rel(&in->drop_count, 1);
     } else {
         flipped = true;
         in->rendering = true;
         in->hasframe_rendered = true;
-        int64_t prev_drop_count = vo->in->drop_count;
+        int64_t prev_drop_count = atomic_load_relaxed(&vo->in->drop_count);
         pthread_mutex_unlock(&in->lock);
 
 
@@ -988,7 +988,7 @@ bool vo_render_frame_external(struct vo *vo)
             vsync.last_queue_display_time = mp_time_us();
 
         pthread_mutex_lock(&in->lock);
-        in->dropped_frame = prev_drop_count < vo->in->drop_count;
+        in->dropped_frame = prev_drop_count < atomic_load_relaxed(&vo->in->drop_count);
         in->rendering = false;
 
         update_vsync_timing_after_swap(vo, &vsync);
@@ -1259,16 +1259,13 @@ void vo_set_paused(struct vo *vo, bool paused)
 
 int64_t vo_get_drop_count(struct vo *vo)
 {
-    pthread_mutex_lock(&vo->in->lock);
-    int64_t r = vo->in->drop_count;
-    pthread_mutex_unlock(&vo->in->lock);
-    return r;
+    return atomic_load_acq(&vo->in->drop_count);
 }
 
 void vo_increment_drop_count(struct vo *vo, int64_t n)
 {
     pthread_mutex_lock(&vo->in->lock);
-    vo->in->drop_count += n;
+    atomic_inc_rel(&vo->in->drop_count, n);
     pthread_mutex_unlock(&vo->in->lock);
 }
 
@@ -1423,19 +1420,13 @@ double vo_get_vsync_interval(struct vo *vo)
 double vo_get_estimated_vsync_interval(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
-    pthread_mutex_lock(&in->lock);
-    double res = in->estimated_vsync_interval / 1e6;
-    pthread_mutex_unlock(&in->lock);
-    return res;
+    return atomic_load_acq(&in->estimated_vsync_interval) / 1e6;
 }
 
 double vo_get_estimated_vsync_jitter(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
-    pthread_mutex_lock(&in->lock);
-    double res = in->estimated_vsync_jitter;
-    pthread_mutex_unlock(&in->lock);
-    return res;
+    return atomic_load_acq(&in->estimated_vsync_jitter);
 }
 
 // Get the time in seconds at after which the currently rendering frame will
@@ -1472,19 +1463,13 @@ void vo_discard_timing_info(struct vo *vo)
 int64_t vo_get_delayed_count(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
-    pthread_mutex_lock(&in->lock);
-    int64_t res = vo->in->delayed_count;
-    pthread_mutex_unlock(&in->lock);
-    return res;
+    return atomic_load_acq(&vo->in->delayed_count);
 }
 
 double vo_get_display_fps(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
-    pthread_mutex_lock(&in->lock);
-    double res = vo->in->display_fps;
-    pthread_mutex_unlock(&in->lock);
-    return res;
+    return atomic_load_acq(&in->display_fps);
 }
 
 // Set specific event flags, and wakeup the playback core if needed.
