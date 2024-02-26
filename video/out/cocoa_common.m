@@ -783,6 +783,8 @@ int vo_cocoa_config_window(struct vo *vo, int swapinterval)
         vo->dwidth  = s->vo_dwidth  = frame.size.width;
         vo->dheight = s->vo_dheight = frame.size.height;
 
+        // Note that reportedly doing an nsopengl context update here may cause issues,
+        // so it's deferred until later.
         s->update_context = 1;
 
     });
@@ -831,7 +833,9 @@ int cocoa_set_qosClass(struct mp_log *log, unsigned int priority) {
     return 1;
 }
 
+int realtime = 0;
 int cocoa_set_realtime(struct mp_log *log, double periodFraction) {
+    realtime = 1;
     char tname[20];
     pthread_getname_np(pthread_self(), tname, 20);
     mp_verbose(log, "Setting thread %s to realtime of fraction %f.\n", tname, periodFraction);
@@ -871,10 +875,6 @@ void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
     info->last_queue_display_time = mp_time_us() - (mp_raw_time_us() - s->last_vsync_time * mach_timebase_ratio*1e6);
     // last_time = s->last_vsync_time;
 }
-
-int realtime = 0;
-
-int last_swap_time = 0;
 
 void vo_cocoa_swap_buffers(struct vo *vo)
 {
@@ -1193,6 +1193,11 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 
 - (void)windowWillStartLiveResize:(NSNotification *)notification
 {
+    // Note: This approach probably does not work on older osx
+    // (which had "raw" opengl), since it relies on things being implicitly layer
+    // backed: as the VO itself is unaware that the size of the frame has changed
+    // until the resize ends. We probably need an ifdef here to decide whether or not
+    // the VO needs to be notified of resizes during live-resize.
     struct vo_cocoa_state *s = self.vout->cocoa;
     pthread_mutex_lock(&s->lock);
     s->in_live_resize = 1;
@@ -1202,7 +1207,6 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 - (void)windowDidEndLiveResize:(NSNotification *)notification
 {
     struct vo_cocoa_state *s = self.vout->cocoa;
-
     pthread_mutex_lock(&s->lock);
     s->in_live_resize = 0;
     s->update_context = 1;
