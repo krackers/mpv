@@ -222,19 +222,6 @@ bool m_property_split_path(const char *path, bstr *prefix, char **rem)
     }
 }
 
-// If *action is M_PROPERTY_KEY_ACTION, but the associated path is "", then
-// make this into a top-level action.
-static void m_property_unkey(int *action, void **arg)
-{
-    if (*action == M_PROPERTY_KEY_ACTION) {
-        struct m_property_action_arg *ka = *arg;
-        if (!ka->key[0]) {
-            *action = ka->action;
-            *arg = ka->arg;
-        }
-    }
-}
-
 static int m_property_do_bstr(const struct m_property *prop_list, bstr name,
                               int action, void *arg, void *ctx)
 {
@@ -354,102 +341,6 @@ void m_properties_print_help_list(struct mp_log *log,
     mp_info(log, "\nTotal: %d properties\n", count);
 }
 
-int m_property_flag_ro(int action, void* arg, int var)
-{
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(int *)arg = !!var;
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_FLAG};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_int_ro(int action, void *arg, int var)
-{
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(int *)arg = var;
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_INT};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_int64_ro(int action, void* arg, int64_t var)
-{
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(int64_t *)arg = var;
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_INT64};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_float_ro(int action, void *arg, float var)
-{
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(float *)arg = var;
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_FLOAT};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_double_ro(int action, void *arg, double var)
-{
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(double *)arg = var;
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_DOUBLE};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_strdup_ro(int action, void* arg, const char *var)
-{
-    if (!var)
-        return M_PROPERTY_UNAVAILABLE;
-    switch (action) {
-    case M_PROPERTY_GET:
-        *(char **)arg = talloc_strdup(NULL, var);
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_STRING};
-        return M_PROPERTY_OK;
-    }
-    return M_PROPERTY_NOT_IMPLEMENTED;
-}
-
-int m_property_read_sub_validate(void *ctx, struct m_property *prop,
-                                 int action, void *arg)
-{
-    m_property_unkey(&action, &arg);
-    switch (action) {
-    case M_PROPERTY_GET_TYPE:
-        *(struct m_option *)arg = (struct m_option){.type = CONF_TYPE_NODE};
-        return M_PROPERTY_OK;
-    case M_PROPERTY_GET:
-    case M_PROPERTY_PRINT:
-    case M_PROPERTY_KEY_ACTION:
-        return M_PROPERTY_VALID;
-    default:
-        return M_PROPERTY_NOT_IMPLEMENTED;
-    };
-}
 
 // This allows you to make a list of values (like from a struct) available
 // as a number of sub-properties. The property list is set up with the current
