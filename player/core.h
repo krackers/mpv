@@ -183,6 +183,8 @@ struct vo_chain {
     bool is_coverart;
     // - video consists of sparse still images
     bool is_sparse;
+    // - Video is a single image
+    bool is_image;
 };
 
 // Like vo_chain, for audio.

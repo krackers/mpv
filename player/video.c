@@ -259,6 +259,7 @@ void reinit_video_chain_src(struct MPContext *mpctx, struct track *track)
         vo_c->filter->container_fps = track->dec->fps;
         vo_c->is_coverart = !!track->stream->attached_picture;
         vo_c->is_sparse = track->stream->still_image;
+        vo_c->is_image = track->stream->image;
 
         track->vo_c = vo_c;
         vo_c->track = track;
@@ -1051,8 +1052,7 @@ void write_video(struct MPContext *mpctx)
         if (mpctx->video_status <= STATUS_PLAYING) {
             mpctx->video_status = STATUS_DRAINING;
             get_relative_time(mpctx);
-            if (mpctx->num_past_frames == 1 && mpctx->past_frames[0].pts == 0 &&
-                !mpctx->ao_chain)
+            if (vo_c->is_image && !mpctx->ao_chain)
             {
                 MP_VERBOSE(mpctx, "Found image, applying image-display-duration.\n");
                 mpctx->time_frame += opts->image_display_duration;
