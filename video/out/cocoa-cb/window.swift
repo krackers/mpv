@@ -28,6 +28,7 @@ class Window: NSWindow, NSWindowDelegate {
     var currentScreen: NSScreen?
     var unfScreen: NSScreen?
 
+    var initialSize: NSSize?
     var unfsContentFrame: NSRect?
     var isInFullscreen: Bool = false
     var isAnimating: Bool = false
@@ -72,7 +73,6 @@ class Window: NSWindow, NSWindowDelegate {
         self.init(contentRect: contentRect,
                   styleMask: [.titled, .closable, .miniaturizable, .resizable],
                   backing: .buffered, defer: false, screen: screen)
-
         // workaround for an AppKit bug where the NSWindow can't be placed on a
         // none Main screen NSScreen outside the Main screen's frame bounds
         if let wantedScreen = screen, screen != NSScreen.main {
@@ -88,6 +88,7 @@ class Window: NSWindow, NSWindowDelegate {
         cocoaCB = ccb
         title = cocoaCB.title
         minSize = NSMakeSize(160, 90)
+        initialSize = contentRect.size
         collectionBehavior = .fullScreenPrimary
         delegate = self
 
@@ -302,7 +303,7 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func updateSize(_ size: NSSize) {
-        if let currentSize = contentView?.frame.size, size != currentSize {
+        if let currentSize = contentView?.frame.size, size != initialSize ?? NSZeroSize {
             let newContentFrame = centeredContentSize(for: frame, size: size)
             if !isInFullscreen {
                 updateFrame(newContentFrame)
@@ -310,6 +311,7 @@ class Window: NSWindow, NSWindowDelegate {
                 unfsContentFrame = newContentFrame
             }
         }
+        initialSize = size
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
