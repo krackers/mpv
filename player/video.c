@@ -1054,7 +1054,7 @@ void write_video(struct MPContext *mpctx)
             if (mpctx->num_past_frames == 1 && mpctx->past_frames[0].pts == 0 &&
                 !mpctx->ao_chain)
             {
-                MP_VERBOSE(mpctx, "assuming this is an image\n");
+                MP_VERBOSE(mpctx, "Found image, applying image-display-duration.\n");
                 mpctx->time_frame += opts->image_display_duration;
             } else if (mpctx->last_frame_duration > 0) {
                 MP_VERBOSE(mpctx, "using demuxer frame duration for last frame\n");

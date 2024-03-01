@@ -47,7 +47,8 @@ struct sh_stream {
     bool forced_track;          // container forced track flag
     bool dependent_track;       // container dependent track flag
     bool image;                 // video stream is an image
-    bool still_image;           // video stream contains still images
+    bool still_image;           // video consists of multiple sparse still images.
+                                // This is usually only set for weird .ts streams
     int hls_bitrate;
 
     struct mp_tags *tags;
