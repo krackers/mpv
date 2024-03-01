@@ -46,6 +46,7 @@ struct sh_stream {
     bool default_track;         // container default track flag
     bool forced_track;          // container forced track flag
     bool dependent_track;       // container dependent track flag
+    bool image;                 // video stream is an image
     bool still_image;           // video stream contains still images
     int hls_bitrate;
 

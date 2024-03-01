@@ -484,6 +484,7 @@ static int lavf_check_file(demuxer_t *demuxer, enum demux_check check)
 
     if (bstr_endswith0(bstrof0(priv->avif->name), "_pipe")) {
         MP_VERBOSE(demuxer, "Assuming this is an image format.\n");
+        sh->image = true;
         priv->format_hack.image_format = true;
     }
 
