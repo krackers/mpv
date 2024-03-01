@@ -288,7 +288,7 @@ static int preinit(struct vo *vo)
     struct ra_ctx_opts opts = p->opts;
 
     struct gl_video_opts *gl_opts = mp_get_config_group(vo, vo->global, &gl_video_conf);
-    opts.want_alpha = gl_opts->alpha_mode == 1;
+    opts.want_alpha = (gl_opts->alpha_mode == 1) || (gl_opts->alpha_mode == 2 && gl_opts->background.a < 255);
     talloc_free(gl_opts);
 
     p->ctx = ra_ctx_create(vo, p->context_type, p->context_name, opts);
