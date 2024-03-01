@@ -288,11 +288,47 @@ void pass_sample_bicubic_fast(struct gl_shader_cache *sc)
     GLSLF("}\n");
 }
 
+/**
+ The working of "oversample" is a bit subtle. Essentially, it's similar to
+ a nearest neighbor except for non-integer scale factors, when it handles
+ the ambiguous case by linear interpolation instead of floor/ceil. Example:
+ 
+ If you have "A B" as two pixels, and 2x it, you get "A A B B". 
+ Now if you try to 1.5x it for total of 3 pixels, you can either have "A A B" or
+ "A B B" depending on how exactly your nearest neighbor is implemented.
+  See https://kwojcicki.github.io/blog/NEAREST-NEIGHBOUR for more context.
+
+ Oversample instead handles this case by performing a blend, so you get
+  A (A+B)/2 B
+
+  See also github.com/haasn/libplacebo/commit/9979731e1d05fa501fab8d8d596649d184922bb4
+
+  A sampler that is similar to nearest neighbour sampling, but tries to
+    preserve pixel aspect ratios. This is mathematically equivalent to taking an
+    idealized image with square pixels, sampling it at an infinite resolution,
+    and then downscaling that to the desired resolution. (Hence it being called
+    "oversample"). Good for pixel art.
+
+    The threshold provides a cutoff threshold below which the contribution of
+    pixels should be ignored, trading some amount of aspect ratio distortion for
+    a slightly crisper image. A value of `threshold == 0.5` makes this filter
+    equivalent to regular nearest neighbour sampling.
+
+    NOTE: Supposedly this calculation is subtly incorrect (half-pixel off?)
+    https://github.com/haasn/libplacebo/commit/c71bbe1cc86bee7d679af05120b67b44947a6ea2
+    apparently fixes that (and it's also more clear how it works.)
+*/
 void pass_sample_oversample(struct gl_shader_cache *sc, struct scaler *scaler,
                                    int w, int h)
 {
+    // The input to all scalers is always texel centered, so that
+    // if pos % 1 = 0.5 then we are sampling exactly at the texel center
+    // otherwise we are sampling off of it (and where GL would normally do interpolation
+    // if GL_LINEAR was set).
+
     GLSLF("{\n");
-    GLSL(vec2 pos = pos - vec2(0.5) * pt;) // round to nearest
+    // round to nearest. {As far as I can tell this is done to make the math work out, see the following:}
+    GLSL(vec2 pos = pos - vec2(0.5) * pt;) 
     GLSL(vec2 fcoord = fract(pos * size - vec2(0.5));)
     // Determine the mixing coefficient vector
     gl_sc_uniform_vec2(sc, "output_size", (float[2]){w, h});
@@ -300,6 +336,15 @@ void pass_sample_oversample(struct gl_shader_cache *sc, struct scaler *scaler,
     float threshold = scaler->conf.kernel.params[0];
     threshold = isnan(threshold) ? 0.0 : threshold;
     GLSLF("coeff = (coeff - %f) * 1.0/%f;\n", threshold, 1.0 - 2 * threshold);
+
+    // So this is basically the key line that makes it a "nearest-neighbor" type algorithm.
+    // Assume that we have 2 pixels we want to interpolate out to 11 pixels. (i.e. size = 2, output_size = 11).
+    // Now the ultimate formula we have for coeff is something like
+    // coeff = (((pixelNum + 0.5)/(11*2))*2 - 0.5) * 11/2     where pixelNum ranges from 1 to 11.
+    // Note that the extra division and multiplication by 2 is to take into account fact that when GL samples
+    // it does so off the texel centers: draw an image of a 2 pixels that is interpolated up to 3 pixels to see the locations
+    // at which GL samples.
+    // Now observe that when pixelNum = 6, we get coeff = 0.5, otherwise it's always <= 0 or >=1.
     GLSL(coeff = clamp(coeff, 0.0, 1.0);)
     // Compute the right blend of colors
     GLSL(color = texture(tex, pos + pt * (coeff - fcoord));)

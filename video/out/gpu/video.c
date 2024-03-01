@@ -3017,6 +3017,40 @@ static void gl_video_interpolate_frame(struct gl_video *p, struct vo_frame *t,
             }
         }
 
+        // Temporal oversample works in a similar way to the spatial one, in that
+        // it blends the "ambiguous" case.
+        // If you expand out the formula below, it works out to
+        // (ideal_vsyncs - vsync_offset)/(vsync_interval)
+        // Out of which interval is of course constant so the main factor is "ideal_vsyncs - cur_vsync_offset"
+        // So let's say ideal is 2.5, then only when cur = 2 do we blend (with factor 0.5). Otherwise it's always <= 0 or >= 1.
+        // Also note that if we start with current interval as negative, then we add ideal to it. So if we have an initial vsync pos of -0.5 
+        // then it's effectively one of 2 (just for the previous frame).
+        // 
+        // Concrete example:
+        // Scheduled for 3 frames:
+        // 2.5-0
+        // 2.5-1
+        // 2.5 - 2 = 0.5 => interpolated
+        //
+        // Next frame starts off at vsync offset = 0.5
+        // (since we were scheduled for 3 frames but our ideal was 2.5, so we're starting off 0.5 vsync in)
+        // I.e. assume we calculate the error for the next frame (call it frame n) as 0.05
+        // (frame is ideally 0.05 vsync longer than what we can actually present).
+        // Then on the next iteration (after we've presented that frame n [and all its virtual frames]
+        // when we are computing info for frame n+1, we would like to "pick up" where frame n should have ideally left off.
+        // So assuming a magic temporal interpolator, we would give it the offset -0.05, so that the effective net duration
+        // for frame n does end up being 0.05.
+        //
+        // 2.5-0.5
+        // 2.5-1.5
+        //
+        // next frame starts at vsync offset -0.5
+        // scheduled for 3 frames
+        // starts at previous frame 
+        //2.5-2
+        //2.5-3
+        //2.5-4
+
         if (oversample) {
             // Oversample uses the frame area as mix ratio, not the the vsync
             // position itself
