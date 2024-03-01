@@ -86,10 +86,8 @@ struct mpv_render_context {
     struct vo_frame *next_frame;    // next frame to draw
     bool shutting_down;            // Set if we shouold no longer block render/flush/present 
     int64_t render_count;          // incremented when next frame can be shown
-    int64_t flush_count;          // incremented when client does glFlush() for drawable
     int64_t present_count;
     int64_t expected_flip_count;    // next vsync event for next_frame
-    int64_t expected_flush_count;  
     int64_t expected_present_count;
     int pending_swap_count;
     bool redrawing;                 // next_frame was a redraw request
@@ -499,17 +497,6 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
     pthread_cond_broadcast(&ctx->video_wait);
 }
 
-void mpv_render_context_report_flush(mpv_render_context *ctx)
-{
-    MP_STATS(ctx, "glcb-reportflush");
-
-    pthread_mutex_lock(&ctx->lock);
-    ctx->flush_count += 1;
-    pthread_mutex_unlock(&ctx->lock);
-    pthread_cond_broadcast(&ctx->video_wait);
-
-}
-
 void mpv_render_context_report_present(mpv_render_context *ctx)
 {
     MP_STATS(ctx, "glcb-reportpresent");
@@ -582,7 +569,6 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     assert(!ctx->next_frame);
     ctx->next_frame = vo_frame_ref(frame);
     ctx->expected_flip_count = ctx->flip_count + 1;
-    ctx->expected_flush_count = ctx->flush_count + 1;
     ctx->expected_present_count = ctx->present_count + 1;
     ctx->redrawing = frame->redraw || !frame->current;
     pthread_mutex_unlock(&ctx->lock);
@@ -630,14 +616,6 @@ static void flip_page(struct vo *vo)
     uint64_t befvsync = ctx->last_vsync_time;
 
     uint64_t flush_bef = mach_absolute_time();
-    while ((ctx->expected_flush_count > ctx->flush_count) && !ctx->shutting_down) {
-        if (!ctx->flush_count)
-            break;
-        if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
-            MP_VERBOSE(vo, "mpv_render_report_flush() not being called.\n");
-            goto done;
-        }
-    }
     while ((ctx->expected_present_count > ctx->present_count) && !ctx->shutting_down) {
         if (!ctx->present_count)
             break;

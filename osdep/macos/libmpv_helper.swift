@@ -116,11 +116,6 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_swap(mpvRenderContext, time)
     }
 
-    func reportRenderFlush() {
-        if !renderInitialized { return }
-        mpv_render_context_report_flush(mpvRenderContext)
-    }
-
     func reportRenderPresent() {
         if !renderInitialized { return }
         mpv_render_context_report_present(mpvRenderContext)
@@ -175,7 +170,6 @@ class LibmpvHelper: LogHelper {
         }
 
         if !skip { CGLFlushDrawable(ctx) }
-        // self.reportRenderFlush()
 
         renderContextLock.unlock()
     }
