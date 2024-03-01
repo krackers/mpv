@@ -526,7 +526,7 @@ class CocoaCB: NSObject {
             if let sizeData = data?.assumingMemoryBound(to: Int32.self) {
                 let size = UnsafeBufferPointer(start: sizeData, count: 2)
                 var rect = NSMakeRect(0, 0, CGFloat(size[0]), CGFloat(size[1]))
-                DispatchQueue.main.async {
+                DispatchQueue.main.sync {
                     if let screen = ccb.window?.currentScreen, !Bool(opts.hidpi_window_scale) {
                         rect = screen.convertRectFromBacking(rect)
                     }
