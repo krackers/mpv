@@ -614,7 +614,8 @@ static void run_reconfig(void *p)
 
     struct vo_internal *in = vo->in;
 
-    MP_VERBOSE(vo, "reconfig to %s\n", mp_image_params_to_str(params));
+    MP_VERBOSE(vo, "reconfig to %s from %s\n", mp_image_params_to_str(params),
+               vo->params ? mp_image_params_to_str(vo->params) : "nil");
 
     update_opts(vo);
 
