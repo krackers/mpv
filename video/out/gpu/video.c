@@ -167,7 +167,7 @@ struct gl_video {
 
     int fb_depth;               // actual bits available in GL main framebuffer
     struct m_color clear_color;
-    bool force_clear_color;
+    bool override_clear_color;
 
     struct gl_shader_cache *sc;
 
@@ -401,6 +401,7 @@ const struct m_sub_options gl_video_conf = {
         OPT_FLAG("opengl-rectangle-textures", use_rectangle, 0),
         OPT_COLOR("background", background, 0),
         OPT_FLAG("interpolation", interpolation, 0),
+        OPT_FLAG("force-clear-frame", force_clear, 0),
         OPT_FLOAT("interpolation-threshold", interpolation_threshold, 0),
         OPT_CHOICE("blend-subtitles", blend_subs, 0,
                    ({"no", BLEND_SUBS_NO},
@@ -3109,12 +3110,15 @@ void gl_video_render_frame(struct gl_video *p, struct vo_frame *frame,
     bool has_frame = !!frame->current;
 
 
-    struct m_color c = p->clear_color;
-    float clear_color[4] = {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0};
-    clear_color[0] *= clear_color[3];
-    clear_color[1] *= clear_color[3];
-    clear_color[2] *= clear_color[3];
-    p->ra->fns->clear(p->ra, fbo.tex, clear_color, &target_rc);
+    if (p->opts.force_clear || !has_frame || !mp_rect_equals(&p->dst_rect, &target_rc)) {
+        struct m_color c = p->clear_color;
+        float clear_color[4] = {c.r / 255.0, c.g / 255.0, c.b / 255.0, c.a / 255.0};
+        clear_color[0] *= clear_color[3];
+        clear_color[1] *= clear_color[3];
+        clear_color[2] *= clear_color[3];
+        p->ra->fns->clear(p->ra, fbo.tex, clear_color, &target_rc);
+    }
+
 
     if (p->hwdec_overlay) {
         if (has_frame) {
@@ -3334,7 +3338,7 @@ done:
 // Use this color instead of the global option.
 void gl_video_set_clear_color(struct gl_video *p, struct m_color c)
 {
-    p->force_clear_color = true;
+    p->override_clear_color = true;
     p->clear_color = c;
 }
 
@@ -3675,6 +3679,7 @@ static void check_gl_features(struct gl_video *p)
             .alpha_mode = p->opts.alpha_mode,
             .use_rectangle = p->opts.use_rectangle,
             .background = p->opts.background,
+            .force_clear = p->opts.force_clear,
             .compute_hdr_peak = p->opts.compute_hdr_peak,
             .dither_algo = p->opts.dither_algo,
             .dither_depth = p->opts.dither_depth,
@@ -3922,7 +3927,7 @@ static void reinit_from_options(struct gl_video *p)
     // referenced by them.
     p->opts = *(struct gl_video_opts *)p->opts_cache->opts;
 
-    if (!p->force_clear_color)
+    if (!p->override_clear_color)
         p->clear_color = p->opts.background;
 
     check_gl_features(p);
