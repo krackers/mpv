@@ -285,12 +285,11 @@ static int preinit(struct vo *vo)
 {
     struct gpu_priv *p = vo->priv;
     p->log = vo->log;
-
-    int alpha_mode;
-    mp_read_option_raw(vo->global, "alpha", &m_option_type_choice, &alpha_mode);
-
     struct ra_ctx_opts opts = p->opts;
-    opts.want_alpha = alpha_mode == 1;
+
+    struct gl_video_opts *gl_opts = mp_get_config_group(vo, vo->global, &gl_video_conf);
+    opts.want_alpha = gl_opts->alpha_mode == 1;
+    talloc_free(gl_opts);
 
     p->ctx = ra_ctx_create(vo, p->context_type, p->context_name, opts);
     if (!p->ctx)
