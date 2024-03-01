@@ -126,12 +126,12 @@ static void copy_opt(const m_option_t *opt, void *dst, const void *src)
 static int parse_flag(struct mp_log *log, const m_option_t *opt,
                       struct bstr name, struct bstr param, void *dst)
 {
-    if (bstr_equals0(param, "yes") || !param.len) {
+    if (bstr_equals0(param, "yes") || bstr_equals0(param, "true") || !param.len) {
         if (dst)
             VAL(dst) = 1;
         return 1;
     }
-    if (bstr_equals0(param, "no")) {
+    if (bstr_equals0(param, "no") || bstr_equals0(param, "false")) {
         if (dst)
             VAL(dst) = 0;
         return 1;
@@ -144,8 +144,8 @@ static int parse_flag(struct mp_log *log, const m_option_t *opt,
                  BSTR_P(name), BSTR_P(param));
         mp_info(log, "Valid values are:\n");
     }
-    mp_info(log, "    yes\n");
-    mp_info(log, "    no\n");
+    mp_info(log, "    yes/true\n");
+    mp_info(log, "    no/false\n");
     mp_info(log, "    (passing nothing)\n");
     return is_help ? M_OPT_EXIT : M_OPT_INVALID;
 }
