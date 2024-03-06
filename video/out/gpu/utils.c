@@ -129,25 +129,32 @@ bool ra_tex_upload_pbo(struct ra *ra, struct ra_buf_pool *pbo,
     #if defined(__arm64__) && defined(__APPLE__)
     // On M1, seem to require that PBO transfer width matches texture width.
     // Ex: Given Width 4096, Row size 4096, rc rectw 2880 
-    // rounding rectw to nearest multiple of 32 still doesn't work. However
+    // rounding rectw to nearest multiple of 256 still doesn't work. However
     // updating rectw to 4096 works.
     // Ex: Given width 709, row size 736, no rc (pix size 1). We cannot handle this on M1
     // since transfer width does not match PBO texture width.
+    // (Note that stride is given in "bytes" not pixels, and so we need to compare to width * pixel bytes)
     if (tex->params.w * tex->params.format->pixel_size != params->stride) {
+        if (!warned) {
+            mp_verbose(ra->log, "GPU does not support partial-row upload with PBO. Tex width %d, stride %ld\n",
+                       tex->params.w, params->stride);
+            warned = true;
+        }
         goto bail;
     }
 
     struct mp_rect new_rc = new_params.rc ? *new_params.rc : (struct mp_rect){0};
     if (new_params.rc && mp_rect_w(*new_params.rc) != tex->params.w) {
-        if (!warned) {
-            mp_verbose(ra->log, "GPU does not support partial-row upload with PBO\n");
-            warned = true;
-        }
         if (new_params.invalidate) {
             new_rc.x0 = 0;
             new_rc.x1 = tex->params.w;
             new_params.rc = &new_rc;
         } else {
+            if (!warned) {
+                mp_verbose(ra->log, "GPU does not support partial-row upload with PBO. RC width %d, stride %ld\n",
+                        mp_rect_w(*new_params.rc), params->stride);
+                warned = true;
+            }
             goto bail;
         }
 
