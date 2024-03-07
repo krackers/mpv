@@ -135,6 +135,13 @@ struct m_obj_desc {
     // is set to the old name (while the name field uses the new name).
     const char *replaced_name;
     // For convenience: these are added as global command-line options.
+    // (Note: from what I can see, the only difference between global_opts
+    // here and opts combined with use_global on the containing m_obj_list is
+    // _where_ the opts are physically allocated. With global_opts, you can define
+    // your own separate optsstruct to place the values into, whereas with opts
+    // everything is init'ed as part of priv.)
+    // Very few things use global_opts, so really I think they can just be removed
+    // to make things conceptually simpler.
     const struct m_sub_options *global_opts;
 };
 
@@ -154,6 +161,12 @@ struct m_obj_list {
     // This helps with confusing error messages if unknown flag options are used.
     bool disallow_positional_parameters;
     // Each sub-item is backed by global options (for AOs and VOs).
+    // If this is set, any option (returned via get_desc) will automatically be
+    // allocated and accessible via the "global" m_config during config creation.
+    // If false, any options are not part of the "global" config
+    // and so they need to be manually inited via m_config_from_obj_desc or
+    // m_config_from_obj_desc_and_args. Filter options are an example,
+    // where they are specified in-band lke --vf=filt1=opt1:val1
     bool use_global_options;
     // Callback to print additional custom help if "vf=help" is passed
     void (*print_help_list)(struct mp_log *log);
