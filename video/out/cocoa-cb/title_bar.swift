@@ -20,7 +20,6 @@ import Cocoa
 class TitleBar: NSVisualEffectView {
 
     unowned var cocoaCB: CocoaCB
-    var libmpv: LibmpvHelper { get { return cocoaCB.libmpv } }
 
     var systemBar: NSView? {
         get { return cocoaCB.window?.standardWindowButton(.closeButton)?.superview }
@@ -67,9 +66,10 @@ class TitleBar: NSVisualEffectView {
         window.contentView?.addSubview(self, positioned: .above, relativeTo: nil)
         window.titlebarAppearsTransparent = true
         window.styleMask.insert(.fullSizeContentView)
-        set(appearance: Int(libmpv.macOpts.macos_title_bar_appearance))
-        set(material: Int(libmpv.macOpts.macos_title_bar_material))
-        set(color: libmpv.macOpts.macos_title_bar_color)
+        let mpv = ccb.mpv!
+        set(appearance: Int(mpv.macOpts.macos_title_bar_appearance))
+        set(material: Int(mpv.macOpts.macos_title_bar_material))
+        set(color: mpv.macOpts.macos_title_bar_color)
     }
 
     required init?(coder: NSCoder) {

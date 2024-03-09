@@ -26,7 +26,6 @@ class LibmpvHelper: LogHelper {
     var mpvHandle: OpaquePointer?
     var renderInitialized = false;
     var mpvRenderContext: OpaquePointer?
-    var macOpts: macos_opts = macos_opts()
     var fbo: GLint = 1
     let renderContextLock = NSLock()
 
@@ -34,20 +33,6 @@ class LibmpvHelper: LogHelper {
         let newlog = mp_log_new(UnsafeMutablePointer<MPContext>(mpv), mp_client_get_log(mpv), name)
         super.init(newlog)
         mpvHandle = mpv
-
-        guard let mpctx = UnsafeMutablePointer<MPContext>(mp_client_get_core(mpvHandle)) else {
-            sendError("No MPContext available")
-            exit(1)
-        }
-        guard let app = NSApp as? Application,
-              let ptr = mp_get_config_group(mpctx,
-                                            mp_client_get_global(mpvHandle),
-                                            app.getMacOSConf()) else
-        {
-            sendError("macOS config group couldn't be retrieved'")
-            exit(1)
-        }
-        macOpts = UnsafeMutablePointer<macos_opts>(OpaquePointer(ptr)).pointee
     }
 
     func createRender() {

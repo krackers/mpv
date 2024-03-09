@@ -64,7 +64,8 @@ class CocoaCB: NSObject {
     func preinit(_ vo: UnsafeMutablePointer<vo>) {
         if backendState == .uninitialized {
             backendState = .needsInit
-
+            mpv = MPVHelper(vo, "cocoacb")
+            
             layer = VideoLayer(cocoaCB: self)
             timer =  PreciseTimer(common: self)
 
@@ -76,7 +77,6 @@ class CocoaCB: NSObject {
             libmpv.observeString("macos-title-bar-material")
             libmpv.observeString("macos-title-bar-color")
 
-            mpv = MPVHelper(vo, "cocoacb")
             view = EventsView(cocoaCB: self)
             view?.layer = layer
             view?.wantsLayer = true
@@ -89,13 +89,16 @@ class CocoaCB: NSObject {
 
     // This must be idempotent as it can potentially be called multiple times.
     func uninit() {
+        // Note: Libmpv guarantees that until we terminate the libmpv renderer
+        // the VO will remain active. So the VO talloc context could only ever be free'd
+        // after the following uninit call.
+        mpv = nil
         layer?.uninit()
         layer = nil
 
         window?.orderOut(nil)
         window?.close()
         timer?.terminate()
-        mpv = nil
     }
 
     func reconfig(_ vo: UnsafeMutablePointer<vo>) {

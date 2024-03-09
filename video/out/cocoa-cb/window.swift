@@ -21,7 +21,6 @@ class Window: NSWindow, NSWindowDelegate {
 
     weak var cocoaCB: CocoaCB! = nil
     var mpv: MPVHelper? { get { return cocoaCB.mpv } }
-    var libmpv: LibmpvHelper { get { return cocoaCB.libmpv } }
 
     var targetScreen: NSScreen?
     var previousScreen: NSScreen?
@@ -260,7 +259,7 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func getFsAnimationDuration(_ def: Double) -> Double {
-        let duration = libmpv.macOpts.macos_fs_animation_duration
+        let duration = mpv?.macOpts.macos_fs_animation_duration ?? 0
         if duration < 0 {
             return def
         } else {
