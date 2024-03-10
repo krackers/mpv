@@ -63,12 +63,9 @@ class CocoaCB: NSObject {
 
     func preinit(_ vo: UnsafeMutablePointer<vo>) {
         if backendState == .uninitialized {
+            // Any 1-time initialization for video rendering here
             backendState = .needsInit
-            mpv = MPVHelper(vo, "cocoacb")
             
-            layer = VideoLayer(cocoaCB: self)
-            timer =  PreciseTimer(common: self)
-
             libmpv.observeFlag("ontop")
             libmpv.observeFlag("border")
             libmpv.observeFlag("keepaspect-window")
@@ -78,9 +75,16 @@ class CocoaCB: NSObject {
             libmpv.observeString("macos-title-bar-color")
 
             view = EventsView(cocoaCB: self)
+        }
+        if backendState == .needsInit {
+            mpv = MPVHelper(vo, "cocoacb")
+            layer = VideoLayer(cocoaCB: self)
+            timer =  PreciseTimer(common: self)
+
             view?.layer = layer
             view?.wantsLayer = true
             view?.layerContentsPlacement = .scaleProportionallyToFit
+
             startDisplayLink(vo)
             if mpv!.glOpts.gamma_auto != 0 {
                 initLightSensor()
@@ -90,17 +94,18 @@ class CocoaCB: NSObject {
     }
 
     // This must be idempotent as it can potentially be called multiple times.
-    func uninit() {
-        // Note: Libmpv guarantees that until we terminate the libmpv renderer
-        // the VO will remain active. So the VO talloc context could only ever be free'd
-        // after the following uninit call.
+    func uninit(unregister: Bool = false) {
+        // Note: If the VO uninit was called first, then VO might already be terminated and
+        // vo context points to already free'd memory
+        print("UNINIT CALLED")
         mpv = nil
-        layer?.uninit()
+        layer?.uninit(unregister)
         layer = nil
 
         window?.orderOut(nil)
         window?.close()
         timer?.terminate()
+        timer = nil
         stopDisplaylink()
         uninitLightSensor()
         removeDisplayReconfigureObserver()
@@ -579,7 +584,12 @@ class CocoaCB: NSObject {
             DispatchQueue.main.sync { ccb.preinit(vout) }
             return VO_TRUE
         case VOCTRL_UNINIT:
-            DispatchQueue.main.async { ccb.uninit() }
+            // Note: This is technically a bit racy since it needs to be done async, and that means
+            // there is a period of time when the libmpv render is not registered. If VO preinit
+            // is called during this time then we won't be able to use libmpv backend.
+            // But in practice this should not happen since mpv doesn't call uninit for back-to-back
+            // videos.
+            DispatchQueue.main.async { ccb.uninit(); ccb.backendState = .needsInit }
             return VO_TRUE
         case VOCTRL_RECONFIG:
             ccb.reconfig(vout)
@@ -596,7 +606,7 @@ class CocoaCB: NSObject {
             window?.close()
         }
         if isShuttingDown { return }
-        uninit()
+        uninit(unregister: true)
         libmpv.freeRenderer()
         setCursorVisiblility(true)
         libmpv.deinitMPV(destroy)

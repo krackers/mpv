@@ -1859,7 +1859,7 @@ int mpv_opengl_cb_report_flip(mpv_opengl_cb_context *ctx, int64_t time)
 int mpv_opengl_cb_uninit_gl(mpv_opengl_cb_context *ctx)
 {
     if (ctx->client_api->render_context) {
-        mpv_render_context_uninit(ctx->client_api->render_context);
+        mpv_render_context_uninit(ctx->client_api->render_context, /*unregister=*/ true);
         mpv_render_context_free(ctx->client_api->render_context);
     }
     ctx->client_api->render_context = NULL;

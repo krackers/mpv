@@ -434,6 +434,9 @@ typedef struct mpv_render_frame_info {
  */
 int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv, mpv_render_param *params);
 
+// Create a render context object and register it as active.
+// (Note there is no point creating but not registering the object as nothing
+//  could be done with it until it is registered.)
 int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv);
 
 /**
@@ -576,25 +579,45 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
  * function. If you use it inconsistently, expect bad video playback.
  *
  * If this is called while no video is initialized, it is ignored.
+ * This can be called from any thread.
  *
  * @param ctx a valid render context
  */
 void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time);
 
+// Report that the equivalent of glFlush() has occurred and vo_libmpv should proceed
+// to wait for the next vsync to unblock render loop.
 void mpv_render_context_report_present(mpv_render_context *ctx);
 
 /**
- * Destroy the mpv renderer state.
- *
- * If video is still active (e.g. a file playing), video will be disabled
- * forcefully.
+ * Free all render resources.
  *
  * @param ctx a valid render context. After this function returns, this is not
  *            a valid pointer anymore. NULL is also allowed and does nothing.
- */
+*/
 void mpv_render_context_free(mpv_render_context *ctx);
 
-void mpv_render_context_uninit(mpv_render_context *ctx);
+/**
+ * Destroy the mpv renderer state.
+ * This must be called with a valid opengl context set.
+ *
+ * If video is still active (e.g. a file playing), video will be disabled
+ * forcefully. Note that this function is not "thread-safe": if this is called
+ * from outside the render thread, user must ensure that there are no concurrent
+ * calls to either mpv_render_context_process_queue, mpv_render_context_render,
+ * or mpv_render_context_set_parameter.
+ * (And of course, any of those must not be called once uninit returns either).
+ * 
+ * For convenience, concurrent calls to mpv_render_context_report_swap or
+ * mpv_render_context_report_present _are_ safe, and are handled gracefully even after uninit.
+ * 
+ * @param unregister If set, unregister the render context (if it was previously registered).
+ *                   If the context will not be re-used again (i.e. will be immintently destroyed)
+ *                   this should be set to true to prevent VO from trying to re-acquire it.
+ *                   If this is false, it is the API user's responsibility to ensure that preinit
+ *                   is only returned from AFTER context_uninit returns.
+ */
+void mpv_render_context_uninit(mpv_render_context *ctx, bool unregister);
 
 #ifdef __cplusplus
 }

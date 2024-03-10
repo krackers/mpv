@@ -27,6 +27,8 @@ class LibmpvHelper: LogHelper {
     var renderInitialized = false;
     var mpvRenderContext: OpaquePointer?
     var fbo: GLint = 1
+    // This is to synchronize the uninit process,
+    // as well as to provide hook point for external lux callback
     let renderContextLock = NSLock()
 
     init(_ mpv: OpaquePointer, _ name: String) {
@@ -41,6 +43,7 @@ class LibmpvHelper: LogHelper {
             exit(1)
         }
     }
+
 
     func initRender() {
         var advanced: CInt = 1
@@ -127,6 +130,10 @@ class LibmpvHelper: LogHelper {
         renderContextLock.unlock()
     }
 
+    // Technically the lock around this function hurts performance "slightly" in that
+    // rendering can never overlap with a checkRenderUpdateFrame call.
+    // However in practice this actually isn't an issue because the VO thread will block
+    // until draw finishes anyway, and so it won't queue a new update until that is done.
     func drawRender(_ surface: NSSize, _ depth: GLint, _ ctx: CGLContextObj, skip: Bool = false) {
         renderContextLock.lock()
         if renderInitialized {
@@ -236,12 +243,12 @@ class LibmpvHelper: LogHelper {
     }
 
     // This must be called with valid OpenGL context
-    func uninitRender() {
+    func uninitRender(_ unregister: Bool) {
         renderContextLock.lock()
         mpv_render_context_set_update_callback(mpvRenderContext, nil, nil)
         // Even though context_uninit waits for VO thread to shut down, we cannot
         // call render_context_update during it.
-        mpv_render_context_uninit(mpvRenderContext)
+        mpv_render_context_uninit(mpvRenderContext, unregister)
         renderInitialized = false
         renderContextLock.unlock()
     }

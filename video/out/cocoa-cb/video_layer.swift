@@ -123,12 +123,14 @@ class VideoLayer: CAOpenGLLayer {
         libmpv.setRenderUpdateCallback(updateCallback, context: self)
     }
 
-    func uninit() {
-
+    func uninit(_ unregister: Bool = false) {
+        let bef = (Double(mach_absolute_time()) * 125.0)/3.0
         CGLLockContext(cglContext)
         CGLSetCurrentContext(cglContext)
-        libmpv.uninitRender()
+        libmpv.uninitRender(unregister)
         CGLUnlockContext(cglContext)
+        let aft = (Double(mach_absolute_time()) * 125.0)/3.0
+        print(String(format: "UNINIT TIME %f\n", (aft - bef)/1e3))
     }
 
     //necessary for when the layer containing window changes the screen

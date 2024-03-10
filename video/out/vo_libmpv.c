@@ -197,6 +197,7 @@ int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv,
     pthread_cond_init(&ctx->update_cond, NULL);
     pthread_cond_init(&ctx->video_wait, NULL);
 
+    ctx->shutting_down = false;
     ctx->log = mp_log_new(ctx, ctx->global->log, "libmpv_render");
     ctx->vo_opts_cache = m_config_cache_alloc(ctx, ctx->global, &vo_sub_opts);
     ctx->vo_opts = ctx->vo_opts_cache->opts;
@@ -227,6 +228,7 @@ int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv,
     }
 
     if (err < 0) {
+        mpv_render_context_uninit(ctx, /*unregister=*/ true);
         mpv_render_context_free(ctx);
         return err;
     }
@@ -241,11 +243,6 @@ int mpv_render_context_initialize(mpv_render_context *ctx, mpv_handle *mpv,
     if (ctx->renderer->fns->get_image && ctx->advanced_control)
         ctx->dr = dr_helper_create(ctx->dispatch, render_get_image, ctx);
 
-    if (!mp_set_main_render_context(ctx->client_api, ctx, true)) {
-        MP_ERR(ctx, "There is already a mpv_render_context set.\n");
-        mpv_render_context_free(ctx);
-        return MPV_ERROR_GENERIC;
-    }
     return 0;
 }
 
@@ -279,13 +276,16 @@ static void mpv_render_context_stop_flip(mpv_render_context *ctx)
     pthread_cond_broadcast(&ctx->video_wait);
 }
 
-void mpv_render_context_uninit(mpv_render_context *ctx) {
+void mpv_render_context_uninit(mpv_render_context *ctx, bool unregister) {
     if (!ctx)
         return;
 
-    // From here on, ctx becomes invisible and cannot be newly acquired. Only
-    // a VO could still hold a reference.
-    mp_set_main_render_context(ctx->client_api, ctx, false);
+
+    if (unregister) {
+        // From here on, ctx becomes invisible and cannot be newly acquired. Only
+        // a VO could still hold a reference.
+        mp_set_main_render_context(ctx->client_api, ctx, false);
+    }
 
     if (atomic_load(&ctx->in_use)) {
         // Start destroy the VO, and also bring down the decoder etc., which
@@ -294,6 +294,9 @@ void mpv_render_context_uninit(mpv_render_context *ctx) {
         // ctx->vo can't change to non-NULL).
         // In theory, this races with vo_libmpv exiting and another VO being
         // used, which is a harmless grotesque corner case.
+        // Note that if unregister=false then it is up to the API user to ensure
+        // that no VO can acquire this context before this function finishes
+        // (i.e. they will either use locks or dispatch queue to serialize things).
         kill_video_async(ctx->client_api);
 
         mpv_render_context_stop_flip(ctx);
@@ -350,6 +353,9 @@ void mpv_render_context_uninit(mpv_render_context *ctx) {
     pthread_cond_destroy(&ctx->update_cond);
     pthread_cond_destroy(&ctx->video_wait);
     pthread_mutex_destroy(&ctx->update_lock);
+    TALLOC_FREE(ctx->vo_opts_cache);
+    TALLOC_FREE(ctx->log);
+    ctx->vo_opts = NULL;
 }
 
 
