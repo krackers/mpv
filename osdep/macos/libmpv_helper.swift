@@ -110,6 +110,7 @@ class LibmpvHelper: LogHelper {
     }
 
     func reportRenderFlip(time: UInt64) {
+        print("REPORT FLIP BEFORE NIL CHECK")
         if mpvRenderContext == nil { return }
         mpv_render_context_report_swap(mpvRenderContext, time)
     }

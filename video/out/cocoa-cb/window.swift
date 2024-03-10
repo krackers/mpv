@@ -231,8 +231,8 @@ class Window: NSWindow, NSWindowDelegate {
         }
 
         isAnimating = false
-        cocoaCB.layer?.update()
         cocoaCB.checkShutdown()
+        cocoaCB.layer?.update()
     }
 
     func setToFullScreen() {

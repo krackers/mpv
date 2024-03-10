@@ -89,6 +89,7 @@ class CocoaCB: NSObject {
 
     // This must be idempotent as it can potentially be called multiple times.
     func uninit() {
+        print("UNINIT CALLED")
         layer?.uninit()
         layer = nil
 
@@ -234,6 +235,7 @@ class CocoaCB: NSObject {
 
     func stopDisplaylink() {
         if let link = self.link, CVDisplayLinkIsRunning(link) {
+            print("STOPPING DISPLAY LINK")
             CVDisplayLinkStop(link)
         }
     }
@@ -588,6 +590,7 @@ class CocoaCB: NSObject {
         }
         if isShuttingDown { return }
         uninit()
+        print("SHUT DOWN CALLED")
         libmpv.freeRenderer()
         setCursorVisiblility(true)
         stopDisplaylink()

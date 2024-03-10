@@ -478,6 +478,7 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
     ctx->last_vsync_time = vsync_time;
 
     pthread_mutex_unlock(&ctx->lock);
+    printf("REPORT SWAP CALLED\n");
     pthread_cond_broadcast(&ctx->video_wait);
 }
 
