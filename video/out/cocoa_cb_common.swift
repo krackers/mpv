@@ -19,7 +19,7 @@ import Cocoa
 import IOKit.pwr_mgt
 
 class CocoaCB: NSObject {
-
+    // Note: MPVHelper is more like VOHelper
     var mpv: MPVHelper?
     var libmpv: LibmpvHelper
     var window: Window?
@@ -99,6 +99,9 @@ class CocoaCB: NSObject {
         window?.orderOut(nil)
         window?.close()
         timer?.terminate()
+        stopDisplaylink()
+        uninitLightSensor()
+        removeDisplayReconfigureObserver()
     }
 
     func reconfig(_ vo: UnsafeMutablePointer<vo>) {
@@ -381,6 +384,7 @@ class CocoaCB: NSObject {
         if lightSensorIOPort != nil {
             IONotificationPortDestroy(lightSensorIOPort)
             IOObjectRelease(lightSensor)
+            lightSensorIOPort = nil
         }
     }
 
@@ -593,9 +597,6 @@ class CocoaCB: NSObject {
         uninit()
         libmpv.freeRenderer()
         setCursorVisiblility(true)
-        stopDisplaylink()
-        uninitLightSensor()
-        removeDisplayReconfigureObserver()
         libmpv.deinitMPV(destroy)
     }
 
@@ -605,6 +606,7 @@ class CocoaCB: NSObject {
         }
     }
 
+    // This is called from the main thread, so it's already serialized against other calls to uninit()
     @objc func processEvent(_ event: UnsafePointer<mpv_event>) {
         switch event.pointee.event_id {
         case MPV_EVENT_SHUTDOWN:

@@ -341,7 +341,7 @@ void mpv_render_context_uninit(mpv_render_context *ctx) {
     if (ctx->renderer) {
         ctx->renderer->fns->destroy(ctx->renderer);
         talloc_free(ctx->renderer->priv);
-        talloc_free(ctx->renderer);
+        TA_FREEP(&ctx->renderer);
     }
     talloc_free(ctx->dr);
     talloc_free(ctx->dispatch);
@@ -478,6 +478,11 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
     MP_STATS(ctx, "glcb-reportflip");
 
     pthread_mutex_lock(&ctx->lock);
+    if (ctx->shutting_down) {
+        pthread_mutex_unlock(&ctx->lock);
+        return;
+    }
+
     ctx->flip_count += 1;
     ctx->pending_swap_count = MPMAX(ctx->pending_swap_count - 1, 0);
 
@@ -502,6 +507,10 @@ void mpv_render_context_report_present(mpv_render_context *ctx)
     MP_STATS(ctx, "glcb-reportpresent");
 
     pthread_mutex_lock(&ctx->lock);
+    if (ctx->shutting_down) {
+        pthread_mutex_unlock(&ctx->lock);
+        return;
+    }
     ctx->present_count += 1;
     pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);

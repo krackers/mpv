@@ -96,6 +96,8 @@ class LibmpvHelper: LogHelper {
         }
     }
 
+    // This should not take lock because otherwise we'd never be able to report flip
+    // while a render is in progress. Internally report_swap/present does its own locking.
     func reportRenderFlip(time: UInt64) {
         if !renderInitialized { return }
         mpv_render_context_report_swap(mpvRenderContext, time)
@@ -154,13 +156,15 @@ class LibmpvHelper: LogHelper {
             glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
         }
 
-        if !skip { CGLFlushDrawable(ctx) }
-
         renderContextLock.unlock()
+        if !skip { CGLFlushDrawable(ctx) }
     }
 
+    // This called either during the initial init,
+    // or as part of the draw loop.
     func setRenderICCProfile(_ profile: NSColorSpace) {
-        if !renderInitialized { return }
+        renderContextLock.lock()
+        if !renderInitialized { renderContextLock.unlock(); return }
         guard var iccData = profile.iccProfileData else {
             sendWarning("Invalid ICC profile data.")
             return
@@ -174,13 +178,16 @@ class LibmpvHelper: LogHelper {
             let params = mpv_render_param(type: MPV_RENDER_PARAM_ICC_PROFILE, data: &icc)
             mpv_render_context_set_parameter(mpvRenderContext, params)
         }
+        renderContextLock.unlock()
     }
 
     func setRenderLux(_ lux: Int) {
-        if !renderInitialized { return }
+        renderContextLock.lock()
+        if !renderInitialized { renderContextLock.unlock(); return }
         var light = lux
         let params = mpv_render_param(type: MPV_RENDER_PARAM_AMBIENT_LIGHT, data: &light)
         mpv_render_context_set_parameter(mpvRenderContext, params)
+        renderContextLock.unlock()
     }
 
     func commandAsync(_ cmd: [String?], id: UInt64 = 1) {
@@ -228,9 +235,12 @@ class LibmpvHelper: LogHelper {
         return str
     }
 
+    // This must be called with valid OpenGL context
     func uninitRender() {
         renderContextLock.lock()
         mpv_render_context_set_update_callback(mpvRenderContext, nil, nil)
+        // Even though context_uninit waits for VO thread to shut down, we cannot
+        // call render_context_update during it.
         mpv_render_context_uninit(mpvRenderContext)
         renderInitialized = false
         renderContextLock.unlock()

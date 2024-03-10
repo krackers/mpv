@@ -231,8 +231,11 @@ class Window: NSWindow, NSWindowDelegate {
         }
 
         isAnimating = false
-        cocoaCB.layer?.update()
         cocoaCB.checkShutdown()
+        // Only update after shutdown is called.
+        // This way if we did indeed shutdown, then we won't have anything
+        // on the queue.
+        cocoaCB.layer?.update()
     }
 
     func setToFullScreen() {
