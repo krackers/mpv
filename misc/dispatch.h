@@ -25,5 +25,6 @@ void mp_dispatch_interrupt(struct mp_dispatch_queue *queue);
 void mp_dispatch_adjust_timeout(struct mp_dispatch_queue *queue, int64_t until);
 void mp_dispatch_lock(struct mp_dispatch_queue *queue);
 void mp_dispatch_unlock(struct mp_dispatch_queue *queue);
+bool mp_dispatch_pending(struct mp_dispatch_queue *queue);
 
 #endif

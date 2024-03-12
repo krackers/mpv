@@ -27,9 +27,6 @@ class LibmpvHelper: LogHelper {
     var renderInitialized = false;
     var mpvRenderContext: OpaquePointer?
     var fbo: GLint = 1
-    // This is to synchronize the uninit process,
-    // as well as to provide hook point for external lux callback
-    let renderContextLock = NSLock()
 
     init(_ mpv: OpaquePointer, _ name: String) {
         let newlog = mp_log_new(UnsafeMutablePointer<MPContext>(mpv), mp_client_get_log(mpv), name)
@@ -102,6 +99,9 @@ class LibmpvHelper: LogHelper {
     // This should not take lock because otherwise we'd never be able to report flip
     // while a render is in progress. Internally report_swap/present does its own locking.
     func reportRenderFlip(time: UInt64) {
+        // Note that even though this is called from another thread and there is no happens-before
+        // relation established, when render is uninit'ed libmpv guarnatees that we can still safely
+        // call this. And we will halt callbacks before free.
         if !renderInitialized { return }
         mpv_render_context_report_swap(mpvRenderContext, time)
     }
@@ -112,30 +112,25 @@ class LibmpvHelper: LogHelper {
     }
 
     func checkRenderUpdateFrame() -> UInt64 {
-        renderContextLock.lock()
         if !renderInitialized {
-            renderContextLock.unlock()
             return 0
         }
         let flags: UInt64 = mpv_render_context_update(mpvRenderContext)
-        renderContextLock.unlock()
         return flags
     }
 
+    // Must be called with valid/locked OpenGL context.
     func processQueue() {
-        renderContextLock.lock()
         if (renderInitialized) {
             mpv_render_context_process_queue(mpvRenderContext);   
         }
-        renderContextLock.unlock()
     }
 
-    // Technically the lock around this function hurts performance "slightly" in that
-    // rendering can never overlap with a checkRenderUpdateFrame call.
-    // However in practice this actually isn't an issue because the VO thread will block
-    // until draw finishes anyway, and so it won't queue a new update until that is done.
+    // Must be called with valid/locked OpenGL context.
     func drawRender(_ surface: NSSize, _ depth: GLint, _ ctx: CGLContextObj, skip: Bool = false) {
-        renderContextLock.lock()
+        // Note that even though this may not always be called from dispatch queue
+        // the fact that this is called with CGL lock active provides us a mutex that establishes
+        // serialization against uninit.
         if renderInitialized {
             var i: GLint = 0
             var flip: CInt = 1
@@ -163,15 +158,13 @@ class LibmpvHelper: LogHelper {
             glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
         }
 
-        renderContextLock.unlock()
         if !skip { CGLFlushDrawable(ctx) }
     }
 
     // This called either during the initial init,
-    // or as part of the draw loop.
+    // or as part of the draw loop so we don't have any concurrency issues.
     func setRenderICCProfile(_ profile: NSColorSpace) {
-        renderContextLock.lock()
-        if !renderInitialized { renderContextLock.unlock(); return }
+        if !renderInitialized { return }
         guard var iccData = profile.iccProfileData else {
             sendWarning("Invalid ICC profile data.")
             return
@@ -185,16 +178,14 @@ class LibmpvHelper: LogHelper {
             let params = mpv_render_param(type: MPV_RENDER_PARAM_ICC_PROFILE, data: &icc)
             mpv_render_context_set_parameter(mpvRenderContext, params)
         }
-        renderContextLock.unlock()
     }
 
+    // Always called from within the draw loop.
     func setRenderLux(_ lux: Int) {
-        renderContextLock.lock()
-        if !renderInitialized { renderContextLock.unlock(); return }
+        if !renderInitialized { return }
         var light = lux
         let params = mpv_render_param(type: MPV_RENDER_PARAM_AMBIENT_LIGHT, data: &light)
         mpv_render_context_set_parameter(mpvRenderContext, params)
-        renderContextLock.unlock()
     }
 
     func commandAsync(_ cmd: [String?], id: UInt64 = 1) {
@@ -242,23 +233,17 @@ class LibmpvHelper: LogHelper {
         return str
     }
 
-    // This must be called with valid OpenGL context
+    // Must be called with valid/locked OpenGL context.
     func uninitRender(_ unregister: Bool) {
-        renderContextLock.lock()
         mpv_render_context_set_update_callback(mpvRenderContext, nil, nil)
-        // Even though context_uninit waits for VO thread to shut down, we cannot
-        // call render_context_update during it.
         mpv_render_context_uninit(mpvRenderContext, unregister)
         renderInitialized = false
-        renderContextLock.unlock()
     }
 
     func freeRenderer() {
-        renderContextLock.lock()
         mp_render_context_set_control_callback(mpvRenderContext, nil, nil)
         mpv_render_context_free(mpvRenderContext)
         mpvRenderContext = nil
-        renderContextLock.unlock()
     }
 
     func deinitMPV(_ destroy: Bool = false) {

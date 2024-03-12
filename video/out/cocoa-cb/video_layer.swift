@@ -73,6 +73,7 @@ class VideoLayer: CAOpenGLLayer {
     let cglContext: CGLContextObj
     let cglPixelFormat: CGLPixelFormatObj
     var wantsUpdate: Bool = false
+    var updateLux: Int = -1
     var surfaceSize: NSSize = NSSize(width: 0, height: 0)
     var bufferDepth: GLint = 8
 
@@ -125,10 +126,12 @@ class VideoLayer: CAOpenGLLayer {
 
     func uninit(_ unregister: Bool = false) {
         let bef = (Double(mach_absolute_time()) * 125.0)/3.0
-        CGLLockContext(cglContext)
-        CGLSetCurrentContext(cglContext)
-        libmpv.uninitRender(unregister)
-        CGLUnlockContext(cglContext)
+        queue.sync {
+            CGLLockContext(cglContext)
+            CGLSetCurrentContext(cglContext)
+            libmpv.uninitRender(unregister)
+            CGLUnlockContext(cglContext)
+        }
         let aft = (Double(mach_absolute_time()) * 125.0)/3.0
         print(String(format: "UNINIT TIME %f\n", (aft - bef)/1e3))
     }
@@ -180,6 +183,10 @@ class VideoLayer: CAOpenGLLayer {
         if needsICCUpdate {
             needsICCUpdate = false
             cocoaCB.updateICCProfile()
+        }
+        if updateLux > 0 {
+            libmpv.setRenderLux(updateLux)
+            updateLux = -1
         }
 
         // In async mode we cannot know when the CATransaction flush happens, so we just resort to reporting after the
@@ -270,13 +277,13 @@ class VideoLayer: CAOpenGLLayer {
     func update(force: Bool = false) {
         queue.async {
             let updateFlags = self.libmpv.checkRenderUpdateFrame()
-            if (updateFlags & UInt64(MPV_RENDER_SCREENSHOT_FRAME.rawValue) > 0) {
+            // Try to avoid calling into layer display() if possible, because
+            // it's a fairly "heavy" function
+            if (updateFlags & UInt64(MPV_RENDER_PROCESS_QUEUE.rawValue) > 0) {
                 CGLLockContext(self.cglContext)
                 CGLSetCurrentContext(self.cglContext)
                 self.libmpv.processQueue()
                 CGLUnlockContext(self.cglContext)
-            } else {
-                self.libmpv.processQueue()
             }
 
             self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || force

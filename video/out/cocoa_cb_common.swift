@@ -361,7 +361,7 @@ class CocoaCB: NSObject {
             var mean = (values[0] + values[1]) / 2
             if ccb.lastLmu != mean {
                 ccb.lastLmu = mean
-                ccb.libmpv.setRenderLux(ccb.lmuToLux(ccb.lastLmu))
+                ccb.layer?.updateLux = ccb.lmuToLux(ccb.lastLmu)
             }
         }
     }

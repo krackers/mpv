@@ -106,7 +106,6 @@ struct mpv_render_context {
     bool need_reset;
     bool need_update_external;
     struct vo *vo;
-    bool screenshot;
 
 
     // --- Mostly immutable after init.
@@ -167,7 +166,6 @@ static struct mp_image *render_get_image(void *ptr, int imgfmt, int w, int h,
                                          int stride_align)
 {
     struct mpv_render_context *ctx = ptr;
-
     return ctx->renderer->fns->get_image(ctx->renderer, imgfmt, w, h, stride_align);
 }
 
@@ -272,6 +270,9 @@ static void mpv_render_context_stop_flip(mpv_render_context *ctx)
 {
     pthread_mutex_lock(&ctx->lock);
     ctx->shutting_down = true;
+    ctx->last_vsync_time = 0;
+    ctx->vsync_interval = 0;
+    ctx->pending_swap_count = 0;
     pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);
 }
@@ -356,6 +357,7 @@ void mpv_render_context_uninit(mpv_render_context *ctx, bool unregister) {
     TALLOC_FREE(ctx->vo_opts_cache);
     TALLOC_FREE(ctx->log);
     ctx->vo_opts = NULL;
+
 }
 
 
@@ -527,10 +529,12 @@ uint64_t mpv_render_context_update(mpv_render_context *ctx)
 {
     uint64_t res = 0;
     pthread_mutex_lock(&ctx->lock);
-    if (ctx->screenshot) 
-        res |= MPV_RENDER_SCREENSHOT_FRAME;
+    if (ctx->dispatch && mp_dispatch_pending(ctx->dispatch))
+        res |= MPV_RENDER_PROCESS_QUEUE;
     if (ctx->next_frame)
         res |= MPV_RENDER_UPDATE_FRAME;
+    if (ctx->shutting_down)
+        res = 0;
     pthread_mutex_unlock(&ctx->lock);
     return res;
 }
@@ -707,7 +711,6 @@ static void run_control_on_render_thread(void *p)
     switch (request) {
     case VOCTRL_SCREENSHOT: {
         pthread_mutex_lock(&ctx->lock);
-        ctx->screenshot = false;
         struct vo_frame *frame = vo_frame_ref(ctx->cur_frame);
         pthread_mutex_unlock(&ctx->lock);
         if (frame && ctx->renderer->fns->screenshot)
@@ -716,6 +719,8 @@ static void run_control_on_render_thread(void *p)
         break;
     }
     case VOCTRL_PERFORMANCE_DATA: {
+        pthread_mutex_lock(&ctx->lock);
+        pthread_mutex_unlock(&ctx->lock);
         if (ctx->renderer->fns->perfdata) {
             ctx->renderer->fns->perfdata(ctx->renderer, data);
             ret = VO_TRUE;
@@ -764,9 +769,6 @@ static int control(struct vo *vo, uint32_t request, void *data)
    if (ctx->advanced_control) {
         switch (request) {
         case VOCTRL_SCREENSHOT:
-            pthread_mutex_lock(&ctx->lock);
-            ctx->screenshot = true;
-            pthread_mutex_unlock(&ctx->lock);
         case VOCTRL_PERFORMANCE_DATA: {
             int ret;
             void *args[] = {ctx, (void *)(intptr_t)request, data, &ret};

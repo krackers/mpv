@@ -395,3 +395,11 @@ void mp_dispatch_unlock(struct mp_dispatch_queue *queue)
     pthread_cond_broadcast(&queue->cond);
     pthread_mutex_unlock(&queue->lock);
 }
+
+bool mp_dispatch_pending(struct mp_dispatch_queue *queue) {
+    bool ret = false;
+    pthread_mutex_lock(&queue->lock);
+    ret = !!queue->head;
+    pthread_mutex_unlock(&queue->lock);
+    return ret;
+}

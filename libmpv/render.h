@@ -60,13 +60,14 @@ extern "C" {
  * The mpv_render_* functions can be called from any thread, under the
  * following conditions:
  *  - only one of the mpv_render_* functions can be called at the same time
- *    (unless they belong to different mpv cores created by mpv_create())
+ *    (unless they belong to different mpv cores created by mpv_create()),
+ *    except for _swap and _present which can be called freely.
  *  - never can be called from within the callbacks set with
  *    mpv_set_wakeup_callback() or mpv_render_context_set_update_callback()
- *  - if the OpenGL backend is used, for all functions the OpenGL context
- *    must be "current" in the calling thread, and it must be the same OpenGL
- *    context as the mpv_render_context was created with. Otherwise, undefined
- *    behavior will occur.
+ *  - if the OpenGL backend is used, for _init, _uninit, _process_queue, and _render
+ *    the OpenGL context must be "current" in the calling thread, and it must be
+ *    the same OpenGL context as the mpv_render_context was created with.
+ *    Otherwise, undefined behavior will occur.
  *  - the thread does not call libmpv API functions other than the mpv_render_*
  *    functions, except APIs which are declared as safe (see below). Likewise,
  *    there must be no lock or wait dependency from the render thread to a
@@ -443,6 +444,8 @@ int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv);
  * Attempt to change a single parameter. Not all backends and parameter types
  * support all kinds of changes.
  *
+ * Note that this should not be called simultaneously with _render or _process_queue
+ *
  * @param ctx a valid render context
  * @param param the parameter type and data that should be set
  * @return error code. If a parameter could actually be changed, this returns
@@ -532,7 +535,13 @@ typedef enum mpv_render_update_flag {
      * called.
      */
     MPV_RENDER_UPDATE_FRAME         = 1 << 0,
-    MPV_RENDER_SCREENSHOT_FRAME      = 1 << 1,
+    /**
+     * Non-video frame related work must be scheduled on the gpu/render thread.
+     * process_queue must be called, with a valid GPU context (and serialized)
+     * against other functions that make use of gpu context, see the threading notes
+     * at top.
+     */
+    MPV_RENDER_PROCESS_QUEUE     = 1 << 1,
 } mpv_render_context_flag;
 
 /**
@@ -573,20 +582,21 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
 
 /**
  * Tell the renderer that a frame was flipped at the given time. This is
- * optional, but can help the player to achieve better timing.
- *
- * Note that calling this at least once informs libmpv that you will use this
- * function. If you use it inconsistently, expect bad video playback.
+ * mandatory, but can be called with time of 0 to use "now" if no vsync information
+ * is available.
  *
  * If this is called while no video is initialized, it is ignored.
- * This can be called from any thread.
+ * This can safely be called from any thread, concurrent with all other mpv_render_* fns.
  *
  * @param ctx a valid render context
  */
 void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time);
 
-// Report that the equivalent of glFlush() has occurred and vo_libmpv should proceed
-// to wait for the next vsync to unblock render loop.
+/**
+ * Tell the renderer that the all work has been submitted to the gpu, and it should proceed to wait for vsync.
+ * (Note that currently the next vsync after preset() is assumed to have content drawn to screen. Ideally
+ *  a gpu fence should also be used to ensure that the gpu had finished processing before the vsync.)
+ */
 void mpv_render_context_report_present(mpv_render_context *ctx);
 
 /**
@@ -598,8 +608,7 @@ void mpv_render_context_report_present(mpv_render_context *ctx);
 void mpv_render_context_free(mpv_render_context *ctx);
 
 /**
- * Destroy the mpv renderer state.
- * This must be called with a valid opengl context set.
+ * Destroy the mpv renderer state. This must be called with a valid GPU context active.
  *
  * If video is still active (e.g. a file playing), video will be disabled
  * forcefully. Note that this function is not "thread-safe": if this is called
