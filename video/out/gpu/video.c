@@ -35,6 +35,7 @@
 #include "hwdec.h"
 #include "osd.h"
 #include "ra.h"
+#include "lcms.h"
 #include "stream/stream.h"
 #include "video_shaders.h"
 #include "user_shaders.h"

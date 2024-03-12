@@ -23,6 +23,7 @@ class MPVHelper: LogHelper {
     var vout: vo { get { return vo.pointee } }
     var opts: mp_vo_opts { get { return vout.opts.pointee } }
     var input: OpaquePointer { get { return vout.input_ctx } }
+    var glOpts: gl_video_opts = gl_video_opts()
     var macOpts: macos_opts = macos_opts()
 
     init(_ vo: UnsafeMutablePointer<vo>, _ name: String) {
@@ -32,14 +33,22 @@ class MPVHelper: LogHelper {
         super.init(newlog)
 
         guard let app = NSApp as? Application,
-              let ptr = mp_get_config_group(vo,
+              let macOptPtr = mp_get_config_group(vo,
                                             vo.pointee.global,
                                             app.getMacOSConf()) else
         {
             sendError("macOS config group couldn't be retrieved'")
             exit(1)
         }
-        macOpts = UnsafeMutablePointer<macos_opts>(OpaquePointer(ptr)).pointee
+        macOpts = UnsafeMutablePointer<macos_opts>(OpaquePointer(macOptPtr)).pointee
+        guard let glOptPtr = mp_get_config_group(vo,
+                                            vo.pointee.global,
+                                            gl_video_conf_ptr) else
+        {
+            sendError("GL config group couldn't be retrieved'")
+            exit(1)
+        }
+        glOpts = UnsafeMutablePointer<gl_video_opts>(OpaquePointer(glOptPtr)).pointee
     }
 
     func canBeDraggedAt(_ pos: NSPoint) -> Bool {

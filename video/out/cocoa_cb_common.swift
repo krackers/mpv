@@ -82,7 +82,9 @@ class CocoaCB: NSObject {
             view?.wantsLayer = true
             view?.layerContentsPlacement = .scaleProportionallyToFit
             startDisplayLink(vo)
-            initLightSensor()
+            if mpv!.glOpts.gamma_auto != 0 {
+                initLightSensor()
+            }
             addDisplayReconfigureObserver()
         }
     }
