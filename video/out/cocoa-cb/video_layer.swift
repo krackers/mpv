@@ -308,7 +308,7 @@ class VideoLayer: CAOpenGLLayer {
         }
 
         guard let pixelFormat = pix, err == kCGLNoError else {
-            mpv.sendError("Couldn't create any CGL pixel format")
+            mpv.log.sendError("Couldn't create any CGL pixel format")
             exit(1)
         }
 
@@ -341,7 +341,7 @@ class VideoLayer: CAOpenGLLayer {
                         return attributeLookUp[value.rawValue] ?? String(value.rawValue)
                     })
 
-                    mpv.sendVerbose("Created CGL pixel format with attributes: " +
+                    mpv.log.sendVerbose("Created CGL pixel format with attributes: " +
                                     "\(attArray.joined(separator: ", "))")
                     return (pix, glFormat.contains(glFormat10Bit) ? 16 : 8, err)
                 }
@@ -349,11 +349,11 @@ class VideoLayer: CAOpenGLLayer {
         }
 
         let errS = String(cString: CGLErrorString(err))
-        mpv.sendWarning("Couldn't create a " +
+        mpv.log.sendWarning("Couldn't create a " +
                            "\(software ? "software" : "hardware accelerated") " +
                            "CGL pixel format: \(errS) (\(err.rawValue))")
         if software == false && mpv.macOpts.cocoa_cb_sw_renderer == -1 {
-            mpv.sendWarning("Falling back to software renderer")
+            mpv.log.sendWarning("Falling back to software renderer")
         }
 
         return (pix, 8, err)
@@ -365,7 +365,7 @@ class VideoLayer: CAOpenGLLayer {
 
         guard let cglContext = context, error == kCGLNoError else {
             let errS = String(cString: CGLErrorString(error))
-            mpv.sendError("Couldn't create a CGLContext: " + errS)
+            mpv.log.sendError("Couldn't create a CGLContext: " + errS)
             exit(1)
         }
 

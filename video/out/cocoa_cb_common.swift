@@ -112,19 +112,18 @@ class CocoaCB: NSObject {
     }
 
     func reconfig(_ vo: UnsafeMutablePointer<vo>) {
-        mpv?.vo = vo
+        mpv?.reconfig(vo)
         if backendState == .needsInit {
-            DispatchQueue.main.sync { self.initBackend(vo) }
+            DispatchQueue.main.sync { self.initBackend() }
         } else {
             DispatchQueue.main.async {
-                self.updateWindowSize(vo)
+                self.updateWindowSize()
                 self.layer?.update(force: true)
             }
         }
     }
 
-    func initBackend(_ vo: UnsafeMutablePointer<vo>) {
-        let opts: mp_vo_opts = vo.pointee.opts.pointee
+    func initBackend() {
         NSApp.setActivationPolicy(.regular)
         setAppIcon()
 
@@ -132,12 +131,12 @@ class CocoaCB: NSObject {
             libmpv.sendError("Something went wrong, no View was initialized")
             exit(1)
         }
-        guard let targetScreen = getScreenBy(id: Int(opts.screen_id)) ?? NSScreen.main else {
+        guard let targetScreen = getScreenBy(id: Int(mpv!.opts.screen_id)) ?? NSScreen.main else {
             libmpv.sendError("Something went wrong, no Screen was found")
             exit(1)
         }
 
-        let wr = getWindowGeometry(forScreen: targetScreen, videoOut: vo)
+        let wr = getWindowGeometry(forScreen: targetScreen)
         window = Window(contentRect: wr, screen: targetScreen, view: view, cocoaCB: self)
         guard let window = self.window else {
             libmpv.sendError("Something went wrong, no Window was initialized")
@@ -145,10 +144,10 @@ class CocoaCB: NSObject {
         }
 
         updateICCProfile()
-        window.setOnTop(Bool(opts.ontop), Int(opts.ontop_level))
-        window.keepAspect = Bool(opts.keepaspect_window)
+        window.setOnTop(Bool(mpv!.opts.ontop), Int(mpv!.opts.ontop_level))
+        window.keepAspect = Bool(mpv!.opts.keepaspect_window)
         window.title = title
-        window.border = Bool(opts.border)
+        window.border = Bool(mpv!.opts.border)
 
         titleBar = TitleBar(frame: wr, window: window, cocoaCB: self)
 
@@ -158,7 +157,7 @@ class CocoaCB: NSObject {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        if Bool(opts.fullscreen) {
+        if Bool(mpv!.opts.fullscreen) {
             DispatchQueue.main.async {
                 self.window?.toggleFullScreen(nil)
             }
@@ -169,14 +168,13 @@ class CocoaCB: NSObject {
         backendState = .initialized
     }
 
-    func updateWindowSize(_ vo: UnsafeMutablePointer<vo>) {
-        let opts: mp_vo_opts = vo.pointee.opts.pointee
-        guard let targetScreen = getScreenBy(id: Int(opts.screen_id)) ?? NSScreen.main else {
+    func updateWindowSize() {
+        guard let targetScreen = getScreenBy(id: Int(mpv!.opts.screen_id)) ?? NSScreen.main else {
             libmpv.sendWarning("Couldn't update Window size, no Screen available")
             return
         }
 
-        let wr = getWindowGeometry(forScreen: targetScreen, videoOut: vo)
+        let wr = getWindowGeometry(forScreen: targetScreen)
         if !(window?.isVisible ?? false) &&
            !(window?.isMiniaturized ?? false) &&
            !NSApp.isHidden
@@ -229,10 +227,9 @@ class CocoaCB: NSObject {
     }
 
     func startDisplayLink(_ vo: UnsafeMutablePointer<vo>) {
-        let opts: mp_vo_opts = vo.pointee.opts.pointee
         CVDisplayLinkCreateWithActiveCGDisplays(&link)
 
-        guard let screen = getScreenBy(id: Int(opts.screen_id)) ?? NSScreen.main,
+        guard let screen = getScreenBy(id: Int(mpv!.opts.screen_id)) ?? NSScreen.main,
               let link = self.link else
         {
             libmpv.sendWarning("Couldn't start DisplayLink, no Screen or DisplayLink available")
@@ -430,8 +427,7 @@ class CocoaCB: NSObject {
         return NSScreen.screens[screenID]
     }
 
-    func getWindowGeometry(forScreen targetScreen: NSScreen,
-                           videoOut vo: UnsafeMutablePointer<vo>) -> NSRect {
+    func getWindowGeometry(forScreen targetScreen: NSScreen) -> NSRect {
         let r = targetScreen.convertRectToBacking(targetScreen.frame)
         var screenRC: mp_rect = mp_rect(x0: Int32(0),
                                         y0: Int32(0),
@@ -439,7 +435,7 @@ class CocoaCB: NSObject {
                                         y1: Int32(r.size.height))
 
         var geo: vo_win_geometry = vo_win_geometry()
-        vo_calc_window_geometry2(vo, &screenRC, Double(targetScreen.backingScaleFactor), &geo)
+        vo_calc_window_geometry2(mpv!.vo, &screenRC, Double(targetScreen.backingScaleFactor), &geo)
 
         // flip y coordinates
         geo.win.y1 = Int32(r.size.height) - geo.win.y1
@@ -456,11 +452,11 @@ class CocoaCB: NSObject {
         events |= ev
         eventsLock.unlock()
 
-        guard let vout = mpv?.vo else {
+        if mpv != nil {
+            mpv!.wakeup_vo()
+        } else {
             libmpv.sendWarning("vo nil in flagEvents")
-            return
         }
-        vo_wakeup(vout)
     }
 
     func checkEvents() -> Int {
@@ -473,7 +469,7 @@ class CocoaCB: NSObject {
 
     var controlCallback: mp_render_cb_control_fn = { ( vo, ctx, events, request, data ) -> Int32 in
         let ccb = unsafeBitCast(ctx, to: CocoaCB.self)
-        guard let vout = vo, let opts: mp_vo_opts = vout.pointee.opts?.pointee else {
+        guard let opts: UnsafeMutablePointer<mp_vo_opts> = vo?.pointee.opts else {
             ccb.libmpv.sendWarning("Nil vo or opts in Control Callback")
             return VO_FALSE
         }
@@ -530,7 +526,7 @@ class CocoaCB: NSObject {
             let sizeData = data?.assumingMemoryBound(to: Int32.self)
             let size = UnsafeMutableBufferPointer(start: sizeData, count: 2)
             var rect = ccb.window?.unfsContentFrame ?? NSRect(x: 0, y: 0, width: 1280, height: 720)
-            if let screen = ccb.window?.currentScreen, !Bool(ccb.mpv?.opts.hidpi_window_scale ?? 0) {
+            if let screen = ccb.window?.currentScreen, !Bool(opts.pointee.hidpi_window_scale) {
                 rect = screen.convertRectToBacking(rect)
             }
             size[0] = Int32(rect.size.width)
@@ -541,7 +537,7 @@ class CocoaCB: NSObject {
                 let size = UnsafeBufferPointer(start: sizeData, count: 2)
                 var rect = NSMakeRect(0, 0, CGFloat(size[0]), CGFloat(size[1]))
                 DispatchQueue.main.sync {
-                    if let screen = ccb.window?.currentScreen, !Bool(opts.hidpi_window_scale) {
+                    if let screen = ccb.window?.currentScreen, !Bool(opts.pointee.hidpi_window_scale) {
                         rect = screen.convertRectFromBacking(rect)
                     }
                     ccb.window?.updateSize(rect.size)
@@ -581,7 +577,7 @@ class CocoaCB: NSObject {
             }
             return VO_FALSE
         case VOCTRL_PREINIT:
-            DispatchQueue.main.sync { ccb.preinit(vout) }
+            DispatchQueue.main.sync { ccb.preinit(vo!) }
             return VO_TRUE
         case VOCTRL_UNINIT:
             // Note: This is technically a bit racy since it needs to be done async, and that means
@@ -592,7 +588,7 @@ class CocoaCB: NSObject {
             DispatchQueue.main.async { ccb.uninit(); ccb.backendState = .needsInit }
             return VO_TRUE
         case VOCTRL_RECONFIG:
-            ccb.reconfig(vout)
+            ccb.reconfig(vo!)
             return VO_TRUE
         default:
             return VO_NOTIMPL
