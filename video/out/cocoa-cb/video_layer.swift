@@ -126,6 +126,9 @@ class VideoLayer: CAOpenGLLayer {
 
     func uninit(_ unregister: Bool = false) {
         let bef = (Double(mach_absolute_time()) * 125.0)/3.0
+        // Mechanism to signal that it's ok to abandon in progress work
+        // Relaxed atomic is OK here
+        libmpv.renderInitialized = false
         queue.sync {
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
@@ -243,7 +246,7 @@ class VideoLayer: CAOpenGLLayer {
     // Note that in async mode, display is not called and the system
     // triggers canDraw -> draw directly.
     override func display() {
-        if (!self.wantsUpdate) {
+        if (!self.wantsUpdate || !libmpv.renderInitialized) {
             return;
         }
 
@@ -255,14 +258,15 @@ class VideoLayer: CAOpenGLLayer {
         }
 
         // If we still need an update...
-        if self.wantsUpdate {
+        if self.wantsUpdate && libmpv.renderInitialized {
             // display() did not end up drawing, possibly because no display was ready
+            // No need to flush here since nothing was really drawn at all.
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
             CGLUnlockContext(cglContext)
             self.wantsUpdate = false
-        } else if !self.wantsUpdate {
+        } else if !self.wantsUpdate && libmpv.renderInitialized {
             // We successfully drew a frame, and need to flush ourselves
             let bef = (Double(mach_absolute_time()) * 125.0)/3.0
             CATransaction.flush()
