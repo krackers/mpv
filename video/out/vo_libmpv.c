@@ -390,6 +390,7 @@ bool mp_render_context_acquire(mpv_render_context *ctx)
 int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
 {
     pthread_mutex_lock(&ctx->lock);
+    assert(!ctx->shutting_down);
 
     int do_render =
         !GET_MPV_RENDER_PARAM(params, MPV_RENDER_PARAM_SKIP_RENDERING, int, 0);
@@ -528,13 +529,13 @@ void mpv_render_context_report_present(mpv_render_context *ctx)
 uint64_t mpv_render_context_update(mpv_render_context *ctx)
 {
     uint64_t res = 0;
-    pthread_mutex_lock(&ctx->lock);
-    if (ctx->dispatch && mp_dispatch_pending(ctx->dispatch))
+    bool dispatch_pending = mp_dispatch_pending(ctx->dispatch);
+    if (dispatch_pending)
         res |= MPV_RENDER_PROCESS_QUEUE;
+    pthread_mutex_lock(&ctx->lock);
+    assert(!ctx->shutting_down);
     if (ctx->next_frame)
         res |= MPV_RENDER_UPDATE_FRAME;
-    if (ctx->shutting_down)
-        res = 0;
     pthread_mutex_unlock(&ctx->lock);
     return res;
 }
