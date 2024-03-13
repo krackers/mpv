@@ -826,6 +826,7 @@ const struct m_sub_options mp_csp_equalizer_conf = {
         {0}
     },
     .size = sizeof(struct mp_csp_equalizer_opts),
+    .change_flags = UPDATE_VO_REDRAW
 };
 
 // Copy settings from eq into params.

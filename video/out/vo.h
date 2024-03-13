@@ -65,7 +65,7 @@ enum mp_voctrl {
     VOCTRL_RESUME,
 
     VOCTRL_SET_PANSCAN,
-    VOCTRL_SET_EQUALIZER,               // struct voctrl_set_equalizer_args*
+    VOCTRL_REDRAW,               // struct voctrl_set_equalizer_args*
     VOCTRL_GET_EQUALIZER,               // struct voctrl_get_equalizer_args*
 
     /* private to vo_gpu */
@@ -130,7 +130,7 @@ enum mp_voctrl {
     VOCTRL_EXTERNAL_RESIZE,
 };
 
-// VOCTRL_SET_EQUALIZER
+// VOCTRL_REDRAW
 struct voctrl_set_equalizer_args {
     const char *name;
     int value;
@@ -483,8 +483,6 @@ struct vo {
 
     struct m_config_cache *opts_cache; // cache for ->opts
     struct mp_vo_opts *opts;
-    struct m_config_cache *gl_opts_cache;
-    struct m_config_cache *eq_opts_cache;
 
     bool want_redraw;   // redraw as soon as possible
 

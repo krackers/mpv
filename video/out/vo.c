@@ -233,22 +233,6 @@ static void update_opts(void *p)
 
     if (m_config_cache_update(vo->opts_cache)) {
         read_opts(vo);
-
-        // "Legacy" update of video position related options.
-        if (vo->driver->control)
-            vo->driver->control(vo, VOCTRL_SET_PANSCAN, NULL);
-    }
-
-    if (vo->gl_opts_cache && m_config_cache_update(vo->gl_opts_cache)) {
-        // "Legacy" update of video GL renderer related options.
-        if (vo->driver->control)
-            vo->driver->control(vo, VOCTRL_UPDATE_RENDER_OPTS, NULL);
-    }
-
-    if (m_config_cache_update(vo->eq_opts_cache)) {
-        // "Legacy" update of video equalizer related options.
-        if (vo->driver->control)
-            vo->driver->control(vo, VOCTRL_SET_EQUALIZER, NULL);
     }
 }
 
@@ -259,8 +243,6 @@ static void dealloc_vo(struct vo *vo)
 
     // These must be free'd before vo->in->dispatch.
     talloc_free(vo->opts_cache);
-    talloc_free(vo->gl_opts_cache);
-    talloc_free(vo->eq_opts_cache);
 
     pthread_mutex_destroy(&vo->in->lock);
     pthread_cond_destroy(&vo->in->wakeup);
@@ -304,19 +286,6 @@ static struct vo *vo_create(bool probing, struct mpv_global *global,
 
     vo->opts_cache = m_config_cache_alloc(NULL, global, &vo_sub_opts);
     vo->opts = vo->opts_cache->opts;
-
-    m_config_cache_set_dispatch_change_cb(vo->opts_cache, vo->in->dispatch,
-                                          update_opts, vo);
-
-#if HAVE_GL
-    vo->gl_opts_cache = m_config_cache_alloc(NULL, global, &gl_video_conf);
-    m_config_cache_set_dispatch_change_cb(vo->gl_opts_cache, vo->in->dispatch,
-                                          update_opts, vo);
-#endif
-
-    vo->eq_opts_cache = m_config_cache_alloc(NULL, global, &mp_csp_equalizer_conf);
-    m_config_cache_set_dispatch_change_cb(vo->eq_opts_cache, vo->in->dispatch,
-                                          update_opts, vo);
 
     mp_input_set_mouse_transform(vo->input_ctx, NULL, NULL);
     if (vo->driver->encode != !!vo->encode_lavc_ctx)
@@ -673,6 +642,7 @@ static void run_control(void *p)
     struct vo *vo = pp[0];
     int request = (intptr_t)pp[1];
     void *data = pp[2];
+    // VOs rely on the opts here being "current"
     update_opts(vo);
     int ret = vo->driver->control(vo, request, data);
     if (pp[3])
@@ -700,6 +670,10 @@ void vo_control_async(struct vo *vo, int request, void *data)
         break;
     case VOCTRL_KILL_SCREENSAVER:
     case VOCTRL_RESTORE_SCREENSAVER:
+    case VOCTRL_UPDATE_RENDER_OPTS:
+    case VOCTRL_REDRAW:
+    case VOCTRL_EXTERNAL_RESIZE:
+    case VOCTRL_SET_PANSCAN:
         break;
     default:
         abort(); // requires explicit support

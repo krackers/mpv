@@ -6318,9 +6318,20 @@ void mp_option_change_callback(void *ctx, struct m_config_option *co, int flags)
     if (flags & UPDATE_LAVFI_COMPLEX)
         update_lavfi_complex(mpctx);
 
-    if (flags & UPDATE_VO_RESIZE) {
-        if (mpctx->video_out)
-            vo_control(mpctx->video_out, VOCTRL_EXTERNAL_RESIZE, NULL);
+
+    if (mpctx->video_out) {
+        if (flags & UPDATE_RENDER_OPTS) {
+            vo_control_async(mpctx->video_out, VOCTRL_UPDATE_RENDER_OPTS, NULL);
+        }
+        if (flags & UPDATE_VO_REDRAW) {
+            vo_control_async(mpctx->video_out, VOCTRL_REDRAW, NULL);
+        }
+        if (flags & UPDATE_VO_RECONFIG) {
+            vo_control_async(mpctx->video_out, VOCTRL_EXTERNAL_RESIZE, NULL);
+        }
+        if (flags & UPDATE_VO_POS) {
+            vo_control_async(mpctx->video_out, VOCTRL_SET_PANSCAN, NULL);
+        }
     }
 }
 

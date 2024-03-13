@@ -434,6 +434,7 @@ const struct m_sub_options gl_video_conf = {
     },
     .size = sizeof(struct gl_video_opts),
     .defaults = &gl_video_opts_def,
+    .change_flags = UPDATE_RENDER_OPTS
 };
 
 static void uninit_rendering(struct gl_video *p);

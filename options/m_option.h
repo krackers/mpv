@@ -435,19 +435,22 @@ char *format_file_size(int64_t size);
 
 // The following are also part of the M_OPT_* flags, and are used to update
 // certain groups of options.
-#define UPDATE_OPT_FIRST        (1 << 8)
-#define UPDATE_TERM             (1 << 8)  // terminal options
-#define UPDATE_OSD              (1 << 10) // related to OSD rendering
-#define UPDATE_BUILTIN_SCRIPTS  (1 << 11) // osc/ytdl/stats
-#define UPDATE_IMGPAR           (1 << 12) // video image params overrides
-#define UPDATE_INPUT            (1 << 13) // mostly --input-* options
-#define UPDATE_AUDIO            (1 << 14) // --audio-channels etc.
-#define UPDATE_PRIORITY         (1 << 15) // --priority (Windows-only)
-#define UPDATE_SCREENSAVER      (1 << 16) // --stop-screensaver
-#define UPDATE_VOL              (1 << 17) // softvol related options
-#define UPDATE_LAVFI_COMPLEX    (1 << 18) // --lavfi-complex
-#define UPDATE_VO_RESIZE        (1 << 19) // --android-surface-size
-#define UPDATE_OPT_LAST         (1 << 19)
+#define UPDATE_OPT_FIRST          (1 << 8)
+#define UPDATE_TERM               (1 << 8)  // terminal options
+#define UPDATE_OSD                (1 << 10) // related to OSD rendering
+#define UPDATE_BUILTIN_SCRIPTS    (1 << 11) // osc/ytdl/stats
+#define UPDATE_IMGPAR             (1 << 12) // video image params overrides
+#define UPDATE_INPUT              (1 << 13) // mostly --input-* options
+#define UPDATE_AUDIO              (1 << 14) // --audio-channels etc.
+#define UPDATE_PRIORITY           (1 << 15) // --priority (Windows-only)
+#define UPDATE_SCREENSAVER        (1 << 16) // --stop-screensaver
+#define UPDATE_VOL                (1 << 17) // softvol related options
+#define UPDATE_LAVFI_COMPLEX      (1 << 18) // --lavfi-complex
+#define UPDATE_VO_RECONFIG        (1 << 19) // --android-surface-size
+#define UPDATE_RENDER_OPTS            (1 << 20) // General handling of GL opt update
+#define UPDATE_VO_REDRAW          (1 << 21) // Used for gamma, etc.
+#define UPDATE_VO_POS             (1 << 22) // Panscan/zoom, etc.
+#define UPDATE_OPT_LAST           (1 << 22)
 
 // All bits between _FIRST and _LAST (inclusive)
 #define UPDATE_OPTS_MASK \
