@@ -1109,7 +1109,7 @@ Video
     N frames fail to decode in a row. 1 is equivalent to ``yes``.
 
 ``--vd-lavc-dr=<yes|no>``
-    Enable direct rendering (default: yes). If this is set to ``yes``, the
+    Enable direct rendering (default: no). If this is set to ``yes``, the
     video will be decoded directly to GPU video memory (or staging buffers).
     This can speed up video upload, and may help with large resolutions or
     slow hardware. This works only with the following VOs:
