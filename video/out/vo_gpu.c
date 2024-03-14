@@ -79,19 +79,30 @@ static void resize(struct vo *vo)
     vo->want_redraw = true;
 }
 
+
+extern uint64_t mach_absolute_time(void);
+#include <dispatch/dispatch.h>
+
 static void draw_frame(struct vo *vo, struct vo_frame *frame)
 {
+    
     struct gpu_priv *p = vo->priv;
     struct ra_swapchain *sw = p->ctx->swapchain;
     struct ra_fbo fbo;
     if (!sw->fns->start_frame(sw, &fbo))
         goto fend;
 
+    uint64_t bef = mach_absolute_time();
     gl_video_render_frame(p->renderer, frame, fbo, RENDER_FRAME_DEF);
+     float ff = (mach_absolute_time() - bef)*(125.0/3)/1e3;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        printf("vo_gpu | render: %f\n", ff);
+    });
     if (!sw->fns->submit_frame(sw, frame)) {
         MP_ERR(vo, "Failed presenting frame!\n");
         goto fend;
     }
+   
 
 fend:
     return;

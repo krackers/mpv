@@ -387,10 +387,20 @@ bool mp_render_context_acquire(mpv_render_context *ctx)
     return atomic_compare_exchange_strong(&ctx->in_use, &prev, true);
 }
 
+extern uint64_t mach_absolute_time(void);
+#include <dispatch/dispatch.h>
+uint64_t last_swap_aft = 0;
+
+
+uint64_t swap_bef = 0;
+
+
 int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
 {
     pthread_mutex_lock(&ctx->lock);
     assert(!ctx->shutting_down);
+
+    uint64_t bef_time = mach_absolute_time();
 
     int do_render =
         !GET_MPV_RENDER_PARAM(params, MPV_RENDER_PARAM_SKIP_RENDERING, int, 0);
@@ -479,6 +489,11 @@ int mpv_render_context_render(mpv_render_context *ctx, mpv_render_param *params)
         pthread_mutex_unlock(&ctx->lock);
     }
 
+    float ff = (mach_absolute_time() - bef_time)*(125.0/3)/1e3;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        printf("vo_libmpv | render: %f\n", ff);
+    });
+
     return err;
 }
 
@@ -509,6 +524,15 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
 
     pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);
+}
+
+void mpv_render_context_report_bef_flush(mpv_render_context *ctx) {
+    pthread_mutex_lock(&ctx->lock);    
+    float ff = (mach_absolute_time() - last_swap_aft)*(125.0/3)/1e3;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        printf("libmpv: %f\n", ff);
+    });
+    pthread_mutex_unlock(&ctx->lock);
 }
 
 void mpv_render_context_report_present(mpv_render_context *ctx)
@@ -596,7 +620,6 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     update(ctx);
 }
 
-extern uint64_t mach_absolute_time(void);
 
 // Called locked
 static inline void update_vo_params(struct vo *vo, struct mpv_render_context *ctx) {
@@ -604,6 +627,7 @@ static inline void update_vo_params(struct vo *vo, struct mpv_render_context *ct
     vo->dheight = ctx->vp_h;
     vo->monitor_par = ctx->vp_par;
 }
+
 
 static void flip_page(struct vo *vo)
 {
@@ -663,6 +687,7 @@ static void flip_page(struct vo *vo)
         }
     }
     uint64_t swap_aft = mach_absolute_time();
+    last_swap_aft = swap_aft;
     ctx->last_presentation_time = ctx->last_vsync_time + ctx->pending_swap_count * ctx->vsync_interval;
     uint64_t aft = ctx->last_presentation_time;
     if ((aft - bef) > 17000) {

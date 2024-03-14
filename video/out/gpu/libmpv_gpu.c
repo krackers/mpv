@@ -166,6 +166,10 @@ static int get_target_size(struct render_backend *ctx, mpv_render_param *params,
     return 0;
 }
 
+
+extern uint64_t mach_absolute_time(void);
+#include <dispatch/dispatch.h>
+
 static int render(struct render_backend *ctx, mpv_render_param *params,
                   struct vo_frame *frame)
 {
@@ -185,7 +189,12 @@ static int render(struct render_backend *ctx, mpv_render_param *params,
                                              &(int){0});
 
     struct ra_fbo target = {.tex = tex, .flip = flip};
+    uint64_t bef = mach_absolute_time();
     gl_video_render_frame(p->renderer, frame, target, RENDER_FRAME_DEF);
+    float ff = (mach_absolute_time() - bef)*(125.0/3)/1e3;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        printf("vo_libmpv | renderfn: %f\n", ff);
+    });
     p->context->fns->done_frame(p->context, frame->display_synced);
 
     return 0;

@@ -876,6 +876,10 @@ void vo_cocoa_get_vsync(struct vo *vo, struct vo_vsync_info *info) {
     // last_time = s->last_vsync_time;
 }
 
+uint64_t abef = 0;
+
+#include <dispatch/dispatch.h>
+
 void vo_cocoa_swap_buffers(struct vo *vo)
 {
     struct vo_cocoa_state *s = vo->cocoa;
@@ -885,6 +889,11 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         // See https://github.com/hooleyhoop/HooleyBits/blob/master/thread_time_constraint_policy/Thread_time_constraint_policy.m
         cocoa_set_realtime(vo->log, 0.8);
     }
+
+    float ff = (mach_absolute_time() - abef)*(125.0/3)/1e3;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        printf("cocoa_common: %f\n", ff);
+    });
  
 
     CGLFlushDrawable(s->cgl_ctx);
@@ -908,6 +917,7 @@ void vo_cocoa_swap_buffers(struct vo *vo)
         }
         pthread_mutex_unlock(&s->sync_lock);
     }
+    abef = mach_absolute_time();
 
   
  ret:

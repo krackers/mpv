@@ -845,6 +845,10 @@ static void wait_until(struct vo *vo, int64_t target)
 
 _Atomic uint64_t request_queue_time = 0;
 
+uint64_t bef_time = 0;
+
+#include <dispatch/dispatch.h>
+
 bool vo_render_frame_external(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
@@ -932,6 +936,12 @@ bool vo_render_frame_external(struct vo *vo)
 
         MP_STATS(vo, "start video-draw");
 
+        float ff = (mach_absolute_time() - bef_time)*(125.0/3)/1e3;
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+            printf("vo: %f\n", ff);
+        });
+    
+
         if (vo->driver->draw_frame) {
             vo->driver->draw_frame(vo, frame);
         } else {
@@ -948,7 +958,9 @@ bool vo_render_frame_external(struct vo *vo)
 
         vo->driver->flip_page(vo);
 
+
         uint64_t aft = mach_absolute_time();
+        bef_time = aft;
         // printf("flip time %f\n", (aft - bef)*mach_timebase_ratio*1e6);
 
         MP_STATS(vo, "end video-flip");

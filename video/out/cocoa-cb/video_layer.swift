@@ -275,6 +275,8 @@ class VideoLayer: CAOpenGLLayer {
                 print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
             }
         }
+        mpv_render_context_report_bef_flush(libmpv.mpvRenderContext)
+
         libmpv.reportRenderPresent()
     }
 
