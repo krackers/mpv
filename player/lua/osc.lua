@@ -97,11 +97,15 @@ local state = {
     mp_screen_sizeX, mp_screen_sizeY,       -- last screen-resolution, to detect resolution changes to issue reINITs
     initREQ = false,                        -- is a re-init request pending?
     last_mouseX, last_mouseY,               -- last mouse position, to detect significant mouse movement
+    mouse_in_window = false,
     message_text,
-    message_timeout,
+    message_hide_timer,
     fullscreen = false,
-    timer = nil,
-    cache_idle = false,
+    tick_timer = nil,
+    tick_last_time = 0,                     -- when the last tick() was run
+    hide_timer = nil,
+    cache_state = nil,
+
     idle = false,
     enabled = true,
     input_enabled = true,
@@ -109,7 +113,9 @@ local state = {
     dmx_cache = 0,
 }
 
+local tick_delay = 0.03
 
+local vo_configured = false
 
 
 --
@@ -127,9 +133,13 @@ end
 
 -- return mouse position in virtual ASS coordinates (playresx/y)
 function get_virt_mouse_pos()
-    local sx, sy = get_virt_scale_factor()
-    local x, y = mp.get_mouse_pos()
-    return x * sx, y * sy
+    if state.mouse_in_window then
+        local sx, sy = get_virt_scale_factor()
+        local x, y = mp.get_mouse_pos()
+        return x * sx, y * sy
+    else
+        return -1, -1
+    end
 end
 
 function set_virt_mouse_area(x0, y0, x1, y1, name)
@@ -498,12 +508,41 @@ function prepare_elements()
     end
 end
 
+-- returns nil or a chapter element from the native property chapter-list
+function get_chapter(possec)
+    local cl = mp.get_property_native("chapter-list", {})
+    local ch = nil
+
+    -- chapters might not be sorted by time. find nearest-before/at possec
+    for n=1, #cl do
+        if possec >= cl[n].time and (not ch or cl[n].time > ch.time) then
+            ch = cl[n]
+        end
+    end
+    return ch
+end
 
 --
 -- Element Rendering
 --
 
 function render_elements(master_ass)
+
+    -- when the slider is dragged or hovered and we have a target chapter name
+    -- then we use it instead of the normal title. we calculate it before the
+    -- render iterations because the title may be rendered before the slider.
+    state.forced_title = nil
+    local se, ae = state.slider_element, elements[state.active_element]
+    if se and (ae == se or (not ae and mouse_hit(se))) then
+        local dur = mp.get_property_number("duration", 0)
+        if dur > 0 then
+            local possec = get_slider_value(se) * dur / 100 -- of mouse pos
+            local ch = get_chapter(possec)
+            if ch and ch.title and ch.title ~= "" then
+                state.forced_title = "Chapter: " .. ch.title
+            end
+        end
+    end
 
     for n=1, #elements do
         local element = elements[n]
@@ -784,12 +823,20 @@ function show_message(text, duration)
     text = string.gsub(text, "\n", "\\N")
 
     state.message_text = text
-    state.message_timeout = mp.get_time() + duration
+    if not state.message_hide_timer then
+        state.message_hide_timer = mp.add_timeout(0, request_tick)
+    end
+    state.message_hide_timer:kill()
+    state.message_hide_timer.timeout = duration
+    state.message_hide_timer:resume()
+    request_tick()
+
 end
 
 function render_message(ass)
-    if not(state.message_timeout == nil) and not(state.message_text == nil)
-        and state.message_timeout > mp.get_time() then
+    if state.message_hide_timer and state.message_hide_timer:is_enabled() and
+       state.message_text
+    then
         local _, lines = string.gsub(state.message_text, "\\N", "")
 
         local fontsize = tonumber(mp.get_property("options/osd-font-size"))
@@ -807,7 +854,6 @@ function render_message(ass)
         ass:append(style .. state.message_text)
     else
         state.message_text = nil
-        state.message_timeout = nil
     end
 end
 
@@ -1559,7 +1605,8 @@ function osc_init()
     ne = new_element("title", "button")
 
     ne.content = function ()
-        local title = mp.command_native({"expand-text", user_opts.title})
+        local title = state.forced_title or
+              mp.command_native({"expand-text", user_opts.title})
         -- escape ASS, and strip newlines and trailing slashes
         title = title:gsub("\\n", " "):gsub("\\$", ""):gsub("{","\\{")
         return not (title == "") and title or "mpv"
@@ -1583,31 +1630,31 @@ function osc_init()
     ne = new_element("pl_prev", "button")
 
     ne.content = "\238\132\144"
-    ne.enabled = (pl_pos > 1) or (loop ~= "no")
+    ne.enabled = have_ch
     ne.eventresponder["mbtn_left_up"] =
         function ()
-            mp.commandv("playlist-prev", "weak")
-            show_message(get_playlist(), 3)
+            mp.commandv("add", "chapter", -1)
+            show_message(get_chapterlist(), 3)
         end
     ne.eventresponder["shift+mbtn_left_up"] =
-        function () show_message(get_playlist(), 3) end
+        function () show_message(get_chapterlist(), 3) end
     ne.eventresponder["mbtn_right_up"] =
-        function () show_message(get_playlist(), 3) end
+        function () show_message(get_chapterlist(), 3) end
 
     --next
     ne = new_element("pl_next", "button")
 
     ne.content = "\238\132\129"
-    ne.enabled = (have_pl and (pl_pos < pl_count)) or (loop ~= "no")
+    ne.enabled = have_ch
     ne.eventresponder["mbtn_left_up"] =
         function ()
-            mp.commandv("playlist-next", "weak")
-            show_message(get_playlist(), 3)
+            mp.commandv("add", "chapter", 1)
+            show_message(get_chapterlist(), 3)
         end
     ne.eventresponder["shift+mbtn_left_up"] =
-        function () show_message(get_playlist(), 3) end
+        function () show_message(get_chapterlist(), 3) end
     ne.eventresponder["mbtn_right_up"] =
-        function () show_message(get_playlist(), 3) end
+        function () show_message(get_chapterlist(), 3) end
 
 
     -- big buttons
@@ -1652,32 +1699,32 @@ function osc_init()
     --ch_prev
     ne = new_element("ch_prev", "button")
 
-    ne.enabled = have_ch
     ne.content = "\238\132\132"
+    ne.enabled = (pl_pos > 1) or (loop ~= "no")
     ne.eventresponder["mbtn_left_up"] =
         function ()
-            mp.commandv("add", "chapter", -1)
-            show_message(get_chapterlist(), 3)
+            mp.commandv("playlist-prev", "weak")
+            show_message(get_playlist(), 3)
         end
     ne.eventresponder["shift+mbtn_left_up"] =
-        function () show_message(get_chapterlist(), 3) end
+        function () show_message(get_playlist(), 3) end
     ne.eventresponder["mbtn_right_up"] =
-        function () show_message(get_chapterlist(), 3) end
+        function () show_message(get_playlist(), 3) end
 
     --ch_next
     ne = new_element("ch_next", "button")
 
-    ne.enabled = have_ch
     ne.content = "\238\132\133"
+    ne.enabled = (have_pl and (pl_pos < pl_count)) or (loop ~= "no")
     ne.eventresponder["mbtn_left_up"] =
         function ()
-            mp.commandv("add", "chapter", 1)
-            show_message(get_chapterlist(), 3)
+            mp.commandv("playlist-next", "weak")
+            show_message(get_playlist(), 3)
         end
     ne.eventresponder["shift+mbtn_left_up"] =
-        function () show_message(get_chapterlist(), 3) end
+        function () show_message(get_playlist(), 3) end
     ne.eventresponder["mbtn_right_up"] =
-        function () show_message(get_chapterlist(), 3) end
+        function () show_message(get_playlist(), 3) end
 
     --
     update_tracklist()
@@ -1737,6 +1784,7 @@ function osc_init()
     ne = new_element("seekbar", "slider")
 
     ne.enabled = not (mp.get_property("percent-pos") == nil)
+    state.slider_element = ne.enabled and ne or nil  -- used for forced_title
     ne.slider.markerF = function ()
         local duration = mp.get_property_number("duration", nil)
         if not (duration == nil) then
@@ -1765,7 +1813,7 @@ function osc_init()
         if not (user_opts.seekranges) then
             return nil
         end
-        local cache_state = mp.get_property_native("demuxer-cache-state", nil)
+        local cache_state = state.cache_state or mp.get_property_native("demuxer-cache-state", {})
         if not cache_state then
             return nil
         end
@@ -1774,11 +1822,20 @@ function osc_init()
             return nil
         end
         local ranges = cache_state["seekable-ranges"]
-        for _, range in pairs(ranges) do
-            range["start"] = 100 * range["start"] / duration
-            range["end"] = 100 * range["end"] / duration
+        if #ranges == 0 then
+            return nil
         end
-        return ranges
+        local nranges = {}
+        local maxend = nil
+        for _, range in pairs(ranges) do
+            nranges[#nranges + 1] = {
+                ["start"] = 100 * range["start"] / duration,
+                ["end"] = 100 * range["end"] / duration,
+            }
+            maxend = range["end"]
+        end
+        -- utils.shared_script_property_set("osc-cache-end", tostring(maxend))
+        return nranges
     end
     ne.eventresponder["mouse_move"] = --keyframe seeking when mouse is dragged
         function (element)
@@ -1842,15 +1899,15 @@ function osc_init()
     ne = new_element("cache", "button")
 
     ne.content = function ()
-        local cache_state = mp.get_property_native("demuxer-cache-state", {})
-        if not (cache_state["seekable-ranges"] and
+        local cache_state = state.cache_state or mp.get_property_native("demuxer-cache-state", {})
+        if not (cache_state and cache_state["seekable-ranges"] and
             #cache_state["seekable-ranges"] > 0) then
             -- probably not a network stream
             return ""
         end
         local dmx_cache = mp.get_property_number("demuxer-cache-duration")
-        if dmx_cache and (dmx_cache > state.dmx_cache * 1.1 or
-                dmx_cache < state.dmx_cache * 0.9) then
+        local thresh = math.min(state.dmx_cache * 0.05, 5)  -- 5% or 5s
+        if dmx_cache and math.abs(dmx_cache - state.dmx_cache) >= thresh then
             state.dmx_cache = dmx_cache
         else
             dmx_cache = state.dmx_cache
@@ -1902,9 +1959,10 @@ end
 
 function show_osc()
     -- show when disabled can happen (e.g. mouse_move) due to async/delayed unbinding
-    if not state.enabled then return end
-
     msg.trace("show_osc")
+    if not state.enabled then return end
+    if not vo_configured then return end
+ 
     --remember last time of invocation (mouse move)
     state.showtime = mp.get_time()
 
@@ -1917,16 +1975,17 @@ end
 
 function hide_osc()
     msg.trace("hide_osc")
+    if not vo_configured then return end
     if not state.enabled then
         -- typically hide happens at render() from tick(), but now tick() is
         -- no-op and won't render again to remove the osc, so do that manually.
         state.osc_visible = false
-        timer_stop()
+        utils.shared_script_property_set("osc-visible", (state.osc_visible and "1" or "0"))
         render_wipe()
     elseif (user_opts.fadeduration > 0) then
         if not(state.osc_visible == false) then
             state.anitype = "out"
-            control_timer()
+            request_tick()
         end
     else
         osc_visible(false)
@@ -1934,59 +1993,50 @@ function hide_osc()
 end
 
 function osc_visible(visible)
-    state.osc_visible = visible
-    control_timer()
+    if visible ~= state.osc_visible then
+        state.osc_visible = visible
+        utils.shared_script_property_set("osc-visible", (state.osc_visible and "1" or "0"))
+        if visible then
+            mp.observe_property("playback-time", "number", request_tick)
+            mp.observe_property("demuxer-cache-state", "native", cache_state)
+        else
+            mp.unobserve_property(request_tick)
+            mp.unobserve_property(cache_state)
+            state.cache_state = nil
+        end
+    end
+    request_tick()
 end
 
 function pause_state(name, enabled)
     state.paused = enabled
-    control_timer()
+    request_tick()
 end
 
-function cache_state(name, idle)
-    state.cache_idle = idle
-    control_timer()
+
+function cache_state(name, st)
+    state.cache_state = st
+    request_tick()
 end
 
-function control_timer()
-    if (state.paused) and (state.osc_visible) and
-        ( not(state.cache_idle) or not (state.anitype == nil) ) then
-
-        timer_start()
-    else
-        timer_stop()
+-- Request that tick() is called (which typically re-renders the OSC).
+-- The tick is then either executed immediately, or rate-limited if it was
+-- called a small time ago.
+function request_tick()
+    if state.tick_timer == nil then
+        state.tick_timer = mp.add_timeout(0, tick)
     end
-end
 
-function timer_start()
-    if not (state.timer_active) then
-        msg.trace("timer start")
-
-        if (state.timer == nil) then
-            -- create new timer
-            state.timer = mp.add_periodic_timer(0.03, tick)
-        else
-            -- resume existing one
-            state.timer:resume()
+    if not state.tick_timer:is_enabled() then
+        local now = mp.get_time()
+        local timeout = tick_delay - (now - state.tick_last_time)
+        if timeout < 0 then
+            timeout = 0
         end
-
-        state.timer_active = true
+        state.tick_timer.timeout = timeout
+        state.tick_timer:resume()
     end
 end
-
-function timer_stop()
-    if (state.timer_active) then
-        msg.trace("timer stop")
-
-        if not (state.timer == nil) then
-            -- kill timer
-            state.timer:kill()
-        end
-
-        state.timer_active = false
-    end
-end
-
 
 
 function mouse_leave()
@@ -1995,6 +2045,7 @@ function mouse_leave()
     end
     -- reset mouse position
     state.last_mouseX, state.last_mouseY = nil, nil
+    state.mouse_in_window = false
 end
 
 function request_init()
@@ -2005,6 +2056,13 @@ function render_wipe()
     msg.trace("render_wipe()")
     mp.set_osd_ass(0, 0, "{}")
 end
+
+function kill_animation()
+    state.anistart = nil
+    state.animation = nil
+    state.anitype =  nil
+end
+
 
 function render()
     msg.trace("rendering")
@@ -2060,14 +2118,10 @@ function render()
             if (state.anitype == "out") then
                 osc_visible(false)
             end
-            state.anistart = nil
-            state.animation = nil
-            state.anitype =  nil
+            kill_animation()
         end
     else
-        state.anistart = nil
-        state.animation = nil
-        state.anitype =  nil
+        kill_animation()
     end
 
     --mouse show/hide area
@@ -2098,11 +2152,23 @@ function render()
     end
 
     -- autohide
-    if not (state.showtime == nil) and (user_opts.hidetimeout >= 0)
-        and (state.showtime + (user_opts.hidetimeout/1000) < now)
-        and (state.active_element == nil) and not (mouse_over_osc) then
-
-        hide_osc()
+    if not (state.showtime == nil) and (user_opts.hidetimeout >= 0) then
+        local timeout = state.showtime + (user_opts.hidetimeout/1000) - now
+        if timeout <= 0 then
+            if (state.active_element == nil) and not (mouse_over_osc) then
+                hide_osc()
+            end
+        else
+            -- the timer is only used to recheck the state and to possibly run
+            -- the code above again
+            if not state.hide_timer then
+                state.hide_timer = mp.add_timeout(0, tick)
+            end
+            state.hide_timer.timeout = timeout
+            -- re-arm
+            state.hide_timer:kill()
+            state.hide_timer:resume()
+        end
     end
 
 
@@ -2183,6 +2249,7 @@ function process_event(source, what)
         state.mouse_down_counter = 0
 
     elseif source == "mouse_move" then
+        state.mouse_in_window = true
 
         local mouseX, mouseY = get_virt_mouse_pos()
         if (user_opts.minmousemove == 0) or
@@ -2199,13 +2266,14 @@ function process_event(source, what)
         if element_has_action(elements[n], action) then
             elements[n].eventresponder[action](elements[n])
         end
-        tick()
     end
+    request_tick()
 end
 
 -- called by mpv on every frame
 function tick()
     if (not state.enabled) then return end
+    if not vo_configured then return end
 
     if (state.idle) then
 
@@ -2253,6 +2321,22 @@ function tick()
         -- Flush OSD
         mp.set_osd_ass(osc_param.playresy, osc_param.playresy, "")
     end
+
+    state.tick_last_time = mp.get_time()
+
+    if state.anitype ~= nil then
+        -- state.anistart can be nil - animation should now start, or it can
+        -- be a timestamp when it started. state.idle has no animation.
+        if not state.idle and
+           (not state.anistart or
+            mp.get_time() < 1 + state.anistart + user_opts.fadeduration/1000)
+        then
+            -- animating or starting, or still within 1s past the deadline
+            request_tick()
+        else
+            kill_animation()
+        end
+    end
 end
 
 function do_enable_keybindings()
@@ -2281,6 +2365,9 @@ validate_user_opts()
 
 mp.register_event("start-file", request_init)
 mp.register_event("tracks-changed", request_init)
+mp.register_event("track-switched", function(name, val)
+        request_tick()
+    end)
 mp.observe_property("playlist", nil, request_init)
 
 mp.register_script_message("osc-message", show_message)
@@ -2307,17 +2394,23 @@ mp.observe_property("fullscreen", "bool",
 mp.observe_property("idle-active", "bool",
     function(name, val)
         state.idle = val
-        tick()
+        request_tick()
     end
 )
-mp.observe_property("pause", "bool", pause_state)
-mp.observe_property("cache-idle", "bool", cache_state)
-mp.observe_property("vo-configured", "bool", function(name, val)
-    if val then
-        mp.register_event("tick", tick)
-    else
-        mp.unregister_event(tick)
+
+mp.observe_property("osd-width", "number",
+    function(name, val)
+        request_tick()
     end
+)
+
+mp.observe_property("pause", "bool", pause_state)
+
+
+
+mp.observe_property("vo-configured", "bool", function(name, val)
+    vo_configured = val
+    request_tick()
 end)
 
 -- mouse show/hide bindings
@@ -2385,8 +2478,18 @@ function visibility_mode(mode, no_osd)
     if not no_osd and tonumber(mp.get_property("osd-level")) >= 1 then
         mp.osd_message("OSC visibility: " .. mode)
     end
+
+    -- Reset the input state on a mode change. The input state will be
+    -- recalcuated on the next render cycle, except in 'never' mode where it
+    -- will just stay disabled.
+    mp.disable_key_bindings("input")
+    mp.disable_key_bindings("window-controls")
+    state.input_enabled = false
+
+    request_tick()
 end
 
+-- mp.register_event("seek", show_osc)
 visibility_mode(user_opts.visibility, true)
 mp.register_script_message("osc-visibility", visibility_mode)
 mp.add_key_binding(nil, "visibility", function() visibility_mode("cycle") end)
