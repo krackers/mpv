@@ -93,8 +93,15 @@ class VideoLayer: CAOpenGLLayer {
     var inLiveResize: Bool = false {
         didSet {
             if inLiveResize {
+                // Note the reason why async is set here is that it allows for a smoother live-resize.
+                // Essentially, it seems when async is used the actual opengl viewport size remains fixed
+                // during the resize, and the contents are simply bilinearly upscaled/downscaled to fit
+                // the new layer size. By contrast if async is false then every time we render to a new
+                // size which is not only wasteful but also produces visual jarringness since things move
+                // around a bit during the resize->rerender delay.
                 isAsynchronous = true
             }
+            // This is necessary for the layer to actually use the new value we set.
             update(force: true)
         }
     }
@@ -196,7 +203,7 @@ class VideoLayer: CAOpenGLLayer {
         // glFlush instead. Note that the live resize status may have possibly changed between the trigger and the
         // beginning of this function, so this is technically a bit racy. However the implicit CGL lock maintains correctness,
         // and the report here is only to avoid visual jarringness. It's OK if we report too many times.
-        // It's also OK if we underreport since we always queue a present on live resize which forces a present.
+        // It's also OK if we underreport since we always queue a present on live resize end.
         if (wasInLiveResize) {
             libmpv.reportRenderPresent()
         }

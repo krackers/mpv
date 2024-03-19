@@ -785,6 +785,11 @@ static int control(struct vo *vo, uint32_t request, void *data)
         int events = 0;
         r = p->ctx->control_cb(vo, p->ctx->control_cb_ctx,
                                &events, request, data);
+        // While this is mostly equivalent to user calling render(), this has the benefit
+        // that it can coalesce repeated resizes
+        if (events & VO_EVENT_RESIZE) {
+            vo->want_redraw = true;
+        }
         vo_event(vo, events);
     }
     pthread_mutex_unlock(&ctx->control_lock);

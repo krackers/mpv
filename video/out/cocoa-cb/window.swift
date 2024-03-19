@@ -295,7 +295,7 @@ class Window: NSWindow, NSWindowDelegate {
         }
     }
 
-    func updateFrame(_ rect: NSRect) {
+    private func updateFrame(_ rect: NSRect) {
         if rect != frame {
             let cRect = frameRect(forContentRect: rect)
             unfsContentFrame = rect
@@ -487,11 +487,18 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
+        // Happens-before relation is established via dispatch queue mechanism
         cocoaCB.layer?.inLiveResize = false
         if let contentViewFrame = contentView?.frame,
                !isAnimating && !isInFullscreen
         {
             unfsContentFrame = convertToScreen(contentViewFrame)
+        }
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        if (!(cocoaCB.layer?.inLiveResize ?? false)) {
+            cocoaCB.flagEvents(VO_EVENT_RESIZE)
         }
     }
 
