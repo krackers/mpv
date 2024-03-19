@@ -92,16 +92,8 @@ class VideoLayer: CAOpenGLLayer {
 
     var inLiveResize: Bool = false {
         didSet {
-            if inLiveResize {
-                // Note the reason why async is set here is that it allows for a smoother live-resize.
-                // Essentially, it seems when async is used the actual opengl viewport size remains fixed
-                // during the resize, and the contents are simply bilinearly upscaled/downscaled to fit
-                // the new layer size. By contrast if async is false then every time we render to a new
-                // size which is not only wasteful but also produces visual jarringness since things move
-                // around a bit during the resize->rerender delay.
-                isAsynchronous = true
-            }
-            // This is necessary for the layer to actually use the new value we set.
+            // This is necessary for the layer to update isAsynchronous
+            // (note that setting isAsynchronous directly here doesn't work.)
             update(force: true)
         }
     }
@@ -166,8 +158,14 @@ class VideoLayer: CAOpenGLLayer {
                           pixelFormat pf: CGLPixelFormatObj,
                           forLayerTime t: CFTimeInterval,
                           displayTime ts: UnsafePointer<CVTimeStamp>?) -> Bool {
-        if inLiveResize == false {
-            isAsynchronous = false
+        // Note the reason why async is set here is that it allows for a smoother live-resize.
+        // Essentially, it seems when async is used the actual opengl viewport size remains fixed
+        // during the resize, and the contents are simply bilinearly upscaled/downscaled to fit
+        // the new layer size. By contrast if async is false then every time we render to a new
+        // size which is not only wasteful but also produces visual jarringness since things move
+        // around a bit during the resize->rerender delay.
+        if inLiveResize != isAsynchronous {
+            isAsynchronous = inLiveResize
         }
         return cocoaCB.backendState == .initialized && self.wantsUpdate
     }
