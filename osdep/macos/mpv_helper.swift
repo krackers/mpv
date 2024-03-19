@@ -20,8 +20,9 @@ import Cocoa
 class MPVHelper {
 
     var vo: UnsafeMutablePointer<vo>
+    private var input: OpaquePointer { get { return vo.pointee.input_ctx } }
+
     var opts: mp_vo_opts
-    var input: OpaquePointer { get { return vo.pointee.input_ctx } }
     var glOpts: gl_video_opts
     var macOpts: macos_opts
     var log: LogHelper

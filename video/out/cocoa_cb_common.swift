@@ -98,6 +98,8 @@ class CocoaCB: NSObject {
         // Note: If the VO uninit was called first, then VO might already be terminated and
         // vo context points to already free'd memory
         print("UNINIT CALLED")
+        // This may be called either by voctrl uninit or by ourselves on global quit
+        // In the latter case VO is still active
         mpv = nil
         layer?.uninit(unregister)
         layer = nil
@@ -580,11 +582,14 @@ class CocoaCB: NSObject {
             DispatchQueue.main.sync { ccb.preinit(vo!) }
             return VO_TRUE
         case VOCTRL_UNINIT:
-            // Note: This is technically a bit racy since it needs to be done async, and that means
-            // there is a period of time when the libmpv render is not registered. If VO preinit
-            // is called during this time then we won't be able to use libmpv backend.
-            // But in practice this should not happen since mpv doesn't call uninit for back-to-back
-            // videos.
+            // Avoid a deadlock: if global quit is called first (from main thread), it calls ccb.uninit() which calls
+            // libmpv uninit, which sends voctrl_uninit (from VO thread) which should not again block on main thread.
+            // Luckily we can avoid a lock here since mp_dispatch_append impliictly gives us the happens-before relation
+            // and guarantees that when the VO thread comes here the write to ccb.mpv is visible.
+            if ccb.mpv != nil {
+                DispatchQueue.main.sync { ccb.mpv = nil }
+            }
+            // Past this point nothing should make use of ccb.mpv
             DispatchQueue.main.async { ccb.uninit(); ccb.backendState = .needsInit }
             return VO_TRUE
         case VOCTRL_RECONFIG:
