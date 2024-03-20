@@ -92,9 +92,11 @@ class VideoLayer: CAOpenGLLayer {
 
     var inLiveResize: Bool = false {
         didSet {
-            // This is necessary for the layer to update isAsynchronous
-            // (note that setting isAsynchronous directly here doesn't work.)
-            update(force: true)
+            if (!inLiveResize) {
+                // Unblock any currently pending draw when disabling live resize
+                // See comment in draw() for more info
+                libmpv.reportRenderPresent()
+            }
         }
     }
 
@@ -201,7 +203,7 @@ class VideoLayer: CAOpenGLLayer {
         // glFlush instead. Note that the live resize status may have possibly changed between the trigger and the
         // beginning of this function, so this is technically a bit racy. However the implicit CGL lock maintains correctness,
         // and the report here is only to avoid visual jarringness. It's OK if we report too many times.
-        // It's also OK if we underreport since we always queue a present on live resize end.
+        // It's also OK if we underreport since we always explicitly report a present when disabling live resize.
         if (wasInLiveResize) {
             libmpv.reportRenderPresent()
         }
@@ -294,9 +296,10 @@ class VideoLayer: CAOpenGLLayer {
                 self.libmpv.processQueue()
                 CGLUnlockContext(self.cglContext)
             }
-
-            self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || force
-            if self.wantsUpdate && (force || !self.inLiveResize) {
+            // Value of async is only ever updated if we actually call into the layer display
+            let forced = force || (self.isAsynchronous != self.inLiveResize)
+            self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || forced
+            if (self.wantsUpdate && !self.inLiveResize) || forced {
                 self.display()
             }
         }

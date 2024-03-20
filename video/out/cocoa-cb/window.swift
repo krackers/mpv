@@ -494,9 +494,11 @@ class Window: NSWindow, NSWindowDelegate {
         {
             unfsContentFrame = convertToScreen(contentViewFrame)
         }
+        cocoaCB.flagEvents(VO_EVENT_RESIZE)
     }
 
     func windowDidResize(_ notification: Notification) {
+        // This is sometimes reported during a live resize...
         if (!(cocoaCB.layer?.inLiveResize ?? false)) {
             cocoaCB.flagEvents(VO_EVENT_RESIZE)
         }
