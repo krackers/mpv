@@ -488,8 +488,7 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
 
     pthread_mutex_lock(&ctx->lock);
     if (ctx->shutting_down) {
-        pthread_mutex_unlock(&ctx->lock);
-        return;
+        goto done;
     }
 
     ctx->flip_count += 1;
@@ -506,9 +505,10 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
     }
     
     ctx->last_vsync_time = vsync_time;
-
-    pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);
+done:
+    pthread_mutex_unlock(&ctx->lock);
+
 }
 
 void mpv_render_context_report_present(mpv_render_context *ctx)
@@ -517,12 +517,12 @@ void mpv_render_context_report_present(mpv_render_context *ctx)
 
     pthread_mutex_lock(&ctx->lock);
     if (ctx->shutting_down) {
-        pthread_mutex_unlock(&ctx->lock);
-        return;
+        goto done;
     }
     ctx->present_count += 1;
-    pthread_mutex_unlock(&ctx->lock);
     pthread_cond_broadcast(&ctx->video_wait);
+done:
+    pthread_mutex_unlock(&ctx->lock);
 }
 
 
