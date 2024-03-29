@@ -512,6 +512,8 @@ static void update_vsync_timing_after_swap(struct vo *vo,  struct vo_vsync_info 
     // In its absence, we are conservative and only skip 1 frame. 
     // Since vsync_skip_detection uses a delay of 2/3 of a vsync as the threshold, this will trigger when
     // one vysnc is takes more than ((1+2/3)avg_vsync) 
+    // TODO: This needs to be surrounded in a check if display_sync actually enabled, and the logic
+    // inspected more carefully.
     // in->current_frame->num_vsyncs = MPMAX(0, in->current_frame->num_vsyncs - skipped_vsyncs);
     // in->current_frame->vsync_offset += in->current_frame->vsync_interval * skipped_vsyncs;
     if (skipped_vsyncs > 0) {

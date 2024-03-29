@@ -266,7 +266,8 @@ class VideoLayer: CAOpenGLLayer {
 
         // If we still need an update...
         if self.wantsUpdate && libmpv.renderInitialized {
-            // display() did not end up drawing, possibly because no display was ready
+            // layer display() did not end up drawing, possibly because no display was ready
+            // or the window was occluded (see iina/issues/4822).
             // No need to flush here since nothing was really drawn at all.
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
@@ -288,8 +289,12 @@ class VideoLayer: CAOpenGLLayer {
     func update(force: Bool = false) {
         queue.async {
             let updateFlags = self.libmpv.checkRenderUpdateFrame()
-            // Try to avoid calling into layer display() if possible, because
-            // it's a fairly "heavy" function
+            // Process the queue outside canDraw/draw if possible, because
+            // those are fairly "heavy" as they involve layer locking/FBO allocaiton.
+            // In fact this _must_ be done outside canDraw/draw because the system can silently
+            // skip those if window occluded. See iina/issues/4822.
+            // Also this shoul be done outside display() since we must still process the queue
+            // even when in async mode.
             if (updateFlags & UInt64(MPV_RENDER_PROCESS_QUEUE.rawValue) > 0) {
                 CGLLockContext(self.cglContext)
                 CGLSetCurrentContext(self.cglContext)
