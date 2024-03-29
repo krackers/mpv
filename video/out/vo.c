@@ -139,6 +139,8 @@ struct vo_internal {
     int64_t *vsync_samples;
     int num_vsync_samples;
     int64_t num_total_vsync_samples;
+    // The vsync timestamps are really "presentation" timestamps on display time,
+    // and should be strictly monotonically increasing.
     int64_t prev_vsync;              // Actual last vsync timestamp in mp_time units
     double base_vsync;               // "Smoothed" last vsync timestamp. This increments by
                                      // vsync_interval every vsync, except for major jumps when
@@ -1284,26 +1286,33 @@ void vo_seek_reset(struct vo *vo)
     pthread_mutex_unlock(&in->lock);
 }
 
-// Muist be called locked. Assumes that we have finished rendering.
-// Returns time in us, relative to mp_time
-static double get_current_frame_end(struct vo *vo)
-{
-    struct vo_internal *in = vo->in;
-    if (!in->current_frame || in->rendering)
+
+// Returns the timestamp (in mp_time units) when the current display-synced
+// frame will end. Returns 0 if no cur frame exists.
+// Returns -1 if not display-synced or there is not enough info to compute the end time.
+//
+// This can only be called while no new frame is queued (after
+// vo_is_ready_for_frame). **Must be called locked**
+static double vo_display_synced_frame_end(struct vo_internal *in) {
+    assert(!in->frame_queued);
+    if (!in->current_frame)
+        return 0;
+     if (!in->current_frame->display_synced || in->base_vsync == 0 || in->vsync_interval <= 1)
         return -1;
 
-    double frame_duration = in->current_frame->display_synced ? 
-                            (in->current_frame->num_vsyncs * in->vsync_interval)
-    						: in->current_frame->duration;
-
-    return in->current_frame->pts + MPMAX(frame_duration, 0);
+    double res = in->base_vsync;
+    // num_vsyncs is decremented _before_ the render, so compensate
+    int extra = !!in->rendering;
+    res += (in->current_frame->num_vsyncs + extra) * in->vsync_interval;
+    return res;
 }
 
+
 // If 0, VO can be reconfigured freely without dropping frames.
-// If > 0, frame is rendered but not yet finished displaying for its duration.
+// If > 0, frame is rendered and VO is idle, but not yet finished displaying for its duration.
 //          Caller should wait the number of secs and retry.
-// If < 0 (-1), then frame is still rendering. The VO thread will wakeup core when state changes.
-double vo_still_displaying(struct vo *vo)
+// If < 0 (-1), then VO still busy (render/queued). VO thread will wakeup core when ready.
+double vo_get_frame_finish_delay(struct vo *vo)
 {
     double ret = 0;
     struct vo_internal *in = vo->in;
@@ -1311,14 +1320,26 @@ double vo_still_displaying(struct vo *vo)
     if (!in->hasframe) {
         ret = 0;
     } else if (in->rendering || in->frame_queued) {
-        // In these cases, VO thread will wakeup core
+        // Cannot swap yet, but VO thread will wakeup the core
         ret = -1;
     } else {
-        // In this case, VO thread has finished rendering
+        // For the display synced case, we can schedule if num_vsyncs == 0.
+        // The VO thread schedules a wakeup after each time num_vsyncs is decremented.
+        // In terms of timing, num_vsyncs == 0 iff the display frame end is same as
+        // the vsync base (in->rendering is set to false alongside vsync stats update).
+        // (Another way to think about it is that in display-sync mode we look at the
+        // display clock instead of system clock, and we are "done" with the frame if
+        // the frame-end time aligns with the last present time, even if
+        // this is physically ahead of system time.)
+        double frame_end = vo_display_synced_frame_end(in);
+        if (frame_end >= 0)
+            return frame_end > in->base_vsync ? -1 : 0;
+        // Fall back to computing based off audio-synced
+        // In this case, VO thread might have finished rendering
         // and gone to sleep. So we need the user to manually
-        // poll themselves.
+        // wait until time elapsed.
+        frame_end = in->current_frame->pts + MPMAX(in->current_frame->duration, 0);
         int64_t now = mp_time_us();
-        double frame_end = get_current_frame_end(vo);
         ret = now < frame_end ? (frame_end - now)/1e6 : 0;
     }
     pthread_mutex_unlock(&vo->in->lock);
@@ -1420,25 +1441,16 @@ double vo_get_estimated_vsync_jitter(struct vo *vo)
 // Get the time in seconds at after which the currently rendering frame will
 // end. Returns positive values if the frame is yet to be finished, negative
 // values if it already finished.
-// This can only be called while no new frame is queued (after
-// vo_is_ready_for_frame). Returns 0 for non-display synced frames, or if the
-// deadline for continuous display was missed.
+// Returns 0 for non-display synced frames.
 double vo_get_display_delay(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
-    assert (!in->frame_queued);
-    double res = 0;
-    if (in->base_vsync != 0 && in->vsync_interval > 1 && in->current_frame) {
-        res = in->base_vsync;
-        int extra = !!in->rendering;
-        res += (in->current_frame->num_vsyncs + extra) * in->vsync_interval;
-        if (!in->current_frame->display_synced)
-            res = 0;
-    }
+    double res = vo_display_synced_frame_end(in);
     pthread_mutex_unlock(&in->lock);
-    return res != 0 ? (res - mp_time_us()) / 1e6 : 0;
+    return res > 0 ? (res - mp_time_us()) / 1e6 : 0;
 }
+
 
 void vo_discard_timing_info(struct vo *vo)
 {

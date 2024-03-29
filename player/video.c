@@ -1096,11 +1096,9 @@ void write_video(struct MPContext *mpctx)
     struct mp_image_params p = mpctx->next_frames[0]->params;
     if (!vo->params || !mp_image_params_equal(&p, vo->params)) {
         // Changing config deletes the current frame; wait until it's finished.
-        double wait_status = vo_still_displaying(vo);
+        double wait_status = vo_get_frame_finish_delay(vo);
         if (wait_status != 0) {
-            if (request_queue_time > 0) {
-                printf("VO Still displaying, wait status %f\n", wait_status);
-            }
+            printf("VO Still displaying, wait status %f\n", wait_status);
             if (wait_status > 0) {
                 mp_set_timeout(mpctx, wait_status);
             }
