@@ -489,19 +489,19 @@ class Window: NSWindow, NSWindowDelegate {
     func windowDidEndLiveResize(_ notification: Notification) {
         // Happens-before relation is established via dispatch queue mechanism
         cocoaCB.layer?.inLiveResize = false
-        if let contentViewFrame = contentView?.frame,
-               !isAnimating && !isInFullscreen
-        {
-            unfsContentFrame = convertToScreen(contentViewFrame)
-        }
-        cocoaCB.flagEvents(VO_EVENT_RESIZE)
+        windowDidResize(notification)
     }
 
     func windowDidResize(_ notification: Notification) {
         // This is sometimes reported during a live resize...
-        if (!(cocoaCB.layer?.inLiveResize ?? false)) {
-            cocoaCB.flagEvents(VO_EVENT_RESIZE)
+        if ((cocoaCB.layer?.inLiveResize ?? false) || isAnimating || isInFullscreen) {
+            return
         }
+        if let contentViewFrame = contentView?.frame
+        {
+            unfsContentFrame = convertToScreen(contentViewFrame)
+        }
+        cocoaCB.flagEvents(VO_EVENT_RESIZE)
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
