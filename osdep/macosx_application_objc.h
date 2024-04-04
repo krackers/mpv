@@ -34,6 +34,6 @@ struct mpv_handle;
 - (const struct m_sub_options *)getMacOSConf;
 
 @property(nonatomic, retain) MenuBar *menuBar;
-@property(nonatomic, assign) size_t openCount;
+@property(nonatomic, assign) size_t cliFilesCount;
 @property(nonatomic, retain) CocoaCB *cocoaCB;
 @end

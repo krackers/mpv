@@ -103,7 +103,7 @@ static void terminate_cocoa_application(void)
 
 @implementation Application
 @synthesize menuBar = _menu_bar;
-@synthesize openCount = _open_count;
+@synthesize cliFilesCount = _cli_files_countn;
 @synthesize cocoaCB = _cocoa_cb;
 
 - (void)sendEvent:(NSEvent *)event
@@ -237,8 +237,10 @@ static const char macosx_icon[] =
 
 - (void)application:(NSApplication *)sender openFiles:(NSArray *)filenames
 {
-    if (mpv_shared_app().openCount > 0) {
-        mpv_shared_app().openCount--;
+    // OSX apparently calls openFiles on us if we invoke the cli app from a bundle
+    // and pass in files in the command line.
+    if (mpv_shared_app().cliFilesCount > 0) {
+        mpv_shared_app().cliFilesCount -= [filenames count];
         return;
     }
     [self openFiles:filenames];
@@ -360,7 +362,7 @@ int cocoa_main(int argc, char *argv[])
         } else {
             for (int i = 1; i < argc; i++)
                 if (argv[i][0] != '-')
-                    mpv_shared_app().openCount++;
+                    mpv_shared_app().cliFilesCount++;
             init_cocoa_application(false);
         }
 
