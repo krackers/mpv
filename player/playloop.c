@@ -1060,6 +1060,7 @@ static void handle_playback_restart(struct MPContext *mpctx)
         MP_VERBOSE(mpctx, "starting audio playback\n");
         mpctx->audio_status = STATUS_PLAYING;
         fill_audio_out_buffers(mpctx); // actually play prepared buffer
+        MP_VERBOSE(mpctx, "Audio out buffers filled\n");
         mp_wakeup_core(mpctx);
         mpctx->osd_force_update = true;
     }
