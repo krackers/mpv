@@ -1386,11 +1386,10 @@ static void mark_stream_eof(struct demux_stream *ds)
 // Read ahead at most 2 extra secs from desired pts, to simulate normal demux
 // readahead behavior.
 #define LAZY_WAIT_READAHEAD_PTS 2.0
-static bool lazy_stream_needs_wait(struct demux_stream *ds)
+static bool lazy_stream_force_read(struct demux_stream *ds)
 {
     struct demux_internal *in = ds->in;
-    // Attempt to read until force_read_until was reached, or reading has
-    // stopped for some reason (true EOF, queue overflow).
+    // Attempt to read until force_read_until was reached, or true EOF.
 
     // Note: Unlike mentioned in 9d9e986e068fc47575ad93557ce9f92b5a992dae
     // I think it should actually work to have !ds->reader_head as
@@ -1401,6 +1400,26 @@ static bool lazy_stream_needs_wait(struct demux_stream *ds)
     // difference is that if reader_head is part of this condition we will wait
     // until all the existing packets in queue are drained before triggering
     // read ahead to min pts.
+    // However, it still makes sense to me to avoid including that,
+    // because if we did then we'd have to ping-pong back and forth between demuxer
+    // and reader (since we'd never queue ahead more than a single packet, but with high probability
+    // the packet we're looking for is several packets ahead. So it makes better sense
+    // to just demux ahead to target so we can read in one swoop.)
+    //
+    // We don't handle queue overflow elegantly here; there's really no way we could,
+    // because there are two conflicting conditions: we're trying to force a read to some pts
+    // but we can't do that because the other stream queues are full so we can't add any more packets
+    // to them (even if our sub queue is empty). There is code to prevent any more packets being
+    // added and mark ds->eof as true (which will cause reader to stop trying), but lazy_stream_force_read
+    // keeps returning true in such cases (because we still want to keep trying and continue force-readahead
+    // as soon as we can). Note that including ds->reader_head in this condition wouldn't really help
+    // with overflow case, as we'd still end up filling the non-sub queues with data. Maybe it might be a slight
+    // optimization in that we will upper-bound the sub queue size as <= 1, but since sub packets are small
+    // anyway it's not worth this optimization. So basically if you set readahead_pts too far into the future
+    // a queue overflow _will_ occur and your subs probably won't show up on screen. Not much we can do
+    // other than fail loudly by printing the queue overflow error message.
+    //
+    //
     // Also note that we don't include ds->selected here since it's the client
     // responsibility to check that, similar to eager case (if using demux_read then
     // this is done for you to avoid infinite looping.)
@@ -1430,10 +1449,8 @@ static bool read_packet(struct demux_internal *in)
         struct demux_stream *ds = in->streams[n]->ds;
         if (ds->eager) {
             read_more |= !ds->reader_head;
-        } else {
-            if (lazy_stream_needs_wait(ds)) {
-                read_more = true;
-            }
+        } else if (lazy_stream_force_read(ds)) {
+            read_more = true;
         }
         refresh_more |= ds->refreshing;
         if (ds->eager && ds->queue->last_ts != MP_NOPTS_VALUE &&
@@ -1799,8 +1816,8 @@ static struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_p
     if (pkt) {
         goto ret;
     }
-    bool lazy_need_wait = lazy_stream_needs_wait(ds);
-    if (ds->eager || lazy_need_wait) {
+    bool forced_read = lazy_stream_force_read(ds);
+    if (ds->eager || forced_read) {
         const char *t = stream_type_name(ds->type);
         MP_DBG(in, "reading packet for %s\n", t);
         in->eof = false; // force retry
@@ -1822,7 +1839,7 @@ static struct demux_packet *demux_read_packet(struct sh_stream *sh, double min_p
             // As an extra precaution we also break if we no longer need to poll for lazy streams.
             // This guards against a scenario where we have no packet ready in a sparse stream
             // and keep looping endlessly.
-            if (ds->eof || (!ds->eager && !lazy_stream_needs_wait(ds)))
+            if (ds->eof || (!ds->eager && !lazy_stream_force_read(ds)))
                 break;
 
         }
@@ -1870,15 +1887,15 @@ int demux_read_packet_async_until(struct sh_stream *sh, double min_pts, struct d
 
     pthread_mutex_lock(&ds->in->lock);
     *out_pkt = dequeue_packet(ds, min_pts);
-    // True iff lazy stream & min_pts doesn't satisfy so should read-ahead
-    // Basically we treat lazy-wait as effectively eager.
-    bool continue_reading = ds->eager || lazy_stream_needs_wait(ds);
+    // True (read-ahead) iff eager, or lazy stream & min_pts not satisfied
+    // Basically we treat lazy-forced case as effectively eager.
+    bool continue_reading = ds->eager || lazy_stream_force_read(ds);
 
     // If we expect a packet to be ready later (eager, or lazy-wait) ask user to check back later.
     // Otherwise we're done for now.
     //
     // Note that lazy-wait condition is based on timestamp of last (demuxed) packet in stream queue.
-    // demux_add_packet takes a lock on in->lock, so lazy_stream_needs_wait cannot have changed 
+    // demux_add_packet takes a lock on in->lock, so lazy_stream_force_read cannot have changed 
     // within this critical section. I.e. it's not possible that in-between the time we
     // dequeued a packet and determined the return code, the demux thread added a new packet
     // to the queue causing stream_needs_wait to erroneously return false us us returning -1 instead 
@@ -1904,7 +1921,7 @@ int demux_read_packet_sync(struct sh_stream *sh, struct demux_packet **out_pkt)
 
 /**
   Unlike async version, this only ever returns 0 if demux was forcefully
-  blocked via demux_block_reading
+  blocked via demux_block_reading.
 */
 int demux_read_packet_sync_until(struct sh_stream *sh, double min_pts, struct demux_packet **out_pkt) {
     struct demux_stream *ds = sh ? sh->ds : NULL;
