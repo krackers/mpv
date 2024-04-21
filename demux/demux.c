@@ -2610,10 +2610,13 @@ static void switch_current_range(struct demux_internal *in,
     free_empty_cached_ranges(in);
 }
 
-static struct demux_packet *find_seek_target(struct demux_queue *queue,
+// Must be called locked, and only if cache is seekable.
+static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
                                              double pts, int flags)
 {
-    struct demux_packet *start = queue->head;
+    assert(queue->ds->in->seekable_cache);
+
+    struct demux_packet *start = queue->keyframe_earliest;
     for (int n = 0; n < queue->num_index; n++) {
         if (queue->index[n]->kf_seek_pts > pts)
             break;
@@ -2661,7 +2664,7 @@ static struct demux_packet *find_seek_target(struct demux_queue *queue,
 }
 
 // must be called locked
-static struct demux_cached_range *find_cache_seek_target(struct demux_internal *in,
+static struct demux_cached_range *find_cache_seek_range(struct demux_internal *in,
                                                          double pts, int flags)
 {
     // Note about queued low level seeks: in->seeking can be true here, and it
@@ -2690,7 +2693,7 @@ static struct demux_cached_range *find_cache_seek_target(struct demux_internal *
 }
 
 // must be called locked
-// range must be non-NULL and from find_cache_seek_target() using the same pts
+// range must be non-NULL and from find_cache_seek_range() using the same pts
 // and flags, before any other changes to the cached state
 static void execute_cache_seek(struct demux_internal *in,
                                struct demux_cached_range *range,
@@ -2708,13 +2711,13 @@ static void execute_cache_seek(struct demux_internal *in,
             struct demux_stream *ds = in->streams[n]->ds;
             struct demux_queue *queue = range->streams[n];
             if (ds->selected && ds->type == STREAM_VIDEO) {
-                struct demux_packet *target = find_seek_target(queue, pts, flags);
+                struct demux_packet *target = find_cache_seek_target(queue, pts, flags);
                 if (target) {
                     double target_pts = target->kf_seek_pts;
                     if (target_pts != MP_NOPTS_VALUE) {
                         MP_VERBOSE(in, "adjust seek target %f -> %f\n",
                                    pts, target_pts);
-                        // (We assume the find_seek_target() will return the
+                        // (We assume the find_cache_seek_target() will return the
                         // same target for the video stream.)
                         pts = target_pts;
                         flags &= ~SEEK_FORWARD;
@@ -2729,7 +2732,7 @@ static void execute_cache_seek(struct demux_internal *in,
         struct demux_stream *ds = in->streams[n]->ds;
         struct demux_queue *queue = range->streams[n];
 
-        struct demux_packet *target = find_seek_target(queue, pts, flags);
+        struct demux_packet *target = find_cache_seek_target(queue, pts, flags);
         ds->reader_head = target;
         ds->skip_to_keyframe = !target;
         if (ds->reader_head)
@@ -2809,7 +2812,7 @@ int demux_seek(demuxer_t *demuxer, double seek_pts, int flags)
     flags &= ~(unsigned)SEEK_CACHED;
 
     struct demux_cached_range *cache_target =
-        find_cache_seek_target(in, seek_pts, flags);
+        find_cache_seek_range(in, seek_pts, flags);
 
     if (!cache_target) {
         if (require_cache) {
