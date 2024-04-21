@@ -265,8 +265,11 @@ struct demux_queue {
     // Represents min/max pts between keyframe_latest and latest (tail) packet.
     double inter_kf_min_pts, inter_kf_max_pts;
     struct demux_packet *keyframe_latest;
+    struct demux_packet *keyframe_earliest;
 
     // incrementally maintained seek range, possibly invalid
+    // seek_start is the min_pts between first and second keyframe
+    // seek_end is the max_pts between second-to-last and last keyframe
     double seek_start, seek_end;
     double last_pruned;     // timestamp of last pruned keyframe
 
@@ -445,6 +448,13 @@ static void update_seek_ranges(struct demux_cached_range *range)
     for (int n = 0; n < range->num_streams; n++) {
         struct demux_queue *queue = range->streams[n];
 
+        // Sanity check: seek_start by construction should be seek_pts of the earliest keyframe.
+        assert((queue->keyframe_earliest && queue->keyframe_earliest->kf_seek_pts == queue->seek_start)
+                || (queue->seek_start == MP_NOPTS_VALUE));
+        // cache being non-empty implies we should have earliest keyframe set.
+        // note that seek_start might be unset though, see explanation in range joining.
+        assert(queue->keyframe_earliest || queue->num_index == 0);
+
         if (queue->ds->selected && queue->ds->eager) {
             range->seek_start = MP_PTS_MAX(range->seek_start, queue->seek_start);
             range->seek_end = MP_PTS_MIN(range->seek_end, queue->seek_end);
@@ -499,6 +509,8 @@ static void remove_head_packet(struct demux_queue *queue)
         queue->next_prune_target = NULL;
     if (queue->keyframe_latest == dp)
         queue->keyframe_latest = NULL;
+    if (queue->keyframe_earliest == dp)
+        queue->keyframe_earliest = NULL;
     queue->is_bof = false;
 
     uint64_t end_pos = dp->next ? dp->next->cum_pos : queue->tail_cum_pos;
@@ -531,7 +543,7 @@ static void clear_queue(struct demux_queue *queue)
     }
     queue->head = queue->tail = NULL;
     queue->next_prune_target = NULL;
-    queue->keyframe_latest = NULL;
+    queue->keyframe_latest = queue->keyframe_earliest = NULL;
     queue->seek_start = queue->seek_end = queue->last_pruned = MP_NOPTS_VALUE;
 
     queue->num_index = 0;
@@ -541,7 +553,6 @@ static void clear_queue(struct demux_queue *queue)
     queue->last_pos = -1;
     queue->last_ts = queue->last_dts = MP_NOPTS_VALUE;
     queue->last_pos_fixup = -1;
-    queue->keyframe_latest = NULL;
     queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
 
     queue->is_eof = false;
@@ -1132,6 +1143,39 @@ static void attempt_range_joining(struct demux_internal *in)
             q1->tail = q2->tail;
         }
 
+        // Note that there are roughly 4 types of joins here, based on which we
+        // may or may not end up with a keyframe_earliest and seek_start set for q1.
+        // Let I indicate a keyframe (e.g. IDR for h264) and B indicate non-keyframe.
+        // Let [x] indicate a shared overlap packet of x between q1 and q2.
+        //
+        //
+        // We can have BB[I]BBBBI, which is the case talked about in the previous
+        // section, and where we assign the kf_seek_pts to q1's end frame, so q1
+        // will also have a valid seek_start and there are no discontinuities.
+        //
+        // We can also have IBB[B]BBIBBBI. In this case we cannot (easily) propagate the
+        // kf_seek_pts info, so while q1 still has a keyframe_earliest, its kf_seek_pts
+        // (and hence also seek_start) are unset. Q1 will still have the cache
+        // entries transferred from q2 though. This is a rarer case (especially for
+        // eager streams. For the purpose of range start/end computation, NOPTS values are ignored,
+        // and if range joining was triggered by an eager stream at a keyframe boundary then
+        // we should hopefully have at least one stream which has a defined seek_start which
+        // will dictate the range). It does unfortunately mean that that earliest keyframe
+        // will never be returned as a valid seek target (because it has no kf_seek_pts value)
+        // but ideally this range is small enough that it's not worth worrying about.
+        //
+        // We can have BBB[B]IBBBIBB. In this case we take the keyframe_earliest from q2
+        // which is the correct thing to do, and we'll set seek_start accordingly.
+        //
+        // BBB[B]BBB - no keyframe at all in seek range.
+
+        // It might be the case (e.g. sparse stream) that q1 does not currently have any keyframe info, while q2 does.
+        q1->keyframe_earliest = q1->keyframe_earliest ?: q2->keyframe_earliest;
+
+        // Due to the assignment of end->kf_seek_pts, or the above line, we might now have a valid seek pts for
+        // the earliest keyframe, in which case we should update seek_start to match.
+        q1->seek_start = PTS_OR_DEF(q1->seek_start, q1->keyframe_earliest ?
+                                                    q1->keyframe_earliest->kf_seek_pts : MP_NOPTS_VALUE);
         q1->seek_end = q2->seek_end;
         q1->correct_dts &= q2->correct_dts;
         q1->correct_pos &= q2->correct_pos;
@@ -1147,7 +1191,7 @@ static void attempt_range_joining(struct demux_internal *in)
 
         q2->head = q2->tail = NULL;
         q2->next_prune_target = NULL;
-        q2->keyframe_latest = NULL;
+        q2->keyframe_latest = q2->keyframe_earliest = NULL;
 
         for (int i = 0; i < q2->num_index; i++)
             add_index_entry(q1, q2->index[i]);
@@ -1169,6 +1213,7 @@ static void attempt_range_joining(struct demux_internal *in)
         ds->refreshing = ds->selected;
     }
 
+     // N.b. only updating for range of q1, not q2
     update_seek_ranges(in->current_range);
 
     // Move demuxing position to after the current range.
@@ -1214,6 +1259,8 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
         } else {
             queue->is_eof |= ds->eof;
         }
+        if (!queue->keyframe_earliest)
+            queue->keyframe_earliest = dp; // Can be null if we are ending range.
         queue->keyframe_latest = dp;
         queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
     }
@@ -1599,6 +1646,7 @@ static void prune_old_packets(struct demux_internal *in)
             if (queue->seek_start != MP_NOPTS_VALUE)
                 queue->last_pruned = queue->seek_start;
             queue->seek_start = MP_NOPTS_VALUE;
+            queue->keyframe_earliest = NULL;
             queue->next_prune_target = queue->tail; // (prune all if none found)
             while (prev->next) {
                 struct demux_packet *dp = prev->next;
@@ -1606,6 +1654,7 @@ static void prune_old_packets(struct demux_internal *in)
                 // packet, but it will still be only viable lowest seek target.
                 if (dp->keyframe && dp->kf_seek_pts != MP_NOPTS_VALUE) {
                     queue->seek_start = dp->kf_seek_pts;
+                    queue->keyframe_earliest = dp;
                     queue->next_prune_target = prev;
                     break;
                 }
