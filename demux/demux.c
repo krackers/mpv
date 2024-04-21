@@ -262,7 +262,8 @@ struct demux_queue {
     double last_ts;         // timestamp of the last packet added to queue
 
     // for incrementally determining seek PTS range
-    double keyframe_pts, keyframe_end_pts;
+    // Represents min/max pts between keyframe_latest and latest (tail) packet.
+    double inter_kf_min_pts, inter_kf_max_pts;
     struct demux_packet *keyframe_latest;
 
     // incrementally maintained seek range, possibly invalid
@@ -541,7 +542,7 @@ static void clear_queue(struct demux_queue *queue)
     queue->last_ts = queue->last_dts = MP_NOPTS_VALUE;
     queue->last_pos_fixup = -1;
     queue->keyframe_latest = NULL;
-    queue->keyframe_pts = queue->keyframe_end_pts = MP_NOPTS_VALUE;
+    queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
 
     queue->is_eof = false;
     queue->is_bof = false;
@@ -1137,8 +1138,8 @@ static void attempt_range_joining(struct demux_internal *in)
         q1->last_pos = q2->last_pos;
         q1->last_dts = q2->last_dts;
         q1->last_ts = q2->last_ts;
-        q1->keyframe_pts = q2->keyframe_pts;
-        q1->keyframe_end_pts = q2->keyframe_end_pts;
+        q1->inter_kf_min_pts = q2->inter_kf_min_pts;
+        q1->inter_kf_max_pts = q2->inter_kf_max_pts;
         q1->keyframe_latest = q2->keyframe_latest;
         q1->is_eof = q2->is_eof;
         
@@ -1199,12 +1200,12 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
 
     if (!dp || dp->keyframe) {
         if (queue->keyframe_latest) {
-            queue->keyframe_latest->kf_seek_pts = queue->keyframe_pts;
+            queue->keyframe_latest->kf_seek_pts = queue->inter_kf_min_pts;
             double old_end = queue->range->seek_end;
             if (queue->seek_start == MP_NOPTS_VALUE)
-                queue->seek_start = queue->keyframe_pts;
-            if (queue->keyframe_end_pts != MP_NOPTS_VALUE)
-                queue->seek_end = queue->keyframe_end_pts;
+                queue->seek_start = queue->inter_kf_min_pts;
+            if (queue->inter_kf_max_pts != MP_NOPTS_VALUE)
+                queue->seek_end = queue->inter_kf_max_pts;
             queue->is_eof = !dp;
             update_seek_ranges(queue->range);
             attempt_range_join = queue->range->seek_end > old_end;
@@ -1214,7 +1215,7 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
             queue->is_eof |= ds->eof;
         }
         queue->keyframe_latest = dp;
-        queue->keyframe_pts = queue->keyframe_end_pts = MP_NOPTS_VALUE;
+        queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
     }
 
     if (dp) {
@@ -1224,8 +1225,8 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
         if (dp->segmented && (ts < dp->start || ts > dp->end))
             ts = MP_NOPTS_VALUE;
 
-        queue->keyframe_pts = MP_PTS_MIN(queue->keyframe_pts, ts);
-        queue->keyframe_end_pts = MP_PTS_MAX(queue->keyframe_end_pts, ts);
+        queue->inter_kf_min_pts = MP_PTS_MIN(queue->inter_kf_min_pts, ts);
+        queue->inter_kf_max_pts = MP_PTS_MAX(queue->inter_kf_max_pts, ts);
 
         queue->is_eof = false;
     }
