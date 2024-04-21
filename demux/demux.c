@@ -2560,36 +2560,14 @@ static void switch_current_range(struct demux_internal *in,
     free_empty_cached_ranges(in);
 }
 
-// Search for the entry with the highest index with entry.pts <= pts true.
-static struct demux_packet *search_index(struct demux_queue *queue, double pts)
-{
-    size_t a = 0;
-    size_t b = queue->num_index;
-
-    while (a < b) {
-        size_t m = a + (b - a) / 2;
-        struct demux_packet *e = queue->index[m];
-
-        bool m_ok = e->kf_seek_pts <= pts;
-
-        if (a + 1 == b)
-            return m_ok ? e : NULL;
-
-        if (m_ok) {
-            a = m;
-        } else {
-            b = m;
-        }
-    }
-    return NULL;
-}
-
 static struct demux_packet *find_seek_target(struct demux_queue *queue,
                                              double pts, int flags)
 {
-    struct demux_packet *start = search_index(queue, pts);
-    if (!start) {
-        start = queue->head;
+    struct demux_packet *start = queue->head;
+    for (int n = 0; n < queue->num_index; n++) {
+        if (queue->index[n]->kf_seek_pts > pts)
+            break;
+        start = queue->index[n];
     }
 
     struct demux_packet *target = NULL;
