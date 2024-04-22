@@ -457,6 +457,8 @@ static void update_seek_ranges(struct demux_cached_range *range)
         // cache being non-empty implies we should have earliest keyframe set.
         // note that seek_start might be unset though, see explanation in range joining.
         assert(queue->keyframe_earliest || queue->num_index == 0);
+        // Must have a latest keyframe if we have an earliest keyframe.
+        assert(queue->keyframe_latest || !queue->keyframe_earliest);
 
         if (queue->ds->selected && queue->ds->eager) {
             range->seek_start = MP_PTS_MAX(range->seek_start, queue->seek_start);
@@ -1266,7 +1268,8 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
         }
         if (!queue->keyframe_earliest)
             queue->keyframe_earliest = dp; // Can be null if we are ending range.
-        queue->keyframe_latest = dp;
+        if (dp)
+            queue->keyframe_latest = dp;
         queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
     }
 
@@ -2629,7 +2632,9 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
     }
 
     struct demux_packet *target = NULL;
-    for (struct demux_packet *dp = start; dp; dp = dp->next) {
+    struct demux_packet *search_end = queue->keyframe_latest ? queue->keyframe_latest->next : NULL;
+
+    for (struct demux_packet *dp = start; dp != search_end; dp = dp->next) {
         double range_pts = dp->kf_seek_pts;
         if (!dp->keyframe || range_pts == MP_NOPTS_VALUE)
             continue;
@@ -2667,8 +2672,8 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
     // that the target PTS is also within the seek range, since while usually
     // we should never call this function if the range isn't valid for the pts,
     // in the case where the range overlaps with BOF or EOF that's not necessarily the case).
-    // We also need queue->keyframe_latest to actually be defined, as it is set to NULL
-    // once EOF is reached.
+    // We also need queue->keyframe_latest to actually be defined, (since we may
+    // call this even though range doesn't contain any packets).
     if (!target && (flags & SEEK_FORWARD) && queue->keyframe_latest &&
         queue->keyframe_latest->kf_seek_pts == MP_NOPTS_VALUE &&
         pts <= queue->seek_end)
