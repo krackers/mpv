@@ -2814,11 +2814,27 @@ static void switch_to_fresh_cache_range(struct demux_internal *in)
     switch_current_range(in, range);
 }
 
-int demux_seek(demuxer_t *demuxer, double seek_pts, int flags)
+int demux_seek(demuxer_t *demuxer, double seek_pts, int flags) {
+    return demux_seek_with_offset(demuxer, seek_pts, 0, flags);
+}
+
+int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offset, int flags)
 {
     struct demux_internal *in = demuxer->in;
     assert(demuxer == in->d_user);
     int res = 0;
+
+    seek_pts += seek_offset;
+
+    if ((flags & SEEK_HR) && (flags & SEEK_STRICT) && !(flags & SEEK_FORWARD)) {
+        // Always try to compensate for possibly bad demuxers in "special"
+        // situations where we need more robustness from the hr-seek code, even
+        // if the user doesn't use --hr-seek-demuxer-offset.
+        // The value is arbitrary, but should be "good enough" in most situations.
+        if (-seek_offset < 0.5) {
+            seek_pts = seek_pts - seek_offset - 0.5;
+        }
+    }
 
     pthread_mutex_lock(&in->lock);
 

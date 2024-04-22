@@ -276,6 +276,7 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
     case MPSEEK_BACKSTEP:
         seek_pts = current_time;
         hr_seek_very_exact = true;
+        demux_flags = SEEK_STRICT;
         break;
     case MPSEEK_RELATIVE:
         demux_flags = seek.amount > 0 ? SEEK_FORWARD : 0;
@@ -308,28 +309,27 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         demux_flags |= SEEK_FACTOR;
     }
 
+    double seek_offset = 0;
     if (hr_seek) {
         double hr_seek_offset = opts->hr_seek_demuxer_offset;
-        // Always try to compensate for possibly bad demuxers in "special"
-        // situations where we need more robustness from the hr-seek code, even
-        // if the user doesn't use --hr-seek-demuxer-offset.
-        // The value is arbitrary, but should be "good enough" in most situations.
-        if (hr_seek_very_exact)
-            hr_seek_offset = MPMAX(hr_seek_offset, 0.5); // arbitrary
+
+        // Offset demuxer on start/seek properly with audio/sub delay
+        // to avoid delay with subtitles or audio on seek.
+        // Only apply for HR seeks since we want keyframe seeks to be fast.
         for (int n = 0; n < mpctx->num_tracks; n++) {
             double offset = 0;
             if (!mpctx->tracks[n]->is_external)
                 offset += get_track_seek_offset(mpctx, mpctx->tracks[n]);
             hr_seek_offset = MPMAX(hr_seek_offset, -offset);
         }
-        demux_pts -= hr_seek_offset;
+        seek_offset = -hr_seek_offset;
         demux_flags = (demux_flags | SEEK_HR) & ~SEEK_FORWARD;
     }
 
     if (!mpctx->demuxer->seekable)
         demux_flags |= SEEK_CACHED;
 
-    if (!demux_seek(mpctx->demuxer, demux_pts, demux_flags)) {
+    if (!demux_seek_with_offset(mpctx->demuxer, demux_pts, seek_offset, demux_flags)) {
         if (!mpctx->demuxer->seekable) {
             MP_ERR(mpctx, "Cannot seek in this stream.\n");
             MP_ERR(mpctx, "You can force it with '--force-seekable=yes'.\n");
@@ -337,18 +337,18 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         return;
     }
 
-    // Seek external, extra files too:
+    // Seek external, extra files too (e.g. external sub or audio):
     bool has_video = false;
     struct track *external_audio = NULL;
     for (int t = 0; t < mpctx->num_tracks; t++) {
         struct track *track = mpctx->tracks[t];
         if (track->selected && track->is_external && track->demuxer) {
-            double main_new_pos = demux_pts;
-            if (!hr_seek || track->is_external)
-                main_new_pos += get_track_seek_offset(mpctx, track);
-            if (demux_flags & SEEK_FACTOR)
-                main_new_pos = seek_pts;
-            demux_seek(track->demuxer, main_new_pos, 0);
+            double external_offset = -1 * MPMAX(hr_seek ? opts->hr_seek_demuxer_offset : 0,
+                                                -get_track_seek_offset(mpctx, track));
+            
+            // Use default of seek backward, otherwise external track
+            // could end up at a position that's too late
+            demux_seek_with_offset(track->demuxer, seek_pts, external_offset, 0);
             if (track->type == STREAM_AUDIO && !external_audio)
                 external_audio = track;
         }

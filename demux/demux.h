@@ -69,10 +69,28 @@ struct demux_ctrl_stream_ctrl {
 };
 
 #define SEEK_FACTOR   (1 << 1)      // argument is in range [0,1]
+
+// If SEEK_FORWARD is set, we return the smallest keyframe whose seek_pts >= target
+// Otherwise we try to return the max keyframe whose seek_pts <= target (if such exists)
+// Note that SEEK_FORWARD naturally corresponds to positive relative seeks, since
+// it guarantees that we make "forward progress". Conversely for backwards seeks
+// we should not overshoot the target, as for an hr-seek we will need to demux
+// from the returned keyframe up until the target.
 #define SEEK_FORWARD  (1 << 2)      // prefer later time if not exact
                                     // (if unset, prefer earlier time)
 #define SEEK_CACHED   (1 << 3)      // allow packet cache seeks only
 #define SEEK_HR       (1 << 5)      // hr-seek (this is a weak hint only)
+
+// Only applies to backward seek. If set, return a keyframe whose pts (_not_ seek pts) 
+// is strictly less than the target pts. This ensures that decoding forward from this
+// point will give us a frame with pts strictly less than the target seek pts.
+// (Note that we cannot use seek pts here, because of B-frames which can result in a
+// keyframe whose seek_pts is less than target but whose pts is >= target. This would
+// occur if there are B-frames following the keyframe; if those b-frames depend on 
+// an I-frame older than the keyframe, then they will not be returned by the decoder,
+// so we cannot make any strict guarantee about backward progress.)
+#define SEEK_STRICT   (1 << 6)
+
 
 // Strictness of the demuxer open format check.
 // demux.c will try by default: NORMAL, UNSAFE (in this order)
@@ -291,6 +309,8 @@ bool demux_cancel_test(struct demuxer *demuxer);
 
 void demux_flush(struct demuxer *demuxer);
 int demux_seek(struct demuxer *demuxer, double rel_seek_secs, int flags);
+int demux_seek_with_offset(struct demuxer *demuxer, double rel_seek_secs, double seek_offset, int flags);
+
 void demux_set_ts_offset(struct demuxer *demuxer, double offset);
 
 int demux_control(struct demuxer *demuxer, int cmd, void *arg);
