@@ -231,7 +231,10 @@ struct demux_cached_range {
     int num_streams;
 
     // Computed from the stream queue's values. These fields (unlike as with
-    // demux_queue) are always either NOPTS, or fully valid.
+    // demux_queue) are always either NOPTS, or fully valid (represent a valid
+    // inclusive pts range between [seek_start, seek_end] across all queues
+    // in the range. See the detailed comments about how it takes into account
+    // sparse stream behavior.
     double seek_start, seek_end;
 
     bool is_bof;            // set if the file begins with this range
@@ -264,10 +267,10 @@ struct demux_queue {
     // for incrementally determining seek PTS range
     // Represents min/max pts between keyframe_latest and latest (tail) packet.
     double inter_kf_min_pts, inter_kf_max_pts;
-    struct demux_packet *keyframe_latest;
+    struct demux_packet *keyframe_latest; // This may be set to null if EOF is reached
     struct demux_packet *keyframe_earliest;
 
-    // incrementally maintained seek range, possibly invalid
+    // incrementally maintained seek range, possibly representing an empty range
     // seek_start is the min_pts between first and second keyframe
     // seek_end is the max_pts between second-to-last and last keyframe
     double seek_start, seek_end;
@@ -462,6 +465,8 @@ static void update_seek_ranges(struct demux_cached_range *range)
             range->is_eof &= queue->is_eof;
             range->is_bof &= queue->is_bof;
 
+            // If the seek range is the empty set
+            // (either both nopts or same pts, then we can't use this range.)
             if (queue->seek_start >= queue->seek_end) {
                 range->seek_start = range->seek_end = MP_NOPTS_VALUE;
                 break;
@@ -2630,14 +2635,19 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
             continue;
 
         if (flags & SEEK_FORWARD) {
-            // Stop on the first packet that is >= pts.
+            // Stop on the first keyframe whose seek_pts is >= pts.
             if (target)
                 break;
             if (range_pts < pts)
                 continue;
         } else {
-            // Stop before the first packet that is > pts.
-            // This still returns a packet with > pts if there's no better one.
+            // Stop before the first keyframe whose seek_pts is > pts.
+            // (I.e. return the highest keyframe whose seek_pts <= pts)
+            // This still returns a kf with seek_pts > pts if there's no better one.
+            // (Almost always the returned keyframe will in fact have seek_pts <= pts since
+            // we usually only call this method if target pts >= keyframe_earliest seek_pts.
+            // But in the case where range overlaps with BOF, the keyframe we return may be
+            // later than what was requested.)
             if (target && range_pts > pts)
                 break;
         }
@@ -2651,8 +2661,14 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
     // within seek range, but the second-last keyframe is before the seek
     // target, above search will return NULL, even though we should return
     // keyframe_latest.
-    // This is only correct in the case when the target PTS is still within the
-    // seek range; the timestamps past it are unknown.
+    //
+    // This is only correct in the case when we've actually seen 2 keyframes,
+    // which we check by making sure seek end is valid (and just for sanity
+    // that the target PTS is also within the seek range, since while usually
+    // we should never call this function if the range isn't valid for the pts,
+    // in the case where the range overlaps with BOF or EOF that's not necessarily the case).
+    // We also need queue->keyframe_latest to actually be defined, as it is set to NULL
+    // once EOF is reached.
     if (!target && (flags & SEEK_FORWARD) && queue->keyframe_latest &&
         queue->keyframe_latest->kf_seek_pts == MP_NOPTS_VALUE &&
         pts <= queue->seek_end)
@@ -2733,6 +2749,13 @@ static void execute_cache_seek(struct demux_internal *in,
         struct demux_queue *queue = range->streams[n];
 
         struct demux_packet *target = find_cache_seek_target(queue, pts, flags);
+        if (!(flags & SEEK_FORWARD) && ds->selected && ds->eager && !target) {
+            // A backward seek should always return _some_ packet, since we only ever
+            // do a cached seek if range start is defined which means we have
+            // an earliest keyframe pts, and that keyframe should always satisfy a
+            // seek-backward request.
+            MP_ERR(in, "Cached seek backward from pts %f failed. Flags %d\n", pts, flags);
+        }
         ds->reader_head = target;
         ds->skip_to_keyframe = !target;
         if (ds->reader_head)
