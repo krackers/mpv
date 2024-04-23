@@ -2874,6 +2874,10 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
     int res = 0;
 
     seek_pts += seek_offset;
+    if (flags & SEEK_STRICT) {
+        // Account for any floating-point tolerance issues
+        seek_pts += ((flags & SEEK_FORWARD) ? 1 : -1) * 0.001;
+    }
 
     pthread_mutex_lock(&in->lock);
 
@@ -2932,8 +2936,8 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
             //  but are coded after it in the coded video sequence (these are usually discarded)"
             // "Trailing pictures of a particular IRAP picture are not allowed to depend on any
             //  leading or trailing pictures of previous IRAP pictures."
-            if (-seek_offset < 0.5) {
-                seek_pts = seek_pts - seek_offset - 0.5;
+            if (-seek_offset < 0.499) {
+                seek_pts = seek_pts - seek_offset - 0.499;
             }
         }
 

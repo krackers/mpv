@@ -91,7 +91,7 @@ struct demux_ctrl_stream_ctrl {
 // so we cannot make any strict guarantee about backward progress.)
 // Note that this is not simply equal to a seek with target - epsilon
 // for the above reason. However for seek forward, using target + epsilon
-// would have the desired effect.
+// would have the same effect.
 #define SEEK_STRICT   (1 << 6)
 
 
