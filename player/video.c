@@ -513,8 +513,8 @@ static int video_output_image(struct MPContext *mpctx)
                     if (mpctx->saved_frame) {
                         add_new_frame(mpctx, mpctx->saved_frame);
                         mpctx->saved_frame = NULL;
-                    } else {
-                        MP_WARN(mpctx, "Backstep failed.\n");
+                    } else if (mpctx->hrseek_pts > 0) {
+                        MP_WARN(mpctx, "Backstep from pts %f failed.\n", mpctx->hrseek_pts);
                     }
                     mpctx->hrseek_backstep = false;
                 }

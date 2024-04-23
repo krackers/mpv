@@ -274,7 +274,7 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         seek_pts = seek.amount;
         break;
     case MPSEEK_BACKSTEP:
-        seek_pts = current_time;
+        seek_pts = current_time + seek.amount;
         hr_seek_very_exact = true;
         demux_flags = SEEK_STRICT;
         break;
@@ -428,6 +428,7 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
 
     switch (type) {
     case MPSEEK_RELATIVE:
+    case MPSEEK_BACKSTEP:
         seek->flags |= flags;
         if (seek->type == MPSEEK_FACTOR)
             return;  // Well... not common enough to bother doing better
@@ -437,11 +438,10 @@ void queue_seek(struct MPContext *mpctx, enum seek_type type, double amount,
             seek->exact = exact;
         if (seek->type == MPSEEK_ABSOLUTE)
             return;
-        seek->type = MPSEEK_RELATIVE;
+        seek->type = type;
         return;
     case MPSEEK_ABSOLUTE:
     case MPSEEK_FACTOR:
-    case MPSEEK_BACKSTEP:
         *seek = (struct seek_params) {
             .type = type,
             .amount = amount,
