@@ -83,11 +83,21 @@ static OSStatus render_cb_lpcm(void *ctx, AudioUnitRenderActionFlags *aflags,
     end += p->hw_latency_us + ca_get_latency(ts) + ca_frames_to_us(ao, frames);
     int samples = ao_read_data(ao, planes, frames, end);
 
+    // Hint to the system that there's no point reading the packets
     if (samples == 0)
         *aflags |= kAudioUnitRenderAction_OutputIsSilence;
 
-    for (int n = 0; n < buffer_list->mNumberBuffers; n++)
-        buffer_list->mBuffers[n].mDataByteSize = samples * ao->sstride;
+    // Only adjust the buffer size if we have at least one packet.
+    // Otherwise if we have a complete underrun, setting buffer to empty
+    // would cause the system to poll again almost immediately,
+    // and since this is a realtime thread, this polling might starve
+    // out the buffer writing code.
+    // See also https://github.com/mpv-player/mpv/issues/13348
+    if (samples > 0) {
+        for (int n = 0; n < buffer_list->mNumberBuffers; n++)
+            buffer_list->mBuffers[n].mDataByteSize = samples * ao->sstride;
+    }
+
     return noErr;
 }
 
