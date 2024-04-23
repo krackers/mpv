@@ -1235,6 +1235,15 @@ failed:
     free_empty_cached_ranges(in);
 }
 
+// Note, dp must be a valid packet.
+// Note that MP_NOPTS_VALUE is large negative number.
+static inline double ts_for_packet(struct demux_packet *dp) {
+    double ts = PTS_OR_DEF(dp->pts, dp->dts);
+    if (dp->segmented && (ts < dp->start || ts > dp->end))
+        ts = MP_NOPTS_VALUE;
+    return ts;
+}
+
 // Determine seekable range when a packet is added. If dp==NULL, treat it as
 // EOF (i.e. closes the current block).
 // This has to deal with a number of corner cases, such as demuxers potentially
@@ -1276,10 +1285,7 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
     if (dp) {
         dp->kf_seek_pts = MP_NOPTS_VALUE;
 
-        double ts = PTS_OR_DEF(dp->pts, dp->dts);
-        if (dp->segmented && (ts < dp->start || ts > dp->end))
-            ts = MP_NOPTS_VALUE;
-
+        double ts = ts_for_packet(dp);
         queue->inter_kf_min_pts = MP_PTS_MIN(queue->inter_kf_min_pts, ts);
         queue->inter_kf_max_pts = MP_PTS_MAX(queue->inter_kf_max_pts, ts);
 
@@ -2626,7 +2632,14 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
 
     struct demux_packet *start = queue->keyframe_earliest;
     for (int n = 0; n < queue->num_index; n++) {
-        if (queue->index[n]->kf_seek_pts > pts)
+        // For the strict case, we want to start from kf with pts strictly less than target.
+        // For safety, don't start from a packet with "unknown pts" either
+        // (using target pts as the fallback ensures if unknown the PTS_OR_DEF returns
+        // a result == pts, so we break).
+        if ((flags & SEEK_STRICT) && !(flags & SEEK_FORWARD) &&
+                PTS_OR_DEF(ts_for_packet(queue->index[n]), pts) >= pts)
+            break;
+        else if (queue->index[n]->kf_seek_pts > pts)
             break;
         start = queue->index[n];
     }
@@ -2646,14 +2659,21 @@ static struct demux_packet *find_cache_seek_target(struct demux_queue *queue,
             if (range_pts < pts)
                 continue;
         } else {
+            // For strict, we never want to return a packet with invalid pts
+            // or with a pts >= our target. Note that we arranged so that
+            // this method only gets called when earliest_keyframe satisfies
+            // our condition.
+            if (target && (flags & SEEK_STRICT) && !(flags & SEEK_FORWARD) &&
+                (PTS_OR_DEF(ts_for_packet(dp), pts) >= pts))
+                break;
             // Stop before the first keyframe whose seek_pts is > pts.
             // (I.e. return the highest keyframe whose seek_pts <= pts)
             // This still returns a kf with seek_pts > pts if there's no better one.
             // (Almost always the returned keyframe will in fact have seek_pts <= pts since
             // we usually only call this method if target pts >= keyframe_earliest seek_pts.
-            // But in the case where range overlaps with BOF, the keyframe we return may be
-            // later than what was requested.)
-            if (target && range_pts > pts)
+            // But in the case where range overlaps with BOF, or non-eager streams,
+            // the keyframe we return may be later than what was requested.)
+            else if (target && range_pts > pts)
                 break;
         }
 
@@ -2701,7 +2721,31 @@ static struct demux_cached_range *find_cache_seek_range(struct demux_internal *i
             MP_VERBOSE(in, "cached range %d: %f <-> %f (bof=%d, eof=%d)\n",
                        n, r->seek_start, r->seek_end, r->is_bof, r->is_eof);
 
-            if ((pts >= r->seek_start || r->is_bof) &&
+            bool pts_in_range_start = pts >= r->seek_start;
+
+             // For strict seeking, need start to be strictly less than target pts.
+            if ((flags & SEEK_STRICT) && !(flags & SEEK_FORWARD) &&
+                    (pts_in_range_start = (pts > r->seek_start))) {
+                // Additionally because of b-frames, we could have kf_seek_pts < target_pts
+                // but the actual pts of the keyframe is >= pts. In such a case
+                // the decoder might only return the keyframe instead of something strictly before
+                // it. To avoid this, we ensure that kf pts is strictly before
+                // target pts (this allows us to always make backward progress, but I think
+                // codec also guarantees that trailing pictures of a particular IRAP can't depend
+                // on anything before that IRAP, so decoding forward from this point
+                // will always allow us to get the frame before the target).
+                for (int s = 0; s < r->num_streams; s++) {
+                    struct demux_queue *queue = r->streams[s];
+                    if (queue->ds->selected && queue->ds->type == STREAM_VIDEO) {
+                        double kf_ts = queue->keyframe_earliest ?
+                                    ts_for_packet(queue->keyframe_earliest) : MP_NOPTS_VALUE;
+                        pts_in_range_start = pts_in_range_start &&
+                                            (kf_ts != MP_NOPTS_VALUE) && (pts > kf_ts);
+                    }
+                }
+            }
+
+            if ((pts_in_range_start || r->is_bof) &&
                 (pts <= r->seek_end || r->is_eof))
             {
                 MP_VERBOSE(in, "...using this range for in-cache seek.\n");
@@ -2831,16 +2875,6 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
 
     seek_pts += seek_offset;
 
-    if ((flags & SEEK_HR) && (flags & SEEK_STRICT) && !(flags & SEEK_FORWARD)) {
-        // Always try to compensate for possibly bad demuxers in "special"
-        // situations where we need more robustness from the hr-seek code, even
-        // if the user doesn't use --hr-seek-demuxer-offset.
-        // The value is arbitrary, but should be "good enough" in most situations.
-        if (-seek_offset < 0.5) {
-            seek_pts = seek_pts - seek_offset - 0.5;
-        }
-    }
-
     pthread_mutex_lock(&in->lock);
 
     if (seek_pts == MP_NOPTS_VALUE)
@@ -2879,6 +2913,29 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
         execute_cache_seek(in, cache_target, seek_pts, flags);
     } else {
         switch_to_fresh_cache_range(in);
+
+        if ((flags & SEEK_HR) && (flags & SEEK_STRICT) && !(flags & SEEK_FORWARD)) {
+            // Always try to compensate for possibly bad demuxers in "special"
+            // situations where we need more robustness from the hr-seek code, even
+            // if the user doesn't use --hr-seek-demuxer-offset.
+            // The value is arbitrary, but should be "good enough" in most situations.
+            // This is not done for the cached case, because we have access to the pts
+            // of the earliest keyframe and can make sure that it satisfies our request.
+            //
+            // (Note that this is also needed because PTS may be non monotonic, and
+            //  a b-frame following an IDR KF may require additional context before 
+            // that KF in order to decode properly. See
+            // https://www.hevcbook.de/hevc-picture-types/
+            // https://ieeexplore.ieee.org/stamp/stamp.jsp?arnumber=6324417
+            // and https://ria.ua.pt/bitstream/10773/21689/1/Disserta%C3%A7%C3%A3o.pdf)
+            // "Leading pictures, which precede a random access point picture in output order
+            //  but are coded after it in the coded video sequence (these are usually discarded)"
+            // "Trailing pictures of a particular IRAP picture are not allowed to depend on any
+            //  leading or trailing pictures of previous IRAP pictures."
+            if (-seek_offset < 0.5) {
+                seek_pts = seek_pts - seek_offset - 0.5;
+            }
+        }
 
         in->seeking = true;
         in->seek_flags = flags;

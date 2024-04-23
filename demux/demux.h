@@ -89,6 +89,9 @@ struct demux_ctrl_stream_ctrl {
 // occur if there are B-frames following the keyframe; if those b-frames depend on 
 // an I-frame older than the keyframe, then they will not be returned by the decoder,
 // so we cannot make any strict guarantee about backward progress.)
+// Note that this is not simply equal to a seek with target - epsilon
+// for the above reason. However for seek forward, using target + epsilon
+// would have the desired effect.
 #define SEEK_STRICT   (1 << 6)
 
 
