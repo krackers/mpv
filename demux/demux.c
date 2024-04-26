@@ -458,8 +458,8 @@ static void update_seek_ranges(struct demux_cached_range *range)
         // cache being non-empty implies we should have earliest keyframe set.
         // note that seek_start might be unset though, see explanation in range joining.
         assert(queue->keyframe_earliest || queue->num_index == 0);
-        // Must have a latest keyframe if we have an earliest keyframe.
-        assert(queue->keyframe_latest || !queue->keyframe_earliest);
+        // Must have a latest keyframe iff we have an earliest keyframe.
+        assert(!!queue->keyframe_earliest == !!queue->keyframe_latest);
 
         if (queue->ds->selected && queue->ds->eager) {
             range->seek_start = MP_PTS_MAX(range->seek_start, queue->seek_start);
@@ -994,6 +994,15 @@ void demuxer_feed_caption(struct sh_stream *stream, demux_packet_t *dp)
     demux_add_packet(sh, dp);
 }
 
+// Note, dp must be a valid packet.
+// Note that MP_NOPTS_VALUE is large negative number.
+static inline double ts_for_packet(struct demux_packet *dp) {
+    double ts = PTS_OR_DEF(dp->pts, dp->dts);
+    if (dp->segmented && (ts < dp->start || ts > dp->end))
+        ts = MP_NOPTS_VALUE;
+    return ts;
+}
+
 // Add the keyframe to the end of the index. Not all packets are actually added.
 static void add_index_entry(struct demux_queue *queue, struct demux_packet *dp)
 {
@@ -1066,6 +1075,8 @@ static void attempt_range_joining(struct demux_internal *in)
     // by the seek overlap, but for arbitrary packet readahead as well.
     // We also drop the overlapping packets (if joining fails, we discard the
     // entire next range anyway, so this does no harm).
+    double kf_overlap_seek_pts[in->num_streams];
+
     for (int n = 0; n < in->num_streams; n++) {
         struct demux_stream *ds = in->streams[n]->ds;
 
@@ -1079,15 +1090,46 @@ static void attempt_range_joining(struct demux_internal *in)
 
         struct demux_packet *end = q1->tail;
         bool join_point_found = !end; // no packets yet -> joining will work
+        bool key_frame_overlap = false;
+        kf_overlap_seek_pts[n] = MP_NOPTS_VALUE;
         if (end) {
             while (q2->head) {
                 struct demux_packet *dp = q2->head;
 
-                // Some weird corner-case. We'd have to search the equivalent
-                // packet in q1 to update it correctly. Better just give up.
-                if (dp == q2->keyframe_latest) {
-                    MP_VERBOSE(in, "stream %d: not enough keyframes for join\n", n);
-                    goto failed;
+                // Handle cases where we have overlapping keyframes
+                // and need to propagate information across the boundary.
+                //
+                // I.e. q1 can not know the kf_seek_pts yet for its latest kf;
+                // it would have to read packets after it to compute it. Ideally,
+                // we'd remove it and use q2's packet, but the linked list
+                // makes this hard, so copy this missing metadata instead.
+                // Ex:
+                //
+                // IBBBBIBBB
+                //      IBBBBBBBBBI
+                //
+                // Note that in this kind of case where we don't yet
+                // have defined values, we handle by transferring the
+                // current incremental min/max values. (kf_seek_pts
+                // would be undefined for q2's latest kf anyway.)
+                //
+                //  BBBBIBBB
+                //      IBBBBBBB
+                //
+                //  BBBBIBBBI
+                //      IBBBIBBBB
+
+                // In the below, we apply only to the latest_keyframe, so others
+                // remain untouched.
+                //
+                //  BBBBIBBBI
+                //      IBBBIBBBBI
+                if (q1->keyframe_latest && dp->keyframe &&
+                    ((ds->global_correct_dts && dp->dts == q1->keyframe_latest->dts) ||
+                    (ds->global_correct_pos && dp->pos == q1->keyframe_latest->pos)))
+                {
+                    key_frame_overlap = true;
+                    kf_overlap_seek_pts[n] = dp->kf_seek_pts;
                 }
 
                 if ((ds->global_correct_dts && dp->dts == end->dts) ||
@@ -1103,14 +1145,6 @@ static void attempt_range_joining(struct demux_internal *in)
                         goto failed;
                     }
 
-                    // q1 usually meets q2 at a keyframe. q1 will end on a key-
-                    // frame (because it tries joining when reading a keyframe).
-                    // Obviously, q1 can not know the kf_seek_pts yet; it would
-                    // have to read packets after it to compute it. Ideally,
-                    // we'd remove it and use q2's packet, but the linked list
-                    // makes this hard, so copy this missing metadata instead.
-                    end->kf_seek_pts = dp->kf_seek_pts;
-
                     remove_head_packet(q2);
                     join_point_found = true;
                     break;
@@ -1123,11 +1157,38 @@ static void attempt_range_joining(struct demux_internal *in)
                 // next has another subtitle somewhere after the start of its
                 // range.
                 if ((ds->global_correct_dts && dp->dts > end->dts) ||
-                    (ds->global_correct_pos && dp->pos > end->pos))
+                    (ds->global_correct_pos && dp->pos > end->pos)) {
+                    // With non-eager streams, everything is a keyframe.
+                    // So we might have
+                    // IIII
+                    //       IIII
+                    // and so we shoould finalize the kf_seek_pts for q1's latest
+                    // keyframe as simply itself.
+                    if (!ds->eager && !key_frame_overlap) {
+                        key_frame_overlap = true;   
+                        kf_overlap_seek_pts[n] = q1->keyframe_latest ? ts_for_packet(q1->keyframe_latest) : MP_NOPTS_VALUE;
+                    }
                     break;
+                }
+                    
 
                 remove_head_packet(q2);
             }
+        }
+
+
+        // Avoid a situation like
+        //  IBBBBIBBB
+        //        BBBBBBIBBI
+        // which would require us to calculate and propagate kf_seek_pts
+        //
+        // Allow IBBB[B]BBBB
+        // or BBB[B]IBBBB though
+        // Also this only applies to eager streams, since for subs
+        // everything is effectively a keyframe
+        if (q1->keyframe_latest && q2->keyframe_earliest && !key_frame_overlap) {
+            MP_WARN(in, "stream %d: overlap range does not contain keyframe\n", n);
+            goto failed;
         }
 
         // For enabled non-sparse streams, always require an overlap packet.
@@ -1139,7 +1200,7 @@ static void attempt_range_joining(struct demux_internal *in)
 
     // Actually join the ranges. Now that we think it will work, mutate the
     // data associated with the current range.
-
+    printf("BEGINNING RANGE JOIN\n");
     for (int n = 0; n < in->num_streams; n++) {
         struct demux_queue *q1 = in->current_range->streams[n];
         struct demux_queue *q2 = next->streams[n];
@@ -1159,26 +1220,14 @@ static void attempt_range_joining(struct demux_internal *in)
             q1->tail = q2->tail;
         }
 
-        // Note that there are roughly 4 types of joins here, based on which we
+        // Note that there are roughly 3 types of joins here, based on which we
         // may or may not end up with a keyframe_earliest and seek_start set for q1.
         // Let I indicate a keyframe (e.g. IDR for h264) and B indicate non-keyframe.
         // Let [x] indicate a shared overlap packet of x between q1 and q2.
         //
-        //
         // We can have BB[I]BBBBI, which is the case talked about in the previous
         // section, and where we assign the kf_seek_pts to q1's end frame, so q1
         // will also have a valid seek_start and there are no discontinuities.
-        //
-        // We can also have IBB[B]BBIBBBI. In this case we cannot (easily) propagate the
-        // kf_seek_pts info, so while q1 still has a keyframe_earliest, its kf_seek_pts
-        // (and hence also seek_start) are unset. Q1 will still have the cache
-        // entries transferred from q2 though. This is a rarer case (especially for
-        // eager streams. For the purpose of range start/end computation, NOPTS values are ignored,
-        // and if range joining was triggered by an eager stream at a keyframe boundary then
-        // we should hopefully have at least one stream which has a defined seek_start which
-        // will dictate the range). It does unfortunately mean that that earliest keyframe
-        // will never be returned as a valid seek target (because it has no kf_seek_pts value)
-        // but ideally this range is small enough that it's not worth worrying about.
         //
         // We can have BBB[B]IBBBIBB. In this case we take the keyframe_earliest from q2
         // which is the correct thing to do, and we'll set seek_start accordingly.
@@ -1192,16 +1241,63 @@ static void attempt_range_joining(struct demux_internal *in)
         // the earliest keyframe, in which case we should update seek_start to match.
         q1->seek_start = PTS_OR_DEF(q1->seek_start, q1->keyframe_earliest ?
                                                     q1->keyframe_earliest->kf_seek_pts : MP_NOPTS_VALUE);
-        q1->seek_end = q2->seek_end;
+
+        // n.b. q2->seek_end might be null, or less than current (after pruning)
+        q1->seek_end = MP_PTS_MAX(q2->seek_end, q1->seek_end);
+
         q1->correct_dts &= q2->correct_dts;
         q1->correct_pos &= q2->correct_pos;
-        q1->last_pos = q2->last_pos;
-        q1->last_dts = q2->last_dts;
-        q1->last_ts = q2->last_ts;
-        q1->inter_kf_min_pts = q2->inter_kf_min_pts;
-        q1->inter_kf_max_pts = q2->inter_kf_max_pts;
-        q1->keyframe_latest = q2->keyframe_latest;
+        // Safe to transfer this directly
+        // q2 might in fact have empty packets because it represents EOF range
+        // On the other hand, q1 might have already been EOF, but now it could get reset.
+        // But this is OK, because if q1 gets signaled EOF again, all that will happen
+        // is that we will reassign the tracked min/max pts to the last keyframe.
+        // (We don't clear out min/max pts on EOF for this reason.)
         q1->is_eof = q2->is_eof;
+
+        // All of these should only be set if q2 is actually an extension of q1
+        if (q2->head) {
+            q1->last_pos = q2->last_pos;
+            q1->last_dts = q2->last_dts;
+            q1->last_ts = q2->last_ts;
+            // Each keyframe begins a new kf_seek range.
+            // If q2 contains latest keyframe, then that keyframe becomes the new starting point
+            // for the incremental tracking.
+            // IBBBBIBBB
+            //      IBBBBBBIBBB
+            // Otherwise if no keyframes in q2, IBBBB[B]BBBB then we need to merge pts
+            // Note that we could have something like
+            // IBBBBBIBB
+            //       IBBBBB
+            // in which case keyframe_latest would not exist for q2 after overlaps have been pruned out.
+            // But in such cases it is still alright to take the min.
+            if (!q2->keyframe_latest) {
+                q1->inter_kf_min_pts = MP_PTS_MIN(q1->inter_kf_min_pts, q2->inter_kf_min_pts);
+                q1->inter_kf_max_pts = MP_PTS_MAX(q1->inter_kf_max_pts, q2->inter_kf_max_pts);
+            } else {
+                q1->inter_kf_min_pts = q2->inter_kf_min_pts;
+                q1->inter_kf_max_pts = q2->inter_kf_max_pts;
+            }
+        }
+
+
+        // Transfer any kf_seek_pts across the boundary
+        // Note that to avoid weird edge-cases like
+        // IBBBBBIBBB
+        //       IB[eof]
+        // We only assign if it's "better" (lower) than what currently exists
+        if (q1->keyframe_latest && kf_overlap_seek_pts[n] != MP_NOPTS_VALUE &&
+                (q1->keyframe_latest->kf_seek_pts == MP_NOPTS_VALUE ||
+                kf_overlap_seek_pts[n] < q1->keyframe_latest->kf_seek_pts)) {
+            q1->keyframe_latest->kf_seek_pts = kf_overlap_seek_pts[n];
+        }
+        // Case like IBBB[B]BBBB
+        // In such a case we should not clobber keyframe_latest
+        if (q2->keyframe_latest)
+            q1->keyframe_latest = q2->keyframe_latest;
+
+        assert(!!q1->keyframe_earliest == !!q1->keyframe_latest);
+
         
         q1->last_pos_fixup = -1;
 
@@ -1242,16 +1338,9 @@ static void attempt_range_joining(struct demux_internal *in)
 failed:
     clear_cached_range(in, next);
     free_empty_cached_ranges(in);
+    printf("FINISHED RANGE JOIN\n");
 }
 
-// Note, dp must be a valid packet.
-// Note that MP_NOPTS_VALUE is large negative number.
-static inline double ts_for_packet(struct demux_packet *dp) {
-    double ts = PTS_OR_DEF(dp->pts, dp->dts);
-    if (dp->segmented && (ts < dp->start || ts > dp->end))
-        ts = MP_NOPTS_VALUE;
-    return ts;
-}
 
 // Determine seekable range when a packet is added. If dp==NULL, treat it as
 // EOF (i.e. closes the current block).
@@ -1267,9 +1356,12 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
 
     if (!ds->in->seekable_cache)
         return;
-
+    
+    // Note that even though we have hit queue EOF
+    // we may still receive packets afterwards; these could be NULL
+    // or we could actually start receiving valid things.
     if (!dp || dp->keyframe) {
-        if (queue->keyframe_latest) {
+        if (queue->keyframe_latest && !queue->is_eof) {
             queue->keyframe_latest->kf_seek_pts = queue->inter_kf_min_pts;
             double old_end = queue->range->seek_end;
             if (queue->seek_start == MP_NOPTS_VALUE)
@@ -1284,11 +1376,15 @@ static void adjust_seek_range_on_packet(struct demux_stream *ds,
         } else {
             queue->is_eof |= ds->eof;
         }
-        if (!queue->keyframe_earliest)
-            queue->keyframe_earliest = dp; // Can be null if we are ending range.
-        if (dp)
+        if (!queue->keyframe_earliest && dp)
+            queue->keyframe_earliest = dp;
+        if (dp) {
             queue->keyframe_latest = dp;
-        queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
+            // Only reset the values if we have a valid packet
+            // This is because we might get EOF, then later get a valid packet
+            // at which point we might need to replace the previous kf_seek_pts value 
+            queue->inter_kf_min_pts = queue->inter_kf_max_pts = MP_NOPTS_VALUE;
+        }
     }
 
     if (dp) {
