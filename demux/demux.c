@@ -366,6 +366,7 @@ struct mp_packet_tags {
 static void demuxer_sort_chapters(demuxer_t *demuxer);
 static void *demux_thread(void *pctx);
 static void update_cache(struct demux_internal *in);
+static void prune_old_packets(struct demux_internal *in);
 
 static uint64_t get_foward_buffered_bytes(struct demux_stream *ds)
 {
@@ -1021,10 +1022,9 @@ static void add_index_entry(struct demux_queue *queue, struct demux_packet *dp)
     queue->index[queue->num_index++] = dp;
 }
 
-// Check whether the next range in the list is, and if it appears to overlap,
-// try joining it into a single range.
-static void attempt_range_joining(struct demux_internal *in)
-{
+// If intersecting is true, returns the fathest overlapping range
+// Otherwise returns the closest non-overlapping range.
+static struct demux_cached_range *next_range(struct demux_internal *in, bool intersecting) {
     struct demux_cached_range *next = NULL;
     double next_dist = INFINITY;
 
@@ -1036,13 +1036,22 @@ static void attempt_range_joining(struct demux_internal *in)
 
         if (in->current_range->seek_start <= range->seek_start) {
             // This uses ">" to get some non-0 overlap.
-            double dist = in->current_range->seek_end - range->seek_start;
+            double dist = (in->current_range->seek_end - range->seek_start) * (intersecting ? 1 : -1);
             if (dist > 0 && dist < next_dist) {
                 next = range;
                 next_dist = dist;
             }
         }
     }
+    return next;
+}
+
+
+// Check whether the next range in the list is, and if it appears to overlap,
+// try joining it into a single range.
+static void attempt_range_joining(struct demux_internal *in)
+{
+    struct demux_cached_range *next = next_range(in, /*intersecting=*/ true);
 
     if (!next)
         return;
@@ -1409,6 +1418,19 @@ void demux_add_packet(struct sh_stream *stream, demux_packet_t *dp)
 
     adjust_seek_range_on_packet(ds, dp);
 
+    // May need to reduce backward cache.
+    // This has to be done here (in addition to dequeue packet)
+    // because 1) buffering can happen while paused (while dequeing obviously doesn't)
+    // and 2) it needs to be run for every packet added, because otherwise if multiple
+    // packets are added before a dequeue happens there is a chance we can have transient
+    // high usage. and 3) Perhaps most importantly, if we don't prune the backbuffer
+    // for every new packet added, there is a chance that we might do range-joining
+    // before the backbuffer is properly drained; range-joining converts the backbuffer
+    // into a front buffer, and once the front-buffer grows it is never actively pruned.
+    // So this can lead to total cache size growing over time if many seek ranges
+    // are joined.
+    prune_old_packets(in);
+
     // Possible update duration based on highest TS demuxed (but ignore subs).
     if (stream->type != STREAM_SUB) {
         if (dp->segmented)
@@ -1608,14 +1630,32 @@ static void prune_old_packets(struct demux_internal *in)
     // It's not clear what the ideal way to prune old packets is. For now, we
     // prune the oldest packet runs, as long as the total cache amount is too
     // big.
-    size_t max_bytes = in->seekable_cache ? in->max_bytes_bw : 0;
     while (1) {
+        size_t max_avail = in->seekable_cache ? in->max_bytes_bw : 0;
+        // Fw bytes counts only things in _this_ seekable range
+        // All other seekable ranges contribute to the back bytes
         uint64_t fw_bytes = 0;
         for (int n = 0; n < in->num_streams; n++) {
             struct demux_stream *ds = in->streams[n]->ds;
             fw_bytes += get_foward_buffered_bytes(ds);
         }
-        if (in->total_bytes - fw_bytes <= max_bytes)
+
+        // Backward cache (if enabled at all) can use unused forward cache.
+        // Still leave 1 byte free, so the read_packet logic doesn't get stuck.
+        if (max_avail && in->max_bytes > (fw_bytes + 1))
+            max_avail += in->max_bytes - (fw_bytes + 1);
+
+        // Note that this effectively gives us "max_bytes_bw" leeway for range joining
+        // As an example, say we currently have maxed out fw bytes (300) in a seek range.
+        // When we seek into a new range to the left of that, 300 is size of backbuffer.
+        //
+        // At the very start our fw_bytes for this range is 0, so our fw bytes
+        // gets donated to our max, and our max is 300 + bw so we don't have to prune anything.
+        // Every new packet we add increases our fw_bytes by 1 but also decreases our max 1.
+        // This means that we can effectively buffer up to bw additional before our total backbuffer
+        // of 300 becomes equal to our max, at which point we will prune 1 packet from the backbuffer
+        // for every new packet added to fw.
+        if (in->total_bytes - fw_bytes <= max_avail)
             break;
 
         // (Start from least recently used range.)
