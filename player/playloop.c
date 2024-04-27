@@ -275,7 +275,6 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         break;
     case MPSEEK_BACKSTEP:
         seek_pts = current_time + seek.amount;
-        hr_seek_very_exact = true;
         demux_flags = SEEK_STRICT;
         break;
     case MPSEEK_RELATIVE:
@@ -381,7 +380,7 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
 
     if (hr_seek) {
         mpctx->hrseek_active = true;
-        mpctx->hrseek_backstep = seek.type == MPSEEK_BACKSTEP;
+        mpctx->hrseek_backstep = (seek.type == MPSEEK_BACKSTEP) && hr_seek_very_exact;
         mpctx->hrseek_pts = seek_pts;
 
         // allow decoder to drop frames before hrseek_pts

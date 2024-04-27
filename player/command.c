@@ -5182,8 +5182,8 @@ static void cmd_frame_back_step(void *p)
             return;
         // Using a non-zero value here allows us to combine multiple if we get "backed up"
         // and maintains illusion of smooth playback.
-        queue_seek(mpctx, MPSEEK_BACKSTEP, 0.5 * -1/mpctx->vo_chain->filter->container_fps,
-                   MPSEEK_VERY_EXACT, MPSEEK_FLAG_DELAY);
+        queue_seek(mpctx, MPSEEK_BACKSTEP, 1.1 * -1/mpctx->vo_chain->filter->container_fps,
+                   MPSEEK_EXACT, MPSEEK_FLAG_DELAY);
     } else {
         add_step_frame(mpctx, -1);
 
