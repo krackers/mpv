@@ -1286,10 +1286,9 @@ static void attempt_range_joining(struct demux_internal *in)
         // IBBBBBIBBB
         //       IB[eof]
         // We only assign if it's "better" (lower) than what currently exists
-        if (q1->keyframe_latest && kf_overlap_seek_pts[n] != MP_NOPTS_VALUE &&
-                (q1->keyframe_latest->kf_seek_pts == MP_NOPTS_VALUE ||
-                kf_overlap_seek_pts[n] < q1->keyframe_latest->kf_seek_pts)) {
-            q1->keyframe_latest->kf_seek_pts = kf_overlap_seek_pts[n];
+        if (q1->keyframe_latest) {
+            q1->keyframe_latest->kf_seek_pts =
+                MP_PTS_MIN(q1->keyframe_latest->kf_seek_pts, kf_overlap_seek_pts[n]);
         }
         // Case like IBBB[B]BBBB
         // In such a case we should not clobber keyframe_latest
