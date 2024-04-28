@@ -2998,14 +2998,18 @@ static void switch_to_fresh_cache_range(struct demux_internal *in)
     switch_current_range(in, range);
 }
 
+// Sub-demuxers should only call this version
+// Does not perform any pts adjustment on top of the given seek_pts.
 int demux_seek(demuxer_t *demuxer, double seek_pts, int flags) {
-    return demux_seek_with_offset(demuxer, seek_pts, 0, flags);
+    return demux_seek_with_offset(demuxer, seek_pts, 0, flags | SEEK_ADJUSTED);
 }
 
 // Offset: A value (always negative) that hints the demuxer should try to begin
 // demuxing earlier than the target seek_pts. Specifying this offset separately instead of
 // as part of seek_pts allows for the offset to be extended or skipped when it can
 // be safe to do so.
+//
+// Only playloop should call this version.
 int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offset, int flags)
 {
     struct demux_internal *in = demuxer->in;
@@ -3013,7 +3017,7 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
     int res = 0;
 
     seek_pts += seek_offset;
-    if (flags & SEEK_STRICT) {
+    if ((flags & SEEK_STRICT) && !(flags & SEEK_ADJUSTED)) {
         // Account for any floating-point tolerance issues
         seek_pts += ((flags & SEEK_FORWARD) ? 1 : -1) * 0.001;
     }
@@ -3057,7 +3061,8 @@ int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offs
     } else {
         switch_to_fresh_cache_range(in);
 
-        if ((flags & SEEK_HR) && (flags & SEEK_STRICT) && !(flags & SEEK_FORWARD)) {
+        if ((flags & SEEK_HR) && (flags & SEEK_STRICT) &&
+            !(flags & SEEK_FORWARD) && !(flags & SEEK_ADJUSTED)) {
             // Always try to compensate for possibly bad demuxers in "special"
             // situations where we need more robustness from the hr-seek code, even
             // if the user doesn't use --hr-seek-demuxer-offset.

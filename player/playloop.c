@@ -259,7 +259,6 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
 
     if (!mpctx->demuxer || !seek.type || seek.amount == MP_NOPTS_VALUE)
         return;
-
     bool hr_seek_very_exact = seek.exact == MPSEEK_VERY_EXACT;
     double current_time = get_current_time(mpctx);
     if (current_time == MP_NOPTS_VALUE && seek.type == MPSEEK_RELATIVE)
@@ -276,6 +275,11 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
     case MPSEEK_BACKSTEP:
         seek_pts = current_time + seek.amount;
         demux_flags = SEEK_STRICT;
+        // TODO: Possibly we should always try the quicker backstep option
+        // and only fall back to the veryexact backstep if we detect
+        // a failure. (This can be done in video.c by checking if we're
+        // in backstep mode and the pts we get after completing an hr seek is
+        // in fact <= what we were supposed to seek to.
         break;
     case MPSEEK_RELATIVE:
         demux_flags = seek.amount > 0 ? SEEK_FORWARD : 0;

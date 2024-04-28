@@ -94,6 +94,11 @@ struct demux_ctrl_stream_ctrl {
 // would have the same effect.
 #define SEEK_STRICT   (1 << 6)
 
+// Internal use only. Set once target pts adjustment
+// has been performed, to avoid repeated adjustments in the case of
+// demuxers that have sub-demuxers.
+#define SEEK_ADJUSTED (1 << 7)
+
 
 // Strictness of the demuxer open format check.
 // demux.c will try by default: NORMAL, UNSAFE (in this order)
