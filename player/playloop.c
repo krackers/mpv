@@ -308,6 +308,17 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         demux_flags |= SEEK_FACTOR;
     }
 
+    if (seek.type == MPSEEK_BACKSTEP && seek.amount < 0 && mpctx->vo_chain) {
+        // SEEK_STRICT already takes care of ensuring that we will be able to get to desired pos.
+        // So from original seek_pts we want demux offset of 0.5 frame ahead.
+        // And we also set target for hr-seek to 0.5 frame back to try avoid overshoot.
+        double epsilon = 0.5 * (1.0/mpctx->vo_chain->filter->container_fps);
+        seek_pts -= epsilon;
+        // Offset applies on top of seek_pts. Since seek_pts was just
+        // altered have to adjust twice as much on other direction.
+        demux_pts += epsilon;
+    }
+
     double seek_offset = 0;
     if (hr_seek) {
         double hr_seek_offset = opts->hr_seek_demuxer_offset;
@@ -321,7 +332,7 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
                 offset += get_track_seek_offset(mpctx, mpctx->tracks[n]);
             hr_seek_offset = MPMAX(hr_seek_offset, -offset);
         }
-        seek_offset = -hr_seek_offset;
+        seek_offset -= hr_seek_offset;
         demux_flags = (demux_flags | SEEK_HR) & ~SEEK_FORWARD;
     }
 

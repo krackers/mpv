@@ -3002,6 +3002,10 @@ int demux_seek(demuxer_t *demuxer, double seek_pts, int flags) {
     return demux_seek_with_offset(demuxer, seek_pts, 0, flags);
 }
 
+// Offset: A value (always negative) that hints the demuxer should try to begin
+// demuxing earlier than the target seek_pts. Specifying this offset separately instead of
+// as part of seek_pts allows for the offset to be extended or skipped when it can
+// be safe to do so.
 int demux_seek_with_offset(demuxer_t *demuxer, double seek_pts, double seek_offset, int flags)
 {
     struct demux_internal *in = demuxer->in;
