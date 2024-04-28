@@ -320,6 +320,11 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
     }
 
     double seek_offset = 0;
+    // TODO: Currently the HR_SEEK offset would be applied even
+    // for SEEK_STRICT cached seeks, which can be avoided.
+    // The hr-seek-offset should probably be calculated in the demuxer
+    // since the calling code should not need to worry about offseting it
+    // in this fashion.
     if (hr_seek) {
         double hr_seek_offset = opts->hr_seek_demuxer_offset;
 
@@ -328,8 +333,9 @@ static void mp_seek(MPContext *mpctx, struct seek_params seek)
         // Only apply for HR seeks since we want keyframe seeks to be fast.
         for (int n = 0; n < mpctx->num_tracks; n++) {
             double offset = 0;
+            // Delay represented as negative return value from get_track_seek_offset
             if (!mpctx->tracks[n]->is_external)
-                offset += get_track_seek_offset(mpctx, mpctx->tracks[n]);
+                offset = MPMIN(offset, get_track_seek_offset(mpctx, mpctx->tracks[n]));
             hr_seek_offset = MPMAX(hr_seek_offset, -offset);
         }
         seek_offset -= hr_seek_offset;
