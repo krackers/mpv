@@ -213,6 +213,8 @@ struct gl_video {
     struct ra_tex *merge_tex[4];
     struct ra_tex *scale_tex[4];
     struct ra_tex *integer_tex[4];
+    struct ra_tex *chroma_tex[4];
+
     struct ra_tex *indirect_tex;
     struct ra_tex *blend_subs_tex;
     struct ra_tex *screen_tex;
@@ -528,6 +530,7 @@ static void uninit_rendering(struct gl_video *p)
         ra_tex_free(p->ra, &p->merge_tex[n]);
         ra_tex_free(p->ra, &p->scale_tex[n]);
         ra_tex_free(p->ra, &p->integer_tex[n]);
+        ra_tex_free(p->ra, &p->chroma_tex[n]);
     }
 
     ra_tex_free(p->ra, &p->indirect_tex);
@@ -2092,6 +2095,37 @@ static void pass_read_video(struct gl_video *p)
         }
 
         img[n] = pass_hook(p, name, img[n], &offsets[n]);
+    }
+
+    // If chroma textures are in a subsampled semi-planar format and rotated,
+    // introduce an explicit conversion pass to avoid breaking chroma scalers.
+
+    // For image formats with 2 or more chroma planes such as YU12, there is
+    // a plane merging pass for these planes calling finish_pass_tex which
+    // does a format conversion. After this conversion, the cscale shader
+    // afterwards works properly.
+    // However, for image formats with only 1 chroma plane (semi-planar formats),
+    // including NV12 and P010, this merging pass is never called, which breaks
+    // the cscale shader afterwards if the video is rotated with subsampled
+    // chroma.
+    // Fix this by adding an explicit conversion pass if this situation is
+    // detected after the pre-scale hooks, so if there are shaders hooking on
+    // CHROMA (like the deband filter) and the conversion is done by pass_hook
+    // already, this conversion won't be called.
+
+    for (int n = 0; n < 4; n++) {
+        if (img[n].tex && img[n].type == PLANE_CHROMA &&
+            img[n].tex->params.format->num_components == 2 &&
+            p->image_params.rotate % 180 == 90 &&
+            p->ra_format.chroma_w != 1)
+        {
+            GLSLF("// chroma fix for rotated plane %d\n", n);
+            copy_image(p, &(int){0}, img[n]);
+            pass_describe(p, "chroma fix for rotated plane");
+            finish_pass_tex(p, &p->chroma_tex[n], img[n].w, img[n].h);
+            img[n] = image_wrap(p->chroma_tex[n], img[n].type,
+                                img[n].components);
+        }
     }
 
     // At this point all planes are finalized but they may not be at the
