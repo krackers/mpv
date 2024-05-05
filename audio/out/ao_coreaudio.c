@@ -155,6 +155,13 @@ coreaudio_error:
     return false;
 }
 
+static void reinit_latency(struct ao *ao)
+{
+    struct priv *p = ao->priv;
+
+    p->hw_latency_us = ca_get_hardware_latency(ao);
+}
+
 static int init(struct ao *ao)
 {
     struct priv *p = ao->priv;
@@ -179,6 +186,8 @@ static int init(struct ao *ao)
 
     if (!init_audiounit(ao, asbd))
         goto coreaudio_error;
+
+    reinit_latency(ao);
 
     return CONTROL_OK;
 
@@ -310,8 +319,6 @@ static bool init_audiounit(struct ao *ao, AudioStreamBasicDescription asbd)
     CHECK_CA_ERROR_L(coreaudio_error_audiounit,
                      "can't link audio unit to selected device");
 
-    p->hw_latency_us = ca_get_hardware_latency(ao);
-
     AURenderCallbackStruct render_cb = (AURenderCallbackStruct) {
         .inputProc       = render_cb_lpcm,
         .inputProcRefCon = ao,
@@ -382,8 +389,11 @@ static OSStatus hotplug_cb(AudioObjectID id, UInt32 naddr,
                            void *ctx)
 {
     struct ao *ao = ctx;
+    struct priv *p = ao->priv;
     MP_VERBOSE(ao, "Handling potential hotplug event...\n");
     reinit_device(ao);
+    if (p->audio_unit)
+        reinit_latency(ao);
     ao_hotplug_event(ao);
     return noErr;
 }
