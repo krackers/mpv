@@ -142,6 +142,8 @@ static int control(struct ao *ao, enum aocontrol cmd, void *arg)
 
 static bool init_audiounit(struct ao *ao, AudioStreamBasicDescription asbd);
 static void init_physical_format(struct ao *ao);
+static bool register_hotplug_cb(struct ao *ao);
+static void unregister_hotplug_cb(struct ao *ao);
 
 static bool reinit_device(struct ao *ao) {
     struct priv *p = ao->priv;
@@ -173,6 +175,9 @@ static int init(struct ao *ao)
     }
 
     if (!reinit_device(ao))
+        goto coreaudio_error;
+
+    if (!register_hotplug_cb(ao))
         goto coreaudio_error;
 
     if (p->change_physical_format)
@@ -382,6 +387,7 @@ static void uninit(struct ao *ao)
                               &p->original_asbd);
         CHECK_CA_WARN("could not restore physical stream format");
     }
+    unregister_hotplug_cb(ao);
 }
 
 static OSStatus hotplug_cb(AudioObjectID id, UInt32 naddr,
@@ -390,11 +396,21 @@ static OSStatus hotplug_cb(AudioObjectID id, UInt32 naddr,
 {
     struct ao *ao = ctx;
     struct priv *p = ao->priv;
-    MP_VERBOSE(ao, "Handling potential hotplug event...\n");
-    reinit_device(ao);
-    if (p->audio_unit)
+    if (p->audio_unit) {
+        MP_VERBOSE(ao, "Handling potential hotplug event for main AO...\n");
+        // Use audio unit being present as sign that it's the playback AO
+        reinit_device(ao);
+        if (p->change_physical_format)
+            init_physical_format(ao);
+        if (!ca_init_chmap(ao, p->device))
+            MP_WARN(ao, "Failed to set chmap on hotplug");
         reinit_latency(ao);
-    ao_hotplug_event(ao);
+    } else {
+        MP_VERBOSE(ao, "Handling potential hotplug event for hotplug dummy AO...\n");
+        // Otherwise assume it's the dummy-AO created specifically to monitor hotplug
+        ao_hotplug_event(ao);
+    }
+        
     return noErr;
 }
 
@@ -403,10 +419,10 @@ static uint32_t hotplug_properties[] = {
     kAudioHardwarePropertyDefaultOutputDevice
 };
 
-static int hotplug_init(struct ao *ao)
+
+static bool register_hotplug_cb(struct ao *ao)
 {
-    if (!reinit_device(ao))
-        goto coreaudio_error;
+    struct priv *p = ao->priv;
 
     OSStatus err = noErr;
     for (int i = 0; i < MP_ARRAY_SIZE(hotplug_properties); i++) {
@@ -415,6 +431,8 @@ static int hotplug_init(struct ao *ao)
             kAudioObjectPropertyScopeGlobal,
             kAudioObjectPropertyElementMaster
         };
+        // Note that same listener can be registered multiple times so long as user-data is different
+        // See https://lists.apple.com/archives/coreaudio-api/2010/Mar/msg00038.html
         err = AudioObjectAddPropertyListener(
             kAudioObjectSystemObject, &addr, hotplug_cb, (void *)ao);
         if (err != noErr) {
@@ -425,14 +443,16 @@ static int hotplug_init(struct ao *ao)
         }
     }
 
-    return 0;
+    return true;
 
 coreaudio_error:
-    return -1;
+    return false;
 }
 
-static void hotplug_uninit(struct ao *ao)
+static void unregister_hotplug_cb(struct ao *ao)
 {
+    struct priv *p = ao->priv;
+
     OSStatus err = noErr;
     for (int i = 0; i < MP_ARRAY_SIZE(hotplug_properties); i++) {
         AudioObjectPropertyAddress addr = {
@@ -449,6 +469,23 @@ static void hotplug_uninit(struct ao *ao)
         }
     }
 }
+
+
+// Note that the ao struct here
+// is actually different from the one used for playing
+static int hotplug_init(struct ao *ao)
+{
+    if (!register_hotplug_cb(ao))
+        return -1;
+
+    return 0;
+}
+
+static void hotplug_uninit(struct ao *ao)
+{
+    unregister_hotplug_cb(ao);
+}
+
 
 #define OPT_BASE_STRUCT struct priv
 
