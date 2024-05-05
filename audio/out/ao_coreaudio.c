@@ -93,6 +93,10 @@ static OSStatus render_cb_lpcm(void *ctx, AudioUnitRenderActionFlags *aflags,
     // and since this is a realtime thread, this polling might starve
     // out the buffer writing code.
     // See also https://github.com/mpv-player/mpv/issues/13348
+    // Note that in the case where returned samples != expected,
+    // the calculated end latency is going to be wrong. This is probably
+    // not worth fixing, since underflow is a transient condition
+    // and will correct itself once the underflow resolves.
     if (samples > 0) {
         for (int n = 0; n < buffer_list->mNumberBuffers; n++)
             buffer_list->mBuffers[n].mDataByteSize = samples * ao->sstride;
