@@ -543,6 +543,7 @@ static void update_display_info(struct vo_w32_state *w32)
     if (w32->monitor == monitor)
         return;
     w32->monitor = monitor;
+    signal_events(w32, VO_EVENT_DISPLAY_STATE);
 
     update_dpi(w32);
 
@@ -562,7 +563,7 @@ static void update_display_info(struct vo_w32_state *w32)
         if (freq == 0.0)
             MP_WARN(w32, "Couldn't determine monitor refresh rate\n");
         w32->display_fps = freq;
-        signal_events(w32, VO_EVENT_WIN_STATE);
+        signal_events(w32, VO_EVENT_DISPLAY_STATE);
     }
 
     char *color_profile = get_color_profile(w32, mi.szDevice);
@@ -937,10 +938,6 @@ static LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam,
         const int x = GET_X_LPARAM(lParam), y = GET_Y_LPARAM(lParam);
         OffsetRect(&w32->windowrc, x - w32->windowrc.left,
                                    y - w32->windowrc.top);
-
-        // Window may intersect with new monitors (see VOCTRL_GET_DISPLAY_NAMES)
-        signal_events(w32, VO_EVENT_WIN_STATE);
-
         update_display_info(w32);  // if we moved between monitors
         MP_DBG(w32, "move window: %d:%d\n", x, y);
         break;

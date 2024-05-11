@@ -799,6 +799,8 @@ static void handle_vo_events(struct MPContext *mpctx)
         mp_notify(mpctx, MP_EVENT_WIN_RESIZE, NULL);
     if (events & VO_EVENT_WIN_STATE)
         mp_notify(mpctx, MP_EVENT_WIN_STATE, NULL);
+    if (events & VO_EVENT_DISPLAY_STATE)
+        mp_notify(mpctx, MP_EVENT_DISPLAY_STATE, NULL);
     if (events & VO_EVENT_FULLSCREEN_STATE) {
         // The only purpose of this is to update the fullscreen flag on the
         // playloop side if it changes "from outside" on the VO.

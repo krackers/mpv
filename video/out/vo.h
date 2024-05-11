@@ -37,7 +37,7 @@ enum {
     VO_EVENT_RESIZE                     = 1 << 1,
     // The ICC profile needs to be reloaded
     VO_EVENT_ICC_PROFILE_CHANGED        = 1 << 2,
-    // Some other window state changed (position, window state, fps)
+    // Some other window state changed (position, window state)
     VO_EVENT_WIN_STATE                  = 1 << 3,
     // The ambient light conditions changed and need to be reloaded
     VO_EVENT_AMBIENT_LIGHTING_CHANGED   = 1 << 4,
@@ -48,9 +48,11 @@ enum {
     // Special thing for encode mode (vo_driver.initially_blocked).
     // Part of VO_EVENTS_USER to make vo_is_ready_for_frame() work properly.
     VO_EVENT_INITIAL_UNBLOCK            = 1 << 7,
+    // Used to flag display-related changes (fps, resolution, etc.)
+    VO_EVENT_DISPLAY_STATE              = 1 << 8,
 
     // Set of events the player core may be interested in.
-    VO_EVENTS_USER = VO_EVENT_RESIZE | VO_EVENT_WIN_STATE |
+    VO_EVENTS_USER = VO_EVENT_RESIZE | VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE |
                      VO_EVENT_FULLSCREEN_STATE | VO_EVENT_INITIAL_UNBLOCK,
 };
 

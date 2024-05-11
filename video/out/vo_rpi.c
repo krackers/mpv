@@ -437,7 +437,7 @@ static int create_overlays(struct vo *vo)
 
     resize(vo);
 
-    vo_event(vo, VO_EVENT_WIN_STATE);
+    vo_event(vo, VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE);
 
     vc_dispmanx_update_submit_sync(p->update);
     p->update = vc_dispmanx_update_start(10);

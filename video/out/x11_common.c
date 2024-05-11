@@ -1680,15 +1680,16 @@ static void vo_x11_update_geometry(struct vo *vo)
     }
     double fallback = x11->num_displays > 0 ? x11->displays[0].fps : 0;
     fps = fps < 1000.0 ? fps : fallback;
-    if (fps != x11->current_display_fps)
+    if (fps != x11->current_display_fps) {
         MP_VERBOSE(x11, "Current display FPS: %f\n", fps);
+        x11->pending_vo_events |= VO_EVENT_DISPLAY_STATE;
+    }
     x11->current_display_fps = fps;
-    // might have changed displays
     x11->pending_vo_events |= VO_EVENT_WIN_STATE;
     int icc_screen = get_icc_screen(vo);
     if (x11->current_icc_screen != icc_screen) {
         x11->current_icc_screen = icc_screen;
-        x11->pending_vo_events |= VO_EVENT_ICC_PROFILE_CHANGED;
+        x11->pending_vo_events |= VO_EVENT_ICC_PROFILE_CHANGED | VO_EVENT_DISPLAY_STATE;
     }
 }
 

@@ -203,7 +203,7 @@ static bool recreate_dispmanx(struct ra_ctx *ctx)
 
     ctx->vo->want_redraw = true;
 
-    vo_event(ctx->vo, VO_EVENT_WIN_STATE);
+    vo_event(ctx->vo, VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE);
     return true;
 
 fail:

@@ -532,8 +532,9 @@ static void update_display_fps(struct vo *vo)
 {
     struct vo_internal *in = vo->in;
     pthread_mutex_lock(&in->lock);
-    if (in->internal_events & VO_EVENT_WIN_STATE) {
-        in->internal_events &= ~(unsigned)VO_EVENT_WIN_STATE;
+    // Only check for fps update if we're signaled to do so
+    if (in->internal_events & VO_EVENT_DISPLAY_STATE) {
+        in->internal_events &= ~(unsigned) VO_EVENT_DISPLAY_STATE;
 
         pthread_mutex_unlock(&in->lock);
 
@@ -556,8 +557,10 @@ static void update_display_fps(struct vo *vo)
 
         MP_VERBOSE(vo, "Assuming %f FPS for display sync.\n", display_fps);
 
-        // make sure to update the player
-        in->queued_events |= VO_EVENT_WIN_STATE;
+        // make sure to update the player (this is technically not redundant
+        // with in->internal_events & vo_event_display_state because of the
+        // override condition).
+        in->queued_events |= VO_EVENT_DISPLAY_STATE;
         wakeup_core(vo);
     }
 
@@ -1110,7 +1113,9 @@ static void *vo_thread(void *ptr)
 
     read_opts(vo);
     update_display_fps(vo);
-    vo_event(vo, VO_EVENT_WIN_STATE);
+    // Notify to user that window is now appeared, and
+    // force us to populate display-fps next update_display_fps.
+    vo_event(vo, VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE);
 
     uint64_t before_render = 0;
     uint64_t after_render = 0;

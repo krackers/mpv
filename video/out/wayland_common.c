@@ -733,7 +733,7 @@ static void surface_handle_enter(void *data, struct wl_surface *wl_surface,
     MP_VERBOSE(wl, "Surface entered output %s %s (0x%x), scale = %i\n", o->make,
                o->model, o->id, wl->scaling);
 
-    wl->pending_vo_events |= VO_EVENT_WIN_STATE;
+    wl->pending_vo_events |= VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE;
 }
 
 static void surface_handle_leave(void *data, struct wl_surface *wl_surface,
@@ -745,7 +745,7 @@ static void surface_handle_leave(void *data, struct wl_surface *wl_surface,
     wl_list_for_each(o, &wl->output_list, link) {
         if (o->output == output) {
             o->has_surface = false;
-            wl->pending_vo_events |= VO_EVENT_WIN_STATE;
+            wl->pending_vo_events |= VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE;
             return;
         }
     }

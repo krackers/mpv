@@ -258,7 +258,7 @@ class CocoaCB: NSObject {
 
         CVDisplayLinkSetCurrentCGDisplay(link, screen.displayID)
         queue.asyncAfter(deadline: DispatchTime.now() + 0.1) {
-            self.flagEvents(VO_EVENT_WIN_STATE)
+            self.flagEvents(VO_EVENT_DISPLAY_STATE)
         }
     }
 
@@ -401,7 +401,7 @@ class CocoaCB: NSObject {
 
             if displayID == display {
                 ccb.libmpv.sendVerbose("Detected display mode change, updating screen refresh rate");
-                ccb.flagEvents(VO_EVENT_WIN_STATE)
+                ccb.flagEvents(VO_EVENT_DISPLAY_STATE)
             }
         }
     }
