@@ -1113,8 +1113,8 @@ static void *vo_thread(void *ptr)
 
     read_opts(vo);
     update_display_fps(vo);
-    // Notify to user that window is now appeared, and
-    // force us to populate display-fps next update_display_fps.
+    // Notify to user that vo is now ready, and
+    // dependent properties should be initialized.
     vo_event(vo, VO_EVENT_WIN_STATE | VO_EVENT_DISPLAY_STATE);
 
     uint64_t before_render = 0;

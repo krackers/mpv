@@ -4123,9 +4123,9 @@ static const struct m_property mp_properties_base[] = {
 // Each entry describes which properties an event (possibly) changes.
 #define E(x, ...) [x] = (const char*const[]){__VA_ARGS__, NULL}
 static const char *const *const mp_event_property_change[] = {
-    E(MPV_EVENT_START_FILE, "*"),
-    E(MPV_EVENT_END_FILE, "*"),
-    E(MPV_EVENT_FILE_LOADED, "*"),
+    E(MPV_EVENT_START_FILE, "*!display-"),
+    E(MPV_EVENT_END_FILE, "*!display-"),
+    E(MPV_EVENT_FILE_LOADED, "*!display-"),
     E(MP_EVENT_CHANGE_ALL, "*"),
     E(MPV_EVENT_TRACKS_CHANGED, "track-list"),
     E(MPV_EVENT_TRACK_SWITCHED, "vid", "video", "aid", "audio", "sid", "sub",
@@ -4178,8 +4178,12 @@ static int prefix_len(const char *p)
 
 static bool match_property(const char *a, const char *b)
 {
-    if (strcmp(a, "*") == 0)
+    if (a && a[0] == '*') {
+        if (a[1] == '!' && strstr(b, a + 2) != NULL) {
+            return false;
+        }
         return true;
+    }
     // Give options and properties the same ID each, so change notifications
     // work both way.
     if (strncmp(a, "options/", 8) == 0)
