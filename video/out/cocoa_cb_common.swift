@@ -457,7 +457,7 @@ class CocoaCB: NSObject {
         if mpv != nil {
             mpv!.wakeup_vo()
         } else {
-            libmpv.sendWarning("vo nil in flagEvents")
+            libmpv.sendVerbose("vo nil in flagEvents")
         }
     }
 
