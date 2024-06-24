@@ -542,7 +542,7 @@ class CocoaCB: NSObject {
                     if let screen = ccb.window?.currentScreen, !Bool(opts.pointee.hidpi_window_scale) {
                         rect = screen.convertRectFromBacking(rect)
                     }
-                    ccb.window?.updateSize(rect.size)
+                    ccb.window?.updateSize(rect.size, reconfig: false)
                 }
                 return VO_TRUE
             }

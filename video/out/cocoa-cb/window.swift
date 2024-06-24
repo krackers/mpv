@@ -295,8 +295,8 @@ class Window: NSWindow, NSWindowDelegate {
         }
     }
 
-    func updateSize(_ size: NSSize) {
-        if let currentSize = contentView?.frame.size, size != initialSize ?? NSZeroSize {
+    func updateSize(_ size: NSSize, reconfig: Bool = true) {
+        if let currentSize = contentView?.frame.size, (size != initialSize ?? NSZeroSize || !reconfig) {
             let newContentFrame = centeredContentSize(for: frame, size: size)
             if !isInFullscreen {
                 updateFrame(newContentFrame)
@@ -304,7 +304,9 @@ class Window: NSWindow, NSWindowDelegate {
                 unfsContentFrame = newContentFrame
             }
         }
-        initialSize = size
+        if (reconfig) {
+            initialSize = size
+        }
     }
 
     override func setFrame(_ frameRect: NSRect, display flag: Bool) {
@@ -319,6 +321,7 @@ class Window: NSWindow, NSWindowDelegate {
         }
     }
 
+    // TODO: This may go offscreen, in which case it might be better to center it?
     func centeredContentSize(for rect: NSRect, size sz: NSSize) -> NSRect {
         let cRect = contentRect(forFrameRect: rect)
         let dx = (cRect.size.width  - sz.width)  / 2
