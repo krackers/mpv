@@ -1159,7 +1159,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     struct vo_cocoa_state *s = self.vout->cocoa;
     s->fullscreen = 1;
-    s->pending_events |= VO_EVENT_FULLSCREEN_STATE;
+    flag_events(self.vout, VO_EVENT_FULLSCREEN_STATE);
     vo_cocoa_anim_unlock(self.vout);
 }
 
@@ -1167,7 +1167,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 {
     struct vo_cocoa_state *s = self.vout->cocoa;
     s->fullscreen = 0;
-    s->pending_events |= VO_EVENT_FULLSCREEN_STATE;
+    flag_events(self.vout, VO_EVENT_FULLSCREEN_STATE);
     vo_cocoa_anim_unlock(self.vout);
 }
 
