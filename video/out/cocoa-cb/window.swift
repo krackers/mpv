@@ -230,10 +230,6 @@ class Window: NSWindow, NSWindowDelegate {
         }
         isAnimating = false
         cocoaCB.checkShutdown()
-        // Only update after shutdown is called.
-        // This way if we did indeed shutdown, then we won't have anything
-        // on the queue.
-        cocoaCB.layer?.update()
     }
 
     func setToFullScreen() {
@@ -244,7 +240,6 @@ class Window: NSWindow, NSWindowDelegate {
         endAnimation()
         isInFullscreen = true
         cocoaCB.flagEvents(VO_EVENT_FULLSCREEN_STATE)
-        cocoaCB.layer?.update()
     }
 
     func setToWindow() {
@@ -256,7 +251,6 @@ class Window: NSWindow, NSWindowDelegate {
         endAnimation()
         isInFullscreen = false
         cocoaCB.flagEvents(VO_EVENT_FULLSCREEN_STATE)
-        cocoaCB.layer?.update()
     }
 
     func getFsAnimationDuration(_ def: Double) -> Double {
@@ -298,7 +292,6 @@ class Window: NSWindow, NSWindowDelegate {
             let cRect = frameRect(forContentRect: rect)
             unfsContentFrame = rect
             setFrame(cRect, display: true)
-            cocoaCB.layer?.update(force: true)
         }
     }
 

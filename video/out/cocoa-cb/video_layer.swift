@@ -85,7 +85,7 @@ class VideoLayer: CAOpenGLLayer {
     var needsICCUpdate: Bool = false {
         didSet {
             if needsICCUpdate == true {
-                update()
+                update(force: true)
             }
         }
     }
