@@ -4422,6 +4422,8 @@ static void show_property_osd(MPContext *mpctx, const char *name, int osd_mode)
         osd_mode =
             ((disp.msg || disp.osd_name || disp.seek_msg) ? MP_ON_OSD_MSG : 0) |
             ((disp.osd_progbar || disp.seek_bar) ? MP_ON_OSD_BAR : 0);
+        if (!osd_mode)
+            return;
     }
 
     if (!disp.osd_progbar)
