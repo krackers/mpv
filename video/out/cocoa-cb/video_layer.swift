@@ -286,6 +286,17 @@ class VideoLayer: CAOpenGLLayer {
         libmpv.reportRenderPresent()
     }
 
+    // TODO: This forcing mechanism should be removed and replaced with an event sent to VO to
+    // request redraw.
+    //
+    // The interaction with async mode is also a bit subtle, we rely on
+    // the locks provided by libmpv in display to ensure that setting wantsUpdate to false
+    // is never reordered after the actual display, thus ensuring that we never "drop" a requested
+    // update. Also note that .update() is called either from the libmpv callback, or from
+    // the main thread. In the libmpv callback case there's no state change we have to worry about.
+    // In the main thread case, we are guaranteed that the async caopengllayer display will not be
+    // hapenning at the same time so either the next caopengllayer display() will pick up our
+    // relevant state on its draw() or we will get to it first and ourselves call display().
     func update(force: Bool = false) {
         queue.async {
             let updateFlags = self.libmpv.checkRenderUpdateFrame()
@@ -303,6 +314,9 @@ class VideoLayer: CAOpenGLLayer {
             }
             // Value of async is only ever updated if we actually call into the layer display
             let forced = force || (self.isAsynchronous != self.inLiveResize)
+            // This is racy with the async display code setting wantsUpdate to false, but it's ok
+            // because any relevant state changes (e.g. window size/pos) happen on main thread
+            // so are serialized with the async display codepath.
             self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || forced
             if (self.wantsUpdate && !self.inLiveResize) || forced {
                 self.display()

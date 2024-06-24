@@ -197,7 +197,6 @@ class Window: NSWindow, NSWindowDelegate {
         cocoaCB.flagEvents(VO_EVENT_FULLSCREEN_STATE)
         cocoaCB.updateCusorVisibility()
         endAnimation(frame)
-        cocoaCB.titleBar?.show()
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
@@ -229,7 +228,6 @@ class Window: NSWindow, NSWindowDelegate {
                 self.animator().setFrame(newFrame, display: true)
             }, completionHandler: nil )
         }
-
         isAnimating = false
         cocoaCB.checkShutdown()
         // Only update after shutdown is called.
@@ -493,11 +491,11 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func windowDidResize(_ notification: Notification) {
-        // This is sometimes reported during a live resize...
-        if ((cocoaCB.layer?.inLiveResize ?? false) || isAnimating || isInFullscreen) {
+        // This is sometimes reported during a live resize... 
+        if ((cocoaCB.layer?.inLiveResize ?? false)) {
             return
         }
-        if let contentViewFrame = contentView?.frame
+        if let contentViewFrame = contentView?.frame, !isAnimating && !isInFullscreen
         {
             unfsContentFrame = convertToScreen(contentViewFrame)
         }
