@@ -465,6 +465,7 @@ class Window: NSWindow, NSWindowDelegate {
             previousScreen = screen
         }
         if currentScreen != screen {
+            windowDidChangeBackingProperties(notification)
             cocoaCB.updateDisplaylink()
             cocoaCB.layer?.update(force: true)
         }
