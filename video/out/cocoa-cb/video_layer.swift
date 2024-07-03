@@ -141,7 +141,7 @@ class VideoLayer: CAOpenGLLayer {
         print(String(format: "UNINIT TIME %f\n", (aft - bef)/1e3))
     }
 
-    //necessary for when the layer containing window changes the screen
+    // might be called for CALayer animations? Not sure...
     override init(layer: Any) {
         guard let oldLayer = layer as? VideoLayer else {
             fatalError("init(layer: Any) passed an invalid layer")
@@ -150,7 +150,7 @@ class VideoLayer: CAOpenGLLayer {
         surfaceSize = oldLayer.surfaceSize
         cglPixelFormat = oldLayer.cglPixelFormat
         cglContext = oldLayer.cglContext
-        super.init()
+        super.init(layer: layer)
     }
 
     required init?(coder: NSCoder) {
