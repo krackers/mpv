@@ -97,6 +97,9 @@ class Window: NSWindow, NSWindowDelegate {
             unfsContentFrame = convertToScreen(cView.frame)
         }
 
+        ccb.layer?.contentsScale = self.backingScaleFactor
+
+
         targetScreen = screen
         currentScreen = screen
         unfScreen = screen

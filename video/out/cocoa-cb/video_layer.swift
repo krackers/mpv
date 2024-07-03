@@ -108,6 +108,7 @@ class VideoLayer: CAOpenGLLayer {
         super.init()
         autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         backgroundColor = NSColor.black.cgColor
+        self.isOpaque = true
 
         if #available(macOS 10.12, *), bufferDepth > 8 {
             contentsFormat = .RGBA16Float
@@ -253,7 +254,6 @@ class VideoLayer: CAOpenGLLayer {
     }
 
     override func copyCGLContext(forPixelFormat pf: CGLPixelFormatObj) -> CGLContextObj {
-        contentsScale = cocoaCB.window?.backingScaleFactor ?? 1.0
         return cglContext
     }
 

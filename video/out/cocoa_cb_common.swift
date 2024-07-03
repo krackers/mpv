@@ -106,6 +106,7 @@ class CocoaCB: NSObject {
 
         window?.orderOut(nil)
         window?.close()
+        view?.layer = nil
         timer?.terminate()
         timer = nil
         stopDisplaylink()
