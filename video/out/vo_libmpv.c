@@ -158,7 +158,6 @@ static void forget_frames(struct mpv_render_context *ctx, bool all)
 static void dispatch_wakeup(void *ptr)
 {
     struct mpv_render_context *ctx = ptr;
-
     update(ctx);
 }
 
@@ -251,8 +250,6 @@ void mpv_render_context_set_update_callback(mpv_render_context *ctx,
     pthread_mutex_lock(&ctx->update_lock);
     ctx->update_cb = callback;
     ctx->update_cb_ctx = callback_ctx;
-    if (ctx->update_cb)
-        ctx->update_cb(ctx->update_cb_ctx);
     pthread_mutex_unlock(&ctx->update_lock);
 }
 
@@ -592,7 +589,6 @@ static void draw_frame(struct vo *vo, struct vo_frame *frame)
     ctx->expected_present_count = ctx->present_count + 1;
     ctx->redrawing = frame->redraw || !frame->current;
     pthread_mutex_unlock(&ctx->lock);
-
     update(ctx);
 }
 

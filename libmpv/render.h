@@ -444,8 +444,10 @@ int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv);
  * Attempt to change a single parameter. Not all backends and parameter types
  * support all kinds of changes.
  *
- * Note that this should not be called simultaneously with _render or _process_queue
- *
+ * Note that this should not be called simultaneously with _render or _process_queue.
+ * In general this should be called with a valid context (whether specific params actually
+ * touch opengl state is an implementation detail.)
+ * 
  * @param ctx a valid render context
  * @param param the parameter type and data that should be set
  * @return error code. If a parameter could actually be changed, this returns

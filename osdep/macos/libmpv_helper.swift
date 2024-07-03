@@ -161,8 +161,7 @@ class LibmpvHelper: LogHelper {
         if !skip { CGLFlushDrawable(ctx) }
     }
 
-    // This called either during the initial init,
-    // or as part of the draw loop so we don't have any concurrency issues.
+    // Must be called with a valid GL context
     func setRenderICCProfile(_ profile: NSColorSpace) {
         if !renderInitialized { return }
         guard var iccData = profile.iccProfileData else {
@@ -180,7 +179,7 @@ class LibmpvHelper: LogHelper {
         }
     }
 
-    // Always called from within the draw loop.
+    // Must be called with a valid GL context
     func setRenderLux(_ lux: Int) {
         if !renderInitialized { return }
         var light = lux

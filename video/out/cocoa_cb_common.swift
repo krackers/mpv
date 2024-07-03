@@ -144,8 +144,7 @@ class CocoaCB: NSObject {
             libmpv.sendError("Something went wrong, no Window was initialized")
             exit(1)
         }
-
-        updateICCProfile()
+        layer?.needsICCUpdate = true
         window.setOnTop(Bool(mpv!.opts.ontop), Int(mpv!.opts.ontop_level))
         window.keepAspect = Bool(mpv!.opts.keepaspect_window)
         window.title = title
@@ -315,18 +314,6 @@ class CocoaCB: NSObject {
         } else if !visibility && !cursorHidden {
             NSCursor.hide()
             cursorHidden = true
-        }
-    }
-
-    func updateICCProfile() {
-        guard let colorSpace = window?.screen?.colorSpace else {
-            libmpv.sendWarning("Couldn't update ICC Profile, no color space available")
-            return
-        }
-
-        libmpv.setRenderICCProfile(colorSpace)
-        if #available(macOS 10.11, *) {
-            layer?.colorspace = colorSpace.cgColorSpace
         }
     }
 

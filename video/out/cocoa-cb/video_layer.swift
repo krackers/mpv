@@ -156,6 +156,25 @@ class VideoLayer: CAOpenGLLayer {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // Must be called with a valid GL context.
+    private func updateRenderParams() {
+        if updateLux > 0 {
+            libmpv.setRenderLux(updateLux)
+            updateLux = -1
+        }
+        if needsICCUpdate {
+            needsICCUpdate = false
+            guard let colorSpace = cocoaCB.window?.screen?.colorSpace else {
+                libmpv.sendWarning("Couldn't update ICC Profile, no color space available")
+                return
+            }
+            libmpv.setRenderICCProfile(colorSpace)
+            if #available(macOS 10.11, *) {
+                self.colorspace = colorSpace.cgColorSpace
+            }
+        }
+    }
+
     override func canDraw(inCGLContext ctx: CGLContextObj,
                           pixelFormat pf: CGLPixelFormatObj,
                           forLayerTime t: CFTimeInterval,
@@ -188,16 +207,10 @@ class VideoLayer: CAOpenGLLayer {
         }
 
         updateSurfaceSize()
+        updateRenderParams()
+
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
 
-        if needsICCUpdate {
-            needsICCUpdate = false
-            cocoaCB.updateICCProfile()
-        }
-        if updateLux > 0 {
-            libmpv.setRenderLux(updateLux)
-            updateLux = -1
-        }
 
         // In async mode we cannot know when the CATransaction flush happens, so we just resort to reporting after the
         // glFlush instead. Note that the live resize status may have possibly changed between the trigger and the
@@ -271,6 +284,7 @@ class VideoLayer: CAOpenGLLayer {
             // No need to flush here since nothing was really drawn at all.
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
+            updateRenderParams()
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
             CGLUnlockContext(cglContext)
             self.wantsUpdate = false
