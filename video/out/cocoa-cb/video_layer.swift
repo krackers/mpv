@@ -278,6 +278,8 @@ class VideoLayer: CAOpenGLLayer {
         }
 
         // If we still need an update...
+        // Note that render initialized flag could have been
+        // set by another thread here.
         if self.wantsUpdate && libmpv.renderInitialized {
             // layer display() did not end up drawing, possibly because no display was ready
             // or the window was occluded (see iina/issues/4822).
