@@ -258,6 +258,10 @@ class VideoLayer: CAOpenGLLayer {
 
     // Note that in async mode, display is not called and the system
     // triggers canDraw -> draw directly.
+    // CoreAnimation seems thread safe enough that concurrent calls to display()
+    // (e.g. on both main & dispatch) are handled properly, and we take a CGLLock
+    // before any non-concurrent libmpv functions. [In fact CAOpenGLLayer seems
+    // smarter and simply skips the call to canDraw/draw for the concurrent call].
     override func display() {
         if (!self.wantsUpdate || !libmpv.renderInitialized) {
             return;
