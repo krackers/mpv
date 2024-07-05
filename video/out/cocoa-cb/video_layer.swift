@@ -143,14 +143,7 @@ class VideoLayer: CAOpenGLLayer {
 
     // might be called for CALayer animations? Not sure...
     override init(layer: Any) {
-        guard let oldLayer = layer as? VideoLayer else {
-            fatalError("init(layer: Any) passed an invalid layer")
-        }
-        cocoaCB = oldLayer.cocoaCB
-        surfaceSize = oldLayer.surfaceSize
-        cglPixelFormat = oldLayer.cglPixelFormat
-        cglContext = oldLayer.cglContext
-        super.init(layer: layer)
+        fatalError("init(layer:) has not been implemented")
     }
 
     required init?(coder: NSCoder) {
