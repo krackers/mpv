@@ -90,15 +90,7 @@ class VideoLayer: CAOpenGLLayer {
         }
     }
 
-    var inLiveResize: Bool = false {
-        didSet {
-            if (!inLiveResize) {
-                // Unblock any currently pending draw when disabling live resize
-                // See comment in draw() for more info
-                libmpv.reportRenderPresent()
-            }
-        }
-    }
+    var inLiveResize: Bool = false
 
     init(cocoaCB ccb: CocoaCB) {
         cocoaCB = ccb
@@ -131,6 +123,7 @@ class VideoLayer: CAOpenGLLayer {
         // Mechanism to signal that it's ok to abandon in progress work
         // Relaxed atomic is OK here
         libmpv.renderInitialized = false
+        libmpv.reportRenderFlip(time: 0) // Unblock the currently blocked present.
         queue.sync {
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
@@ -204,16 +197,7 @@ class VideoLayer: CAOpenGLLayer {
         updateRenderParams()
 
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
-
-
-        // In async mode we cannot know when the CATransaction flush happens, so we just resort to reporting after the
-        // glFlush instead. Note that the live resize status may have possibly changed between the trigger and the
-        // beginning of this function, so this is technically a bit racy. However the implicit CGL lock maintains correctness,
-        // and the report here is only to avoid visual jarringness. It's OK if we report too many times.
-        // It's also OK if we underreport since we always explicitly report a present when disabling live resize.
-        if (wasInLiveResize) {
-            libmpv.reportRenderPresent()
-        }
+        libmpv.reportRenderPresent()
     }
 
     func updateSurfaceSize() {
@@ -285,6 +269,7 @@ class VideoLayer: CAOpenGLLayer {
             CGLSetCurrentContext(cglContext)
             updateRenderParams()
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+            libmpv.reportRenderPresent()
             CGLUnlockContext(cglContext)
             self.wantsUpdate = false
         } else if !self.wantsUpdate && libmpv.renderInitialized {
@@ -296,7 +281,6 @@ class VideoLayer: CAOpenGLLayer {
                 print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
             }
         }
-        libmpv.reportRenderPresent()
     }
 
     // TODO: This forcing mechanism should be removed and replaced with an event sent to VO to

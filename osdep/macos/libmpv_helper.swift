@@ -99,10 +99,11 @@ class LibmpvHelper: LogHelper {
     // This should not take lock because otherwise we'd never be able to report flip
     // while a render is in progress. Internally report_swap/present does its own locking.
     func reportRenderFlip(time: UInt64) {
-        // Note that even though this is called from another thread and there is no happens-before
-        // relation established, when render is uninit'ed libmpv guarnatees that we can still safely
+        // When render is uninit'ed libmpv guarnatees that we can still safely
         // call this. And we will halt callbacks before free.
-        if !renderInitialized { return }
+        // Must always be called since the cocoa-cb side could be blocked on waiting
+        // for a swap.
+        if mpvRenderContext == nil { return }
         mpv_render_context_report_swap(mpvRenderContext, time)
     }
 

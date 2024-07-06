@@ -176,6 +176,7 @@ int mpv_render_context_create(mpv_render_context **res, mpv_handle *mpv)
 
     ctx->global = mp_client_get_global(mpv);
     ctx->client_api = ctx->global->client_api;
+    ctx->shutting_down = true; // start with things shut down.
 
     if (!mp_set_main_render_context(ctx->client_api, ctx, true)) {
         MP_ERR(ctx, "There is already a mpv_render_context set.\n");
@@ -266,6 +267,7 @@ void mp_render_context_set_control_callback(mpv_render_context *ctx,
 static void mpv_render_context_stop_flip(mpv_render_context *ctx)
 {
     pthread_mutex_lock(&ctx->lock);
+    printf("SET CTX SHUTTING DOWN TO TRUE\n");
     ctx->shutting_down = true;
     ctx->last_vsync_time = 0;
     ctx->vsync_interval = 0;
@@ -493,11 +495,12 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time)
 
     uint64_t vsync_time = (time > 0 ? mp_time_us() - (mp_raw_time_us() - time) : mp_time_us());
 
+
     if (ctx->last_vsync_time > 0) {
         ctx->vsync_interval = ctx->vsync_interval > 0 ? (vsync_time - ctx->last_vsync_time)*0.5 + ctx->vsync_interval*0.5 : vsync_time - ctx->last_vsync_time;
     }
 
-    if (vsync_time - ctx->last_vsync_time > 17000) {
+    if ((int64_t) vsync_time - ctx->last_vsync_time > 17000) {
         printf("Report swap clock skew, got %llu\n", vsync_time - ctx->last_vsync_time);
     }
     
@@ -511,12 +514,27 @@ done:
 void mpv_render_context_report_present(mpv_render_context *ctx)
 {
     MP_STATS(ctx, "glcb-reportpresent");
+    struct timespec ts = mp_rel_time_to_timespec(0.2);
 
     pthread_mutex_lock(&ctx->lock);
     if (ctx->shutting_down) {
         goto done;
     }
+
     ctx->present_count += 1;
+    ctx->pending_swap_count += 1;
+    // Wait for next vsync after flush
+    // int64_t flp_count_before_flush = ctx->flip_count;
+    // TODO: Should also use gpu fence to make sure commands itself retired.
+    // See opengl vo.
+    while ((ctx->pending_swap_count > 1) && !ctx->shutting_down) {
+        if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
+            printf("Bail on swap\n");
+            MP_VERBOSE(ctx, "mpv_render_report_swap() not being called.\n");
+            goto done;
+        }
+    }
+    
     pthread_cond_broadcast(&ctx->video_wait);
 done:
     pthread_mutex_unlock(&ctx->lock);
@@ -633,38 +651,23 @@ static void flip_page(struct vo *vo)
 
     uint64_t flush_bef = mach_absolute_time();
     while ((ctx->expected_present_count > ctx->present_count) && !ctx->shutting_down) {
-        if (!ctx->present_count)
-            break;
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             printf("Bail on present\n");
             MP_VERBOSE(vo, "mpv_render_report_present() not being called.\n");
             goto done;
         }
     }
-    ctx->pending_swap_count += 1;
+    
 
     uint64_t flush_aft = mach_absolute_time();
     uint64_t befvsync2 = ctx->last_vsync_time;
-    int pswap = ctx->pending_swap_count;
 
-    // Wait for next vsync after flush
-    // int64_t flp_count_before_flush = ctx->flip_count;
-    // TODO: Should also use gpu fence to make sure commands itself retired.
-    // See opengl vo.
-    while ((ctx->pending_swap_count > 1) && !ctx->shutting_down) {
-        if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
-            printf("Bail on swap\n");
-            MP_VERBOSE(vo, "mpv_render_report_swap() not being called.\n");
-            goto done;
-        }
-    }
     uint64_t swap_aft = mach_absolute_time();
     ctx->last_presentation_time = ctx->last_vsync_time + ctx->pending_swap_count * ctx->vsync_interval;
     uint64_t aft = ctx->last_presentation_time;
-    if ((aft - bef) > 17000) {
+    if (((int64_t) aft - bef) > 17000) {
         printf("vo_libmpv flip time %llu, aft %llu, bef %llu, vsync diff %llu, interval %llu\n", (aft - bef), aft, bef, ctx->last_vsync_time - befvsync, ctx->vsync_interval);
         printf("\tvo: flush diff %.1f, swap diff (host time) %.1f, swap diff (vsync time) %llu\n", (flush_aft - flush_bef)*(125.0/3)/1e3, (swap_aft - flush_aft)*(125.0/3)/1e3, ctx->last_vsync_time - befvsync2);
-        printf("\t prev pending swap %d\n", pswap);
     }
 
 done:

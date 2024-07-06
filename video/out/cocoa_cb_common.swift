@@ -221,10 +221,10 @@ class CocoaCB: NSObject {
         let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
 
         let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
-
-        timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
-            self.libmpv.reportRenderFlip(time: scheduleTime)
-        })
+        self.libmpv.reportRenderFlip(time: scheduleTime)
+        // timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
+        //     self.libmpv.reportRenderFlip(time: scheduleTime)
+        // })
         return kCVReturnSuccess
     }
 
