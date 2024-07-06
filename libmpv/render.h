@@ -601,7 +601,7 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time);
  */
 void mpv_render_context_report_flush(mpv_render_context *ctx);
 
-void mpv_render_context_wait_for_swap(mpv_render_context *ctx);
+void mpv_render_context_wait_for_swap(mpv_render_context *ctx, bool skip);
 
 /**
  * Free all render resources.

@@ -218,10 +218,21 @@ class CocoaCB: NSObject {
         // be misaligned with the vsync timings somehow. So things only get unblocked like 0.2-in or something,
         // but if you wait until 0.5 then the compositor probably fires which causes issues.
         // Then again the net result is that addition to gpu timing includes the cpu wait time anyhow (4k us => 25% vsync interval)
+
+
+        var inTstamp = CVTimeStamp()
+        inTstamp.videoTime = inNow.pointee.videoTime
+        inTstamp.videoTimeScale = inNow.pointee.videoTimeScale
+        inTstamp.flags = CVTimeStampFlags.videoTimeValid.rawValue
+        var outTstamp = CVTimeStamp()
+        outTstamp.flags = CVTimeStampFlags.hostTimeValid.rawValue
+        CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp)
+
         let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
+        let curVsync = UInt64(Double(outTstamp.hostTime) * 125.0 / 3.0 / 1e3)
 
         let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
-        self.libmpv.reportRenderFlip(time: scheduleTime)
+        self.libmpv.reportRenderFlip(time: curVsync + UInt64(vsyncInterval * 1e6))
         // timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
         //     self.libmpv.reportRenderFlip(time: scheduleTime)
         // })

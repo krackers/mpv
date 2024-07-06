@@ -107,9 +107,9 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_swap(mpvRenderContext, time)
     }
 
-    func waitForSwap() {
+    func waitForSwap(skip: Bool) {
         if !renderInitialized { return}
-        mpv_render_context_wait_for_swap(mpvRenderContext)
+        mpv_render_context_wait_for_swap(mpvRenderContext, skip)
     }
 
     func reportRenderFlush() {

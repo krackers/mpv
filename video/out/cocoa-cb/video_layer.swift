@@ -91,6 +91,9 @@ class VideoLayer: CAOpenGLLayer {
     }
 
     var inLiveResize: Bool = false
+    // Mechanism to track whether a callback is due to async mode
+    // or not. Should be maintained in sync with inLiveResize
+    private var wasAsync: Bool = false
 
     init(cocoaCB ccb: CocoaCB) {
         cocoaCB = ccb
@@ -172,8 +175,17 @@ class VideoLayer: CAOpenGLLayer {
         // the new layer size. By contrast if async is false then every time we render to a new
         // size which is not only wasteful but also produces visual jarringness since things move
         // around a bit during the resize->rerender delay.
+        // We could also check if displayTime is != null, which is true
+        // only if triggered in async mode.
+        wasAsync = isAsynchronous
         if inLiveResize != isAsynchronous {
             isAsynchronous = inLiveResize
+            if (wasAsync && !isAsynchronous) {
+                 // Since async mode is driven off a timer and doesn't strictly have any bounds on
+                 // periodicity, avoid an edge-case where pending draws pile up which we'd have to 
+                 // wait out in sync mode
+                libmpv.reportRenderFlip(time: UInt64(bitPattern: -1))
+            }
         }
         return cocoaCB.backendState == .initialized && self.wantsUpdate
     }
@@ -182,7 +194,6 @@ class VideoLayer: CAOpenGLLayer {
                        pixelFormat pf: CGLPixelFormatObj,
                        forLayerTime t: CFTimeInterval,
                        displayTime ts: UnsafePointer<CVTimeStamp>?) {
-        let wasInLiveResize = self.inLiveResize
         wantsUpdate = false
 
         if draw.rawValue >= Draw.atomic.rawValue {
@@ -197,10 +208,11 @@ class VideoLayer: CAOpenGLLayer {
         updateRenderParams()
 
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
-        // Note that in live-resize we never increment the pending swap
-        // But this is OK because the async mode takes care of avoiding
-        // runaway fps.
-        libmpv.waitForSwap()
+        libmpv.waitForSwap(skip: self.wasAsync)
+
+        if (self.wasAsync) {
+            libmpv.reportRenderFlush()
+        }
     }
 
     func updateSurfaceSize() {
@@ -272,7 +284,7 @@ class VideoLayer: CAOpenGLLayer {
             CGLSetCurrentContext(cglContext)
             updateRenderParams()
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
-            libmpv.waitForSwap()
+            libmpv.waitForSwap(skip: false)
             CGLUnlockContext(cglContext)
             self.wantsUpdate = false
         } else if !self.wantsUpdate && libmpv.renderInitialized {
