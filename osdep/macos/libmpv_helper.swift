@@ -107,9 +107,14 @@ class LibmpvHelper: LogHelper {
         mpv_render_context_report_swap(mpvRenderContext, time)
     }
 
-    func reportRenderPresent() {
+    func waitForSwap() {
+        if !renderInitialized { return}
+        mpv_render_context_wait_for_swap(mpvRenderContext)
+    }
+
+    func reportRenderFlush() {
         if !renderInitialized { return }
-        mpv_render_context_report_present(mpvRenderContext)
+        mpv_render_context_report_flush(mpvRenderContext)
     }
 
     func checkRenderUpdateFrame() -> UInt64 {

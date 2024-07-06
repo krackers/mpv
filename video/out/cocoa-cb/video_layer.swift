@@ -197,7 +197,10 @@ class VideoLayer: CAOpenGLLayer {
         updateRenderParams()
 
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
-        libmpv.reportRenderPresent()
+        // Note that in live-resize we never increment the pending swap
+        // But this is OK because the async mode takes care of avoiding
+        // runaway fps.
+        libmpv.waitForSwap()
     }
 
     func updateSurfaceSize() {
@@ -269,7 +272,7 @@ class VideoLayer: CAOpenGLLayer {
             CGLSetCurrentContext(cglContext)
             updateRenderParams()
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
-            libmpv.reportRenderPresent()
+            libmpv.waitForSwap()
             CGLUnlockContext(cglContext)
             self.wantsUpdate = false
         } else if !self.wantsUpdate && libmpv.renderInitialized {
@@ -281,6 +284,7 @@ class VideoLayer: CAOpenGLLayer {
                 print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
             }
         }
+        libmpv.reportRenderFlush()
     }
 
     // TODO: This forcing mechanism should be removed and replaced with an event sent to VO to

@@ -1851,7 +1851,8 @@ int mpv_opengl_cb_report_flip(mpv_opengl_cb_context *ctx, int64_t time)
     if (!ctx->client_api->render_context)
         return MPV_ERROR_INVALID_PARAMETER;
 
-    mpv_render_context_report_present(ctx->client_api->render_context);
+    mpv_render_context_report_flush(ctx->client_api->render_context);
+    mpv_render_context_wait_for_swap(ctx->client_api->render_context);
     mpv_render_context_report_swap(ctx->client_api->render_context, time);
     return 0;
 }

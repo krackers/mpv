@@ -599,7 +599,9 @@ void mpv_render_context_report_swap(mpv_render_context *ctx, uint64_t time);
  * (Note that currently the next vsync after preset() is assumed to have content drawn to screen. Ideally
  *  a gpu fence should also be used to ensure that the gpu had finished processing before the vsync.)
  */
-void mpv_render_context_report_present(mpv_render_context *ctx);
+void mpv_render_context_report_flush(mpv_render_context *ctx);
+
+void mpv_render_context_wait_for_swap(mpv_render_context *ctx);
 
 /**
  * Free all render resources.
