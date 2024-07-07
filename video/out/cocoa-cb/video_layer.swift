@@ -28,14 +28,12 @@ let glVersions: [CGLOpenGLProfile] = [
 let glFormatBase: [CGLPixelFormatAttribute] = [
     kCGLPFAOpenGLProfile,
     kCGLPFAAccelerated,
-    kCGLPFADoubleBuffer
 ]
 
 let glFormatSoftwareBase: [CGLPixelFormatAttribute] = [
     kCGLPFAOpenGLProfile,
     kCGLPFARendererID,
     CGLPixelFormatAttribute(UInt32(kCGLRendererGenericFloatID)),
-    kCGLPFADoubleBuffer
 ]
 
 let glFormatOptional: [[CGLPixelFormatAttribute]] = [

@@ -210,15 +210,9 @@ class CocoaCB: NSObject {
                                  _ flagsIn: CVOptionFlags,
                                 _ flagsOut: UnsafeMutablePointer<CVOptionFlags>) -> CVReturn
     {
-        // For reasons I don't understand, unblocking the render flip at inNow (0.5 into vsync)
-        // results in _lower_ frame timings. But if you do so, then there are also lots of skipped frames.
-        // If you unblock at exactly vsync, then there aren't any skipped frames but page timing is high.
-        // So we compromise and unblock at 0.25 vsync, which seems to give best of both worlds?
-        // To be honest it seems like the double-buffering implemented by caopengllayer seems to
-        // be misaligned with the vsync timings somehow. So things only get unblocked like 0.2-in or something,
-        // but if you wait until 0.5 then the compositor probably fires which causes issues.
-        // Then again the net result is that addition to gpu timing includes the cpu wait time anyhow (4k us => 25% vsync interval)
-
+        // Compositing seems to happen in the first 1-5% of the interval, so we should not
+        // flush within then to avoid conflicting with a previous commit. To be safe we
+        // wait until 15%.
 
         // var inTstamp = CVTimeStamp()
         // inTstamp.videoTime = inNow.pointee.videoTime
@@ -228,17 +222,19 @@ class CocoaCB: NSObject {
         // outTstamp.flags = CVTimeStampFlags.hostTimeValid.rawValue
         // CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp)
 
-        // let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
+        let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
+        let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
+
         // let lastVsync = UInt64(Double(outTstamp.hostTime) * 125.0 / 3.0 / 1e3)
 
-        let targetVsync = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
-        let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
-        let lastVsync = targetVsync - UInt64(vsyncInterval * 1e6)
+        // let targetVsync = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
 
-        self.libmpv.reportRenderFlip(time: lastVsync)
-        // timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
-        //     self.libmpv.reportRenderFlip(time: scheduleTime)
-        // })
+        // let lastVsync = targetVsync - UInt64(vsyncInterval * 1e6)
+
+        // self.libmpv.reportRenderFlip(time: lastVsync)
+        timer?.scheduleAt(time: inOutputTime.pointee.hostTime + UInt64(0.15 * vsyncInterval * 1e9 * 3.0/125.0) , closure: {
+            self.libmpv.reportRenderFlip(time: scheduleTime)
+        })
         return kCVReturnSuccess
     }
 

@@ -164,7 +164,7 @@ class LibmpvHelper: LogHelper {
             glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
         }
 
-        if !skip { CGLFlushDrawable(ctx) }
+        if !skip { glFlushRenderAPPLE() }
     }
 
     // Must be called with a valid GL context
