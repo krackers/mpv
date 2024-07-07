@@ -183,8 +183,8 @@ class VideoLayer: CAOpenGLLayer {
             if (wasAsync && !isAsynchronous) {
                  // Since async mode is driven off a timer and doesn't strictly have any bounds on
                  // periodicity, avoid an edge-case where pending draws pile up which we'd have to 
-                 // wait out in sync mode
-                libmpv.reportRenderFlip(time: UInt64(bitPattern: -1))
+                 // wait out in sync mode. (May not be necessary???)
+                // libmpv.reportRenderFlip(time: UInt64(bitPattern: -1))
             }
         }
         return cocoaCB.backendState == .initialized && self.wantsUpdate
@@ -208,9 +208,9 @@ class VideoLayer: CAOpenGLLayer {
         updateRenderParams()
 
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
-        libmpv.waitForSwap(skip: self.wasAsync)
 
         if (self.wasAsync) {
+            libmpv.waitForSwap(skip: true)
             libmpv.reportRenderFlush()
         }
     }
@@ -284,19 +284,25 @@ class VideoLayer: CAOpenGLLayer {
             CGLSetCurrentContext(cglContext)
             updateRenderParams()
             libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
-            libmpv.waitForSwap(skip: false)
             CGLUnlockContext(cglContext)
+            // Note that we still need to keep proper vsync timing.
+            libmpv.waitForSwap(skip: false)
+            libmpv.reportRenderFlush()
             self.wantsUpdate = false
         } else if !self.wantsUpdate && libmpv.renderInitialized {
             // We successfully drew a frame, and need to flush ourselves
+            
+            libmpv.waitForSwap(skip: false)
             let bef = (Double(mach_absolute_time()) * 125.0)/3.0
             CATransaction.flush()
             let aft = (Double(mach_absolute_time()) * 125.0)/3.0
+            libmpv.reportRenderFlush()
+
             if ((aft - bef)/1e3 > 8_000) {
                 print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
             }
         }
-        libmpv.reportRenderFlush()
+        
     }
 
     // TODO: This forcing mechanism should be removed and replaced with an event sent to VO to

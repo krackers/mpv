@@ -220,19 +220,22 @@ class CocoaCB: NSObject {
         // Then again the net result is that addition to gpu timing includes the cpu wait time anyhow (4k us => 25% vsync interval)
 
 
-        var inTstamp = CVTimeStamp()
-        inTstamp.videoTime = inNow.pointee.videoTime
-        inTstamp.videoTimeScale = inNow.pointee.videoTimeScale
-        inTstamp.flags = CVTimeStampFlags.videoTimeValid.rawValue
-        var outTstamp = CVTimeStamp()
-        outTstamp.flags = CVTimeStampFlags.hostTimeValid.rawValue
-        CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp)
+        // var inTstamp = CVTimeStamp()
+        // inTstamp.videoTime = inNow.pointee.videoTime
+        // inTstamp.videoTimeScale = inNow.pointee.videoTimeScale
+        // inTstamp.flags = CVTimeStampFlags.videoTimeValid.rawValue
+        // var outTstamp = CVTimeStamp()
+        // outTstamp.flags = CVTimeStampFlags.hostTimeValid.rawValue
+        // CVDisplayLinkTranslateTime(displayLink, &inTstamp, &outTstamp)
 
-        let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
-        let curVsync = UInt64(Double(outTstamp.hostTime) * 125.0 / 3.0 / 1e3)
+        // let scheduleTime = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
+        // let lastVsync = UInt64(Double(outTstamp.hostTime) * 125.0 / 3.0 / 1e3)
 
+        let targetVsync = UInt64(Double(inOutputTime.pointee.hostTime) * 125.0 / 3.0 / 1e3)
         let vsyncInterval = Double(inOutputTime.pointee.videoRefreshPeriod)/Double(inOutputTime.pointee.videoTimeScale)
-        self.libmpv.reportRenderFlip(time: curVsync + UInt64(vsyncInterval * 1e6))
+        let lastVsync = targetVsync - UInt64(vsyncInterval * 1e6)
+
+        self.libmpv.reportRenderFlip(time: lastVsync)
         // timer?.scheduleAt(time: inOutputTime.pointee.hostTime /*+ UInt64(0.25 * vsyncInterval * 1e9 * 3.0/125.0)*/ , closure: {
         //     self.libmpv.reportRenderFlip(time: scheduleTime)
         // })
