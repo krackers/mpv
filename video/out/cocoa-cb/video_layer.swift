@@ -93,6 +93,7 @@ class VideoLayer: CAOpenGLLayer {
     // or not. Should be maintained in sync with inLiveResize.
     // We could also have used whether ts != nil in the draw/canDraw.
     private var wasAsync: Bool = false
+    private var reinited: Bool = false
 
     init(cocoaCB ccb: CocoaCB) {
         cocoaCB = ccb
@@ -181,6 +182,7 @@ class VideoLayer: CAOpenGLLayer {
         self.wasAsync = isAsync
         if inLiveResize != isAsync {
             self.isAsynchronous = inLiveResize
+            self.reinited = true
         }
         return cocoaCB.backendState == .initialized && self.wantsUpdate
     }
@@ -275,15 +277,24 @@ class VideoLayer: CAOpenGLLayer {
             // layer display() did not end up drawing, possibly because no display was ready
             // or the window was occluded (see iina/issues/4822).
             // No need to flush here since nothing was really drawn at all.
+            var failed = false
             CGLLockContext(cglContext)
             CGLSetCurrentContext(cglContext)
             updateRenderParams()
-            libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+            if (!libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)) {
+                failed = true
+            }
             CGLUnlockContext(cglContext)
             // Note that we still need to keep proper vsync timing.
-            libmpv.waitForSwap(skip: false)
-            libmpv.reportRenderFlush()
-            self.wantsUpdate = false
+            if (!failed) {
+                libmpv.waitForSwap(skip: false)
+                libmpv.reportRenderFlush()
+                self.wantsUpdate = false
+            } else if (self.reinited) {
+                print("Retry on failure")
+                queue.async {self.display()}
+            }
+
         } else if !self.wantsUpdate && libmpv.renderInitialized {
             // We successfully drew a frame, and need to flush ourselves
             
@@ -297,6 +308,8 @@ class VideoLayer: CAOpenGLLayer {
                 print(String(format: "CAFlush time %f\n", (aft - bef)/1e3))
             }
         }
+
+        self.reinited = false
         
     }
 

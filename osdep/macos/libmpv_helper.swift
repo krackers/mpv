@@ -133,7 +133,7 @@ class LibmpvHelper: LogHelper {
     }
 
     // Must be called with valid/locked OpenGL context.
-    func drawRender(_ surface: NSSize, _ depth: GLint, _ ctx: CGLContextObj, skip: Bool = false) {
+    func drawRender(_ surface: NSSize, _ depth: GLint, _ ctx: CGLContextObj, skip: Bool = false) -> Bool {
         // Note that even though this may not always be called from dispatch queue
         // the fact that this is called with CGL lock active provides us a mutex that establishes
         // serialization against uninit.
@@ -145,6 +145,10 @@ class LibmpvHelper: LogHelper {
             glGetIntegerv(GLenum(GL_DRAW_FRAMEBUFFER_BINDING), &i)
             // CAOpenGLLayer has ownership of FBO zero yet can return it to us,
             // so only utilize a newly received FBO ID if it is nonzero.
+            if (i == 0) {
+                print("WARNING: GOT ZERO FBO")
+                return false;
+            }
             fbo = i != 0 ? i : fbo
 
             var data = mpv_opengl_fbo(fbo: Int32(fbo),
@@ -165,6 +169,7 @@ class LibmpvHelper: LogHelper {
         }
 
         if !skip { glFlushRenderAPPLE() }
+        return true;
     }
 
     // Must be called with a valid GL context
