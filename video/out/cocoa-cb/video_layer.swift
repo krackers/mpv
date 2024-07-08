@@ -255,6 +255,28 @@ class VideoLayer: CAOpenGLLayer {
         layer.update()
     }
 
+    func printCurrentTime() {
+        if (self.cocoaCB.link == nil) {
+            return
+        }
+        
+        var inTstamp = CVTimeStamp()
+        CVDisplayLinkGetCurrentTime(self.cocoaCB.link!, &inTstamp)
+        
+        inTstamp.flags = CVTimeStampFlags.videoTimeValid.rawValue
+        var outTstamp = CVTimeStamp()
+        outTstamp.flags = CVTimeStampFlags.hostTimeValid.rawValue
+        CVDisplayLinkTranslateTime(self.cocoaCB.link!, &inTstamp, &outTstamp)
+        
+        let vsyncStartHostTime = outTstamp.hostTime
+        
+        let vsyncInterval = Double(inTstamp.videoRefreshPeriod)/Double(inTstamp.videoTimeScale)
+        let timeDifference = Double(inTstamp.hostTime - vsyncStartHostTime) / (vsyncInterval * 1e9 * 3.0 / 125.0)
+        
+        print(String(format: "%.2f", timeDifference))
+    }
+
+
 
     // Note that in async mode, display is not called and the system
     // triggers canDraw -> draw directly.
@@ -289,6 +311,7 @@ class VideoLayer: CAOpenGLLayer {
             self.wantsUpdate = false
         } else if !self.wantsUpdate && libmpv.renderInitialized {
             // We successfully drew a frame, and need to flush ourselves
+            printCurrentTime()
             let bef = (Double(mach_absolute_time()) * 125.0)/3.0
             CATransaction.flush()
             let aft = (Double(mach_absolute_time()) * 125.0)/3.0
