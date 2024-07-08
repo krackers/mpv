@@ -232,7 +232,7 @@ class CocoaCB: NSObject {
         // let lastVsync = targetVsync - UInt64(vsyncInterval * 1e6)
 
         // self.libmpv.reportRenderFlip(time: lastVsync)
-        timer?.scheduleAt(time: inOutputTime.pointee.hostTime + UInt64(0.15 * vsyncInterval * 1e9 * 3.0/125.0) , closure: {
+        timer?.scheduleAt(time: inOutputTime.pointee.hostTime + UInt64(0.10 * vsyncInterval * 1e9 * 3.0/125.0) , closure: {
             self.libmpv.reportRenderFlip(time: scheduleTime)
         })
         return kCVReturnSuccess
