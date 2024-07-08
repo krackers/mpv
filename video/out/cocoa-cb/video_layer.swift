@@ -90,7 +90,8 @@ class VideoLayer: CAOpenGLLayer {
 
     var inLiveResize: Bool = false
     // Mechanism to track whether a callback is due to async mode
-    // or not. Should be maintained in sync with inLiveResize
+    // or not. Should be maintained in sync with inLiveResize.
+    // We could also have used whether ts != nil in the draw/canDraw.
     private var wasAsync: Bool = false
 
     init(cocoaCB ccb: CocoaCB) {
@@ -173,17 +174,13 @@ class VideoLayer: CAOpenGLLayer {
         // the new layer size. By contrast if async is false then every time we render to a new
         // size which is not only wasteful but also produces visual jarringness since things move
         // around a bit during the resize->rerender delay.
-        // We could also check if displayTime is != null, which is true
-        // only if triggered in async mode.
-        wasAsync = isAsynchronous
-        if inLiveResize != isAsynchronous {
-            isAsynchronous = inLiveResize
-            if (wasAsync && !isAsynchronous) {
-                 // Since async mode is driven off a timer and doesn't strictly have any bounds on
-                 // periodicity, avoid an edge-case where pending draws pile up which we'd have to 
-                 // wait out in sync mode. (May not be necessary???)
-                // libmpv.reportRenderFlip(time: UInt64(bitPattern: -1))
-            }
+
+        // Note that value of async is only ever updated if we actually call into the layer display
+        // so it is up to the VO to queue a redraw when live resize status changes.
+        let isAsync = self.isAsynchronous
+        self.wasAsync = isAsync
+        if inLiveResize != isAsync {
+            self.isAsynchronous = inLiveResize
         }
         return cocoaCB.backendState == .initialized && self.wantsUpdate
     }
@@ -193,7 +190,6 @@ class VideoLayer: CAOpenGLLayer {
                        forLayerTime t: CFTimeInterval,
                        displayTime ts: UnsafePointer<CVTimeStamp>?) {
         wantsUpdate = false
-
         if draw.rawValue >= Draw.atomic.rawValue {
              if draw == .atomic {
                 draw = .atomicEnd
@@ -208,7 +204,8 @@ class VideoLayer: CAOpenGLLayer {
         libmpv.drawRender(surfaceSize, bufferDepth, ctx)
 
         if (self.wasAsync) {
-            libmpv.waitForSwap(skip: true)
+            // On the async -> sync transition, we want to wait.
+            libmpv.waitForSwap(skip: self.isAsynchronous)
             libmpv.reportRenderFlush()
         }
     }
@@ -329,13 +326,13 @@ class VideoLayer: CAOpenGLLayer {
                 self.libmpv.processQueue()
                 CGLUnlockContext(self.cglContext)
             }
-            // Value of async is only ever updated if we actually call into the layer display
-            let forced = force || (self.isAsynchronous != self.inLiveResize)
+
             // This is racy with the async display code setting wantsUpdate to false, but it's ok
             // because any relevant state changes (e.g. window size/pos) happen on main thread
             // so are serialized with the async display codepath.
-            self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || forced
-            if (self.wantsUpdate && !self.inLiveResize) || forced {
+            self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || force
+            // We rely on the atomicity & memory-ordering properties provided by CAOpenGLLayer here
+            if (self.wantsUpdate && !self.isAsynchronous) {
                 self.display()
             }
         }
