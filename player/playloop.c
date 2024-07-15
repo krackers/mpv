@@ -203,6 +203,8 @@ void update_screensaver_state(struct MPContext *mpctx)
     } else {
       if (!mpctx->power_mgmt_assertion) return;
       MP_VERBOSE(mpctx, "Releasing wakelock\n");
+      // TODO: This logic should be moved into cocoa specific code
+      // and not be here. Maybe put it in coreaudio backend somewhere?
       IOPMAssertionRelease(mpctx->power_mgmt_assertion);
       mpctx->power_mgmt_assertion = kIOPMNullAssertionID;
     }

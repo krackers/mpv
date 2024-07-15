@@ -207,6 +207,13 @@ class VideoLayer: CAOpenGLLayer {
 
         if (self.wasAsync) {
             // On the async -> sync transition, we want to wait.
+            // TODO: We could possibly reset pendingSwap to 1 here, so
+            // that mpv properly "registers" the delayed frame when pendingSwap
+            // is >= 2 at this moment. (Which could happen due to normal vsync
+            // timing misaligning with the async callback timing. In practice
+            // it seems that this doesn't happen though, something about how the 
+            // CFRunLoopTimer that drives the async callback tends to gets registered
+            // about 5% after the vsync time, and so they actually don't end up colliding too badly?
             libmpv.waitForSwap(skip: self.isAsynchronous)
             libmpv.reportRenderFlush()
         }
@@ -291,6 +298,12 @@ class VideoLayer: CAOpenGLLayer {
                 libmpv.reportRenderFlush()
                 self.wantsUpdate = false
             } else if (self.reinited) {
+                // TODO: Could possibly try waiting one vsync interval
+                // before calling into drawRender instead of retrying.
+                // Although that might be wasteful? Also likely
+                // we don't need to call into drawRender() at all
+                // and should just reschedule if the call to super.draw()
+                // failed when reinited is true.
                 print("Retry on failure")
                 queue.async {self.display()}
             }
