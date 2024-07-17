@@ -1187,9 +1187,14 @@ void run_playloop(struct MPContext *mpctx)
     uint64_t update_demux_bef = mach_absolute_time();
 
     update_demuxer_properties(mpctx);
-
     handle_cursor_autohide(mpctx);
+
+    uint64_t update_autohide_aft = mach_absolute_time();
+
     handle_vo_events(mpctx);
+
+    uint64_t handle_vo_events_aft = mach_absolute_time();
+
     handle_command_updates(mpctx);
 
     if (mpctx->lavfi && mp_filter_has_failed(mpctx->lavfi))
@@ -1297,7 +1302,9 @@ void run_playloop(struct MPContext *mpctx)
     if (print_stats || 
         (!mpctx->paused && (handle_queued_seek_after - last_playloop_time)*mach_timebase_ratio*1e6 > 50000) ||
         (!mpctx->paused && rr > 0 && (handle_queued_seek_after > rr) && ((handle_queued_seek_after - rr) * mach_timebase_ratio * 1e6) > 20000)) {   
-         printf("\tUpdate demux time %f\n", (handle_command_update_after - update_demux_bef)*mach_timebase_ratio*1e6);   
+         printf("\tUpdate demux time %f\n", (update_autohide_aft - update_demux_bef)*mach_timebase_ratio*1e6);   
+         printf("\tHandle VO event time %f\n", (handle_vo_events_aft - update_autohide_aft)*mach_timebase_ratio*1e6);   
+         printf("\tHandle command update time %f\n", (handle_command_update_after - handle_vo_events_aft)*mach_timebase_ratio*1e6);   
          printf("\tFill audio out time %f\n", (fill_audio_out_after - handle_command_update_after)*mach_timebase_ratio*1e6);   
          printf("\tWrite video %f\n", (write_video_after - fill_audio_out_after)*mach_timebase_ratio*1e6);   
          printf("\t\tAfter output %f\n", (video_after_output_image - write_video_start)*mach_timebase_ratio*1e6);   
