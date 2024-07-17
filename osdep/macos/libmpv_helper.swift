@@ -147,7 +147,10 @@ class LibmpvHelper: LogHelper {
             // so only utilize a newly received FBO ID if it is nonzero.
             if (i == 0) {
                 print("WARNING: GOT ZERO FBO")
-                return false;
+                if (skip == 0) {
+                    print("WARNING: SKIPPING DRAW WITH FBO ZERO")
+                    return false
+                }
             }
             fbo = i != 0 ? i : fbo
 

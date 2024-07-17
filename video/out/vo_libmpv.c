@@ -646,6 +646,7 @@ static void flip_page(struct vo *vo)
     while (ctx->next_frame && !ctx->shutting_down) {
         if (pthread_cond_timedwait(&ctx->video_wait, &ctx->lock, &ts)) {
             if (ctx->next_frame) {
+                printf("mpv_render_context_render() not being called");
                 MP_VERBOSE(vo, "mpv_render_context_render() not being called "
                            "or stuck.\n");
                 goto done;

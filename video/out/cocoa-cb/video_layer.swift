@@ -281,33 +281,29 @@ class VideoLayer: CAOpenGLLayer {
         // Note that render initialized flag could have been
         // set by another thread here.
         if self.wantsUpdate && libmpv.renderInitialized {
-            // layer display() did not end up drawing, possibly because no display was ready
-            // or the window was occluded (see iina/issues/4822).
-            // No need to flush here since nothing was really drawn at all.
-            var failed = false
-            CGLLockContext(cglContext)
-            CGLSetCurrentContext(cglContext)
-            updateRenderParams()
-            if (!libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)) {
-                failed = true
-            }
-            CGLUnlockContext(cglContext)
-            // Note that we still need to keep proper vsync timing.
-            if (!failed) {
+            if (self.reinited) {
+                // After live-resize ends, the first draw call fails
+                // for some reason.
+                print("Retry on failure")
+                CGLLockContext(cglContext)
+                // This barrier is important here, since it is what allows us to
+                // wait until the layer is ready for display again.
+                CGLUnlockContext(cglContext)
+                queue.async {self.display()}
+            } else {
+                // layer display() did not end up drawing, possibly because no display was ready
+                // or the window was occluded (see iina/issues/4822).
+                // No need to flush here since nothing was really drawn at all.
+                CGLLockContext(cglContext)
+                CGLSetCurrentContext(cglContext)
+                updateRenderParams()
+                libmpv.drawRender(NSZeroSize, bufferDepth, cglContext, skip: true)
+                CGLUnlockContext(cglContext)
+                // Note that we still need to keep proper vsync timing.
                 libmpv.waitForSwap(skip: false)
                 libmpv.reportRenderFlush()
                 self.wantsUpdate = false
-            } else if (self.reinited) {
-                // TODO: Could possibly try waiting one vsync interval
-                // before calling into drawRender instead of retrying.
-                // Although that might be wasteful? Also likely
-                // we don't need to call into drawRender() at all
-                // and should just reschedule if the call to super.draw()
-                // failed when reinited is true.
-                print("Retry on failure")
-                queue.async {self.display()}
             }
-
         } else if !self.wantsUpdate && libmpv.renderInitialized {
             // We successfully drew a frame, and need to flush ourselves
             
