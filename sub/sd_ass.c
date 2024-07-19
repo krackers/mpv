@@ -287,6 +287,20 @@ static inline bool should_set_storage_size(bool converted, struct mp_subtitle_op
                        opts->ass_vsfilter_blur_compat);
 }
 
+// Calculate the height libass uses for scaling subtitle text size so --sub-scale-with-window
+// can undo this scale and use frame size instead. The algorithm used is the following:
+// - If use_margins is disabled, libass scales things with the video size
+// - If use_margins is enabled, libass scales things with the total frame (window) size
+static float get_libass_scale_height(struct mp_osd_res *dim, bool use_margins)
+{
+    float vidw = dim->w - (dim->ml + dim->mr);
+    float vidh = dim->h - (dim->mt + dim->mb);
+    if (!use_margins || vidw < 1.0)
+        return vidh;
+    else
+        return MPMIN(dim->h, dim->w / vidw * vidh);
+}
+
 static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
                           bool converted, ASS_Track *track)
 {
@@ -333,7 +347,7 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     }
     if (set_scale_with_window) {
         int vidh = dim->h - (dim->mt + dim->mb);
-        set_font_scale *= dim->h / (float)MPMAX(vidh, 1);
+        set_font_scale *= dim->h / MPMAX(get_libass_scale_height(dim, set_use_margins), 1);
     }
     if (!set_scale_by_window) {
         double factor = dim->h / 720.0;
