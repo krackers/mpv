@@ -220,7 +220,6 @@ const struct m_sub_options mp_subtitle_sub_opts = {
         OPT_FLAG("sub-ass-justify", ass_justify, 0),
         OPT_CHOICE("sub-ass-override", ass_style_override, 0,
                 ({"no", 0}, {"yes", 1}, {"force", 3}, {"scale", 4}, {"strip", 5})),
-        OPT_FLAG("sub-scale-by-window", sub_scale_by_window, 0),
         OPT_FLAG("sub-scale-with-window", sub_scale_with_window, 0),
         OPT_FLAG("sub-ass-scale-with-window", ass_scale_with_window, 0),
         OPT_SUBSTRUCT("sub", sub_style, sub_style_conf, 0),
@@ -234,7 +233,6 @@ const struct m_sub_options mp_subtitle_sub_opts = {
         .sub_pos = 100,
         .sub_speed = 1.0,
         .ass_enabled = 1,
-        .sub_scale_by_window = 1,
         .ass_use_margins = 0,
         .sub_use_margins = 1,
         .ass_scale_with_window = 0,
@@ -262,7 +260,6 @@ const struct m_sub_options mp_osd_render_sub_opts = {
         OPT_FLOATRANGE("osd-bar-h", osd_bar_h, 0, 0.1, 50),
         OPT_SUBSTRUCT("osd", osd_style, osd_style_conf, 0),
         OPT_FLOATRANGE("osd-scale", osd_scale, 0, 0, 100),
-        OPT_FLAG("osd-scale-by-window", osd_scale_by_window, 0),
         OPT_FLAG("force-rgba-osd-rendering", force_rgba_osd, 0),
         {0}
     },
@@ -272,7 +269,6 @@ const struct m_sub_options mp_osd_render_sub_opts = {
         .osd_bar_w = 75.0,
         .osd_bar_h = 3.125,
         .osd_scale = 1,
-        .osd_scale_by_window = 1,
     },
     .change_flags = UPDATE_OSD,
 };

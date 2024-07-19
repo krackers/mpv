@@ -80,7 +80,6 @@ struct mp_subtitle_opts {
     int stretch_image_subs;
     int image_subs_video_res;
     int sub_fix_timing;
-    int sub_scale_by_window;
     int sub_scale_with_window;
     int ass_scale_with_window;
     struct osd_style_opts *sub_style;
@@ -113,7 +112,6 @@ struct mp_osd_render_opts {
     float osd_bar_w;
     float osd_bar_h;
     float osd_scale;
-    int osd_scale_by_window;
     struct osd_style_opts *osd_style;
     int force_rgba_osd;
 };

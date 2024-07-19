@@ -243,9 +243,6 @@ static ASS_Style *prepare_osd_ass(struct osd_state *osd, struct osd_object *obj)
     font.font_size *= opts->osd_scale;
 
     double playresy = obj->ass.track->PlayResY;
-    // Compensate for libass and mp_ass_set_style scaling the font etc.
-    if (!opts->osd_scale_by_window)
-        playresy *= 720.0 / obj->vo_res.h;
 
     ASS_Style *style = get_style(&obj->ass, "OSD");
     mp_ass_set_style(style, playresy, &font);

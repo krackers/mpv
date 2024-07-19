@@ -317,7 +317,6 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     float set_font_scale = 1;
     int set_hinting = 0;
     bool set_scale_with_window = false;
-    bool set_scale_by_window = true;
 
     int set_force_flags = 0;
 
@@ -325,7 +324,6 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     if (converted || opts->ass_style_override == 3) { // 'force'
         set_scale_with_window = opts->sub_scale_with_window;
         set_use_margins = opts->sub_use_margins;
-        set_scale_by_window = opts->sub_scale_by_window;
 
         // For total override we override everything _except_
         // attribute events (italic/bold).
@@ -348,11 +346,6 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     if (set_scale_with_window) {
         int vidh = dim->h - (dim->mt + dim->mb);
         set_font_scale *= dim->h / MPMAX(get_libass_scale_height(dim, set_use_margins), 1);
-    }
-    if (!set_scale_by_window) {
-        double factor = dim->h / 720.0;
-        if (factor != 0.0)
-            set_font_scale /= factor;
     }
     ass_set_use_margins(priv, set_use_margins);
     ass_set_line_position(priv, set_sub_pos);
