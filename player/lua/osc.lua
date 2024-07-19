@@ -1948,6 +1948,8 @@ function osc_init()
     --do something with the elements
     prepare_elements()
 
+    --mouse show/hide area
+    set_show_hide_area()
 end
 
 
@@ -2050,6 +2052,7 @@ end
 
 function request_init()
     state.initREQ = true
+    request_tick()
 end
 
 function render_wipe()
@@ -2063,6 +2066,12 @@ function kill_animation()
     state.anitype =  nil
 end
 
+function set_show_hide_area()
+    for k,cords in pairs(osc_param.areas["showhide"]) do
+        set_virt_mouse_area(cords.x1, cords.y1, cords.x2, cords.y2, "showhide")
+    end
+end
+
 
 function render()
     msg.trace("rendering")
@@ -2074,8 +2083,7 @@ function render()
     if not (state.mp_screen_sizeX == current_screen_sizeX
         and state.mp_screen_sizeY == current_screen_sizeY) then
 
-        request_init()
-
+        state.initREQ = true
         state.mp_screen_sizeX = current_screen_sizeX
         state.mp_screen_sizeY = current_screen_sizeY
     end
@@ -2124,10 +2132,6 @@ function render()
         kill_animation()
     end
 
-    --mouse show/hide area
-    for k,cords in pairs(osc_param.areas["showhide"]) do
-        set_virt_mouse_area(cords.x1, cords.y1, cords.x2, cords.y2, "showhide")
-    end
     do_enable_keybindings()
 
     --mouse input area
@@ -2400,7 +2404,7 @@ mp.observe_property("idle-active", "bool",
 
 mp.observe_property("osd-width", "number",
     function(name, val)
-        request_tick()
+        request_init()
     end
 )
 

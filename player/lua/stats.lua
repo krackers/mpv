@@ -488,18 +488,7 @@ local function add_video(s)
         append_property(s, "hwdec-current", {prefix="(hwdec:", nl="", indent=" ",
                          no_prefix_markup=true, suffix=")"}, {no=true, [""]=true})
     end
-    append_property(s, "avsync", {prefix="A-V:"})
-    if append_property(s, compat("decoder-frame-drop-count"),
-                       {prefix="Dropped Frames:", suffix=" (decoder)"}) then
-        append_property(s, compat("frame-drop-count"), {suffix=" (output)", nl="", indent=""})
-    end
-    if append_property(s, "display-fps", {prefix="Display FPS:", suffix=" (specified)"}) then
-        append_property(s, "estimated-display-fps",
-                        {suffix=" (estimated)", nl="", indent=""})
-    else
-        append_property(s, "estimated-display-fps",
-                        {prefix="Display FPS:", suffix=" (estimated)"})
-    end
+
     if append_property(s, compat("container-fps"), {prefix="FPS:", suffix=" (specified)"}) then
         append_property(s, "estimated-vf-fps",
                         {suffix=" (estimated)", nl="", indent=""})
@@ -508,22 +497,30 @@ local function add_video(s)
                         {prefix="FPS:", suffix=" (estimated)"})
     end
 
-    append_display_sync(s)
-    append_perfdata(s, o.print_perfdata_passes)
-
-    if append(s, r["w"], {prefix="Native Resolution:"}) then
+    if append(s, r["w"], {prefix="Source Resolution:"}) then
         append(s, r["h"], {prefix="x", nl="", indent=" ", prefix_sep=" ", no_prefix_markup=true})
     end
-    if r["aspect"] then
-        append_property(s, "window-scale", {prefix="Window Scale:"})
-        append(s, format("%.2f", r["aspect"]), {prefix="Aspect Ratio:"})
-        append(s, r["pixelformat"], {prefix="Pixel Format:"})
+
+    local ml, mt, mr, mb = mp.get_osd_margins()
+    local scaled_width = mp.get_property_native("osd-width") - ml - mr
+    local scaled_height = mp.get_property_native("osd-height") - mt - mb
+    -- display_hidpi_scale = mp.get_property_native("display-hidpi-scale", 1.0)
+    if append(s, scaled_width, {prefix="Render Resolution:"}) then
+        append(s, scaled_height, {prefix="x", nl="", indent=" ", prefix_sep=" ", no_prefix_markup=true})
     end
+    local window_scale = (scaled_width / r["w"] + scaled_height / r["h"])/2
+    append(s, format("%.2f", window_scale),  {prefix="Window Scale:"})
+    -- append_property(s, "window-scale", {prefix="Window Scale:"})
+    if r["aspect"] then
+        append(s, format("%.2f", r["aspect"]), {prefix="Aspect Ratio:"})
+    end
+    append(s, r["hw-pixelformat"] or r["pixelformat"], {prefix="Pixel Format:"})
+    append(s, r["colorlevels"], {prefix="Levels:", nl=""})
     
     -- Group these together to save vertical space
     local prim = append(s, r["primaries"], {prefix="Primaries:"})
     local cmat = append(s, r["colormatrix"], {prefix="Colormatrix:", nl=prim and "" or o.nl})
-    append(s, r["colorlevels"], {prefix="Levels:", nl=cmat and "" or o.nl})
+    
 
     -- Append HDR metadata conditionally (only when present and interesting)
     local hdrpeak = r["sig-peak"] or 0
@@ -532,9 +529,38 @@ local function add_video(s)
         hdrinfo = " (HDR peak: " .. format("%.2f", hdrpeak) .. ")"
     end
 
-    append(s, r["gamma"], {prefix="Gamma:", suffix=hdrinfo})
+    append(s, r["gamma"], {prefix="Gamma:", suffix=hdrinfo, nl = cmat and "" or o.nl})
     append_property(s, "packet-video-bitrate", {prefix="Bitrate:", suffix=" kbps"})
     append_filters(s, "vf", "Filters:")
+end
+
+local function add_display_out(s)
+    local vo = mp.get_property_native("current-vo")
+    if not vo then
+        return
+    end
+    append(s, "", {prefix=o.nl .. o.nl .. "VO:", nl="", indent=""})
+    append(s, vo, {prefix_sep="", nl="", indent=""})
+    -- This doesn't seem to be set by default anyhow, and wastes a VOCTRL
+    -- local display_names = mp.get_property_osd("display-names")
+    -- if display_names ~= "Unknown" then
+    --     append(s, display_names, {prefix_sep="", prefix="(", suffix=")",
+    --                                      no_prefix_markup=true, nl="", indent=" "})
+    -- end
+    append_property(s, "avsync", {prefix="A-V:"})
+    if append_property(s, compat("decoder-frame-drop-count"),
+                       {prefix="Dropped Frames:", suffix=" (decoder)"}) then
+        append_property(s, compat("frame-drop-count"), {suffix=" (output)", nl="", indent=""})
+    end
+    if append_property(s, "display-fps", {prefix="Refresh Rate:", suffix=" (specified)"}) then
+        append_property(s, "estimated-display-fps",
+                        {suffix=" (estimated)", nl="", indent=""})
+    else
+        append_property(s, "estimated-display-fps",
+                        {prefix="Refresh Rate:", suffix=" (estimated)"})
+    end
+    append_display_sync(s)
+    append_perfdata(s, o.print_perfdata_passes)
 end
 
 
@@ -594,6 +620,7 @@ local function default_stats()
     eval_ass_formatting()
     add_header(stats)
     add_file(stats)
+    add_display_out(stats)
     add_video(stats)
     add_audio(stats)
     return table.concat(stats)

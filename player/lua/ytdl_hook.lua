@@ -311,8 +311,12 @@ local function valid_manifest(json)
         return false
     end
     local proto = reqfmt["protocol"] or json["protocol"] or ""
-    return (proto == "http_dash_segments" and has_native_dash_demuxer()) or
+    local is_valid = (proto == "http_dash_segments" and has_native_dash_demuxer()) or
         proto:find("^m3u8")
+    if is_valid then
+        msg.warn("Using manifest, protocol/format" .. proto .. " " .. reqfmt["format_id"])
+    end
+    return is_valid
 end
 
 local function add_single_video(json)
@@ -351,24 +355,26 @@ local function add_single_video(json)
     elseif reqfmts then
         -- msg.warn("Reqfmts " .. dump(reqfmts))
         for _, track in pairs(reqfmts) do
-            -- msg.warn("testing track" .. track.protocol .. " " .. track.format_id)
             local edl_track = nil
             edl_track = edl_track_joined(track.container, track.fragments,
                 track.protocol, json.is_live,
                 track.fragment_base_url)
             -- msg.warn("Got edl track" .. (edl_track or "nil"))
-            if not edl_track and (track.manifest_url or not url_is_safe(track.url)) then
+            if not edl_track and (not url_is_safe(track.url)) then
                 msg.error("No safe URL or supported fragmented stream available")
                 return
             end
             if track.vcodec and track.vcodec ~= "none" then
                 -- video track
                 streamurl = edl_track or track.url
+                msg.warn("Using url " .. streamurl)
+                msg.warn("Using video track " .. track.protocol .. " " .. track.format_id)
             elseif track.vcodec == "none" then
                 -- according to ytdl, if vcodec is None, it's audio
                 mp.commandv("audio-add",
                     edl_track or track.url, "auto",
                     track.format_note or "")
+                msg.warn("Using audio track " .. track.protocol .. " " .. track.format_id)
             end
         end
 
