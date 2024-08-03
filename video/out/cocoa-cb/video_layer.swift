@@ -121,6 +121,23 @@ class VideoLayer: CAOpenGLLayer {
         libmpv.setRenderUpdateCallback(updateCallback, context: self)
     }
 
+    // Called when backing properties (such as contentScale) changes
+    // e.g. when moving windows between screens.
+    // Note that because wantsUpdate is always false for this shadow layer
+    // it is never actually drawn to, but we still must implement it
+    // to satisfy AppKit.
+    override init(layer: Any) {
+        guard let oldLayer = layer as? VideoLayer else {
+            fatalError("init(layer: Any) passed an invalid layer")
+        }
+        cocoaCB = oldLayer.cocoaCB
+        surfaceSize = oldLayer.surfaceSize
+        cglPixelFormat = oldLayer.cglPixelFormat
+        cglContext = oldLayer.cglContext
+        super.init(layer: layer)
+        autoresizingMask = oldLayer.autoresizingMask
+    }
+
     func uninit(_ unregister: Bool = false) {
         let bef = (Double(mach_absolute_time()) * 125.0)/3.0
         // Mechanism to signal that it's ok to abandon in progress work
@@ -135,11 +152,6 @@ class VideoLayer: CAOpenGLLayer {
         }
         let aft = (Double(mach_absolute_time()) * 125.0)/3.0
         print(String(format: "UNINIT TIME %f\n", (aft - bef)/1e3))
-    }
-
-    // might be called for CALayer animations? Not sure...
-    override init(layer: Any) {
-        fatalError("init(layer:) has not been implemented")
     }
 
     required init?(coder: NSCoder) {
@@ -184,7 +196,7 @@ class VideoLayer: CAOpenGLLayer {
             self.isAsynchronous = inLiveResize
             self.reinited = true
         }
-        return cocoaCB.backendState == .initialized && self.wantsUpdate
+        return self.wantsUpdate && cocoaCB.backendState == .initialized
     }
 
     override func draw(inCGLContext ctx: CGLContextObj,
