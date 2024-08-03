@@ -311,22 +311,18 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
     ass_set_frame_size(priv, dim->w, dim->h);
     ass_set_margins(priv, dim->mt, dim->mb, dim->ml, dim->mr);
 
-
+    bool set_use_margins = false;
     int set_sub_pos = 0;
     float set_line_spacing = 0;
     float set_font_scale = 1;
     int set_hinting = 0;
-
-    bool set_use_margins = opts->ass_use_margins;
-    bool scale_to_window = opts->ass_scale_to_window;
-    bool scale_on_resize = true; // ASS always resizes by default.
+    bool set_scale_with_window = false;
 
     int set_force_flags = 0;
 
     // With forced overrides, apply the --sub-* specific options
     if (converted || opts->ass_style_override == 3) { // 'force'
-        scale_to_window = opts->sub_scale_to_window;
-        scale_on_resize = opts->sub_scale_on_resize;
+        set_scale_with_window = opts->sub_scale_with_window;
         set_use_margins = opts->sub_use_margins;
 
         // For total override we override everything _except_
@@ -337,24 +333,20 @@ static void configure_ass(struct sd *sd, struct mp_osd_res *dim,
                            ASS_OVERRIDE_BIT_BORDER | 
                            ASS_OVERRIDE_BIT_MARGINS |
                            ASS_OVERRIDE_BIT_FONT_SIZE;
+    } else {
+        set_scale_with_window = opts->ass_scale_with_window;
+        set_use_margins = opts->ass_use_margins;
     }
-
     if (converted || opts->ass_style_override) {
         set_sub_pos = 100 - opts->sub_pos;
         set_line_spacing = opts->ass_line_spacing;
         set_hinting = opts->ass_hinting;
         set_font_scale = opts->sub_scale;
     }
-    if (scale_to_window) {
+    if (set_scale_with_window) {
+        int vidh = dim->h - (dim->mt + dim->mb);
         set_font_scale *= dim->h / MPMAX(get_libass_scale_height(dim, set_use_margins), 1);
     }
-    if (!scale_on_resize) {
-        int vidh = dim->h - (dim->mt + dim->mb);
-        double factor = (scale_to_window ? dim->h : MPMAX(get_libass_scale_height(dim, set_use_margins), 1)) / 720.0;
-        if (factor != 0.0)
-            set_font_scale /= factor;
-    }
-
     ass_set_use_margins(priv, set_use_margins);
     ass_set_line_position(priv, set_sub_pos);
     ass_set_shaper(priv, opts->ass_shaper);

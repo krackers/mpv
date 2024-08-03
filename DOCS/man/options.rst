@@ -1667,12 +1667,11 @@ Subtitles
         This affects ASS subtitles as well, and may lead to incorrect subtitle
         rendering. Use with care, or use ``--sub-font-size`` instead.
 
-
-``--sub-scale-to-window=<default|force>``
-    Force subtitle font size to be scaled relative to the window. By default, libass normally scales
-    fonts with respect to the video size if ``--sub-use-margins`` is disabled, or with respect
-    to the window-fit-size if margins are enabled. (The window-fit size is not necessarily the window
-    size in the case aspect ratio of video differs from that of the frame).
+``--sub-scale-with-window=<yes|no>``
+    Force subtitle font size to be scaled relative to the window. Libass normally scales
+    fonts with respect to the video size when ``--sub-use-margins`` is disabled. When
+    ``--sub-use-margins`` is enabled, this option has no effect and fonts are always
+    scaled with repect to window size.
 
     Note that margins are unaffected by this option: they are with respect to the video-size
     or window-size, depending on the value of `--sub-use-margins`.
@@ -1686,18 +1685,8 @@ Subtitles
     Affects plain text subtitles only (or ASS if ``--sub-ass-override`` is set
     high enough).
 
-``--sub-scale-on-resize=<yes|no>``
-    Whether to scale subtitles with the window/video size (default: yes). If this is
-    disabled, changing the video or window size (depending on value of scale-to-window) won't
-    affect the subtitle font size. With this option disabled the value of scale-to-window
-    does not matter.
-
-    Affects plain text subtitles only (or ASS if ``--sub-ass-override`` is set
-    high enough).
-
-
-``--sub-ass-scale-to-window=<default|force>``
-    Like ``--sub-scale-to-window``, but affects subtitles in ASS format only.
+``--sub-ass-scale-with-window=<yes|no>``
+    Like ``--sub-scale-with-window``, but affects subtitles in ASS format only.
     Like ``--sub-scale``, this can break ASS subtitles.
 
     Default: no.
