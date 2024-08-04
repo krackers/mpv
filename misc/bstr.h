@@ -34,6 +34,7 @@ typedef struct bstr {
     unsigned char *start; // Note that this may not necessarily be null-terminated
                           // Unless guaranteed by the generating functions.
                           // Unsigned char is used since this can be used as a generic data-slice.
+                          // This may not necessarily be a valid talloc ptr.
     size_t len; // size (for strings, this does not include null-term)
                 // May be different from what is reported by strlen as slice may be of generic data.
 } bstr;
@@ -82,7 +83,8 @@ static inline bstr0 bstr_dupfrom0(void *talloc_ctx, const char *s)
 
 
 // Use an existing C-string as a bstr.
-// Be careful with memory management.
+// Be careful with memory management, as the resulting bstr is not
+// talloc managed.
 static inline struct bstr bstrof0(const char *s)
 {
     return (struct bstr){(unsigned char *)s, s ? strlen(s) : 0};
