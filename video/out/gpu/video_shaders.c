@@ -302,6 +302,7 @@ void pass_sample_bicubic_fast(struct gl_shader_cache *sc)
   A (A+B)/2 B
 
   See also github.com/haasn/libplacebo/commit/9979731e1d05fa501fab8d8d596649d184922bb4
+  and https://github.com/haasn/libplacebo/commit/c71bbe1cc86bee7d679af05120b67b44947a6ea2
 
   A sampler that is similar to nearest neighbour sampling, but tries to
     preserve pixel aspect ratios. This is mathematically equivalent to taking an
@@ -314,9 +315,18 @@ void pass_sample_bicubic_fast(struct gl_shader_cache *sc)
     a slightly crisper image. A value of `threshold == 0.5` makes this filter
     equivalent to regular nearest neighbour sampling.
 
-    NOTE: Supposedly this calculation is subtly incorrect (half-pixel off?)
-    https://github.com/haasn/libplacebo/commit/c71bbe1cc86bee7d679af05120b67b44947a6ea2
-    apparently fixes that (and it's also more clear how it works.)
+
+    The following Mathematica code can be used to simulate it:
+
+    outSize = 3; inSize = 2;
+    fract[x_] := x - Floor[x]
+    pixelCoord[num_, outSize_] := (num + 0.5)/outSize
+    fcoord[x_] := fract[x-0.5]
+
+    Table[
+        clamp[(fcoord[pixelNum[x, outSize]*inSize] - 0.5)*outSize/inSize + 0.5]
+        - fcoord[pixelNum[x, outSize]*inSize],
+        {x, 0, outSize - 1}]
 */
 void pass_sample_oversample(struct gl_shader_cache *sc, struct scaler *scaler,
                                    int w, int h)
@@ -326,27 +336,37 @@ void pass_sample_oversample(struct gl_shader_cache *sc, struct scaler *scaler,
     // otherwise we are sampling off of it (and where GL would normally do interpolation
     // if GL_LINEAR was set).
 
+    // Assume we have the input size as 2, and our output size is 3.
+    // The texture of width 2 will be sampled at (normalized) coordinates 1/6, 1/2, 5/6.
+    // (Or unnormalized coordinates 1/3, 1, 5/3)
+    // When doing the oversample, we intuitively expect that the center output pixel (sampled at 1/2)
+    // will be blended from the two nearing.
+
     GLSLF("{\n");
-    // round to nearest. {As far as I can tell this is done to make the math work out, see the following:}
-    GLSL(vec2 pos = pos - vec2(0.5) * pt;) 
+    // fcoord is 0 if we are sampling at a texel center. For the above example,
+    // fcoord is 0.5 for the middle sample since it is exactly in between two texels.
     GLSL(vec2 fcoord = fract(pos * size - vec2(0.5));)
-    // Determine the mixing coefficient vector
+    // Determine the mixing coefficient vector. Intuitively, if we are already
+    // sampling exactly on the border (in-between two texel centers)
+    // then we should stay there. Otherwise, the distance between the texel
+    // border and where we are sampling should be scaled by our ratio.
     gl_sc_uniform_vec2(sc, "output_size", (float[2]){w, h});
-    GLSL(vec2 coeff = fcoord * output_size/size;)
+    GLSL(vec2 coeff = (fcoord - vec2(0.5)) * output_size/size;)
+
+    // Based on the result from previous, determine the point we should
+    // ultimately sample at (0 being left texel, 1 being right texel).
+    // Note that this is also the key line that makes it a "nearest-neighbor" type algorithm.
+    GLSL(coeff = clamp(coeff + vec2(0.5), 0.0, 1.0);)
+
     float threshold = scaler->conf.kernel.params[0];
     threshold = isnan(threshold) ? 0.0 : threshold;
-    GLSLF("coeff = (coeff - %f) * 1.0/%f;\n", threshold, 1.0 - 2 * threshold);
-
-    // So this is basically the key line that makes it a "nearest-neighbor" type algorithm.
-    // Assume that we have 2 pixels we want to interpolate out to 11 pixels. (i.e. size = 2, output_size = 11).
-    // Now the ultimate formula we have for coeff is something like
-    // coeff = (((pixelNum + 0.5)/(11*2))*2 - 0.5) * 11/2     where pixelNum ranges from 1 to 11.
-    // Note that the extra division and multiplication by 2 is to take into account fact that when GL samples
-    // it does so off the texel centers: draw an image of a 2 pixels that is interpolated up to 3 pixels to see the locations
-    // at which GL samples.
-    // Now observe that when pixelNum = 6, we get coeff = 0.5, otherwise it's always <= 0 or >=1.
-    GLSL(coeff = clamp(coeff, 0.0, 1.0);)
-    // Compute the right blend of colors
+    if (threshold > 0) {
+        // Distance to texel border is always <= 0.5
+        threshold = MPMIN(threshold, 0.5f);
+        GLSLF("coeff = mix(coeff, vec2(0.0), lessThan(coeff, vec2(%f)));\n", threshold);
+        GLSLF("coeff = mix(coeff, vec2(1.0), greaterThan(coeff, vec2(1.0 - %f)));\n", 1.0 - 2 * threshold);
+    }
+    // Compute the right output blend of colors
     GLSL(color = texture(tex, pos + pt * (coeff - fcoord));)
     GLSLF("}\n");
 }
