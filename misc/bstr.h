@@ -73,6 +73,7 @@ static inline bstr0 bstrdup(void *talloc_ctx, struct bstr str)
 // Creates a bstr with the copy of the given null-terminated C string.
 static inline bstr0 bstr_dupfrom0(void *talloc_ctx, const char *s)
 {
+    // Don't use talloc_strndup since we don't want to mark as a string.
     struct bstr r = { NULL, 0 };
     if (!s)
         return r;
