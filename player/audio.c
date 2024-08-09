@@ -854,7 +854,9 @@ void fill_audio_out_buffers(struct MPContext *mpctx)
     int skip = 0;
     bool sync_known = get_sync_samples(mpctx, &skip);
     if (skip > 0) {
-        playsize = MPMIN(skip + 1, MPMAX(playsize, 2500)); // buffer extra data
+        // skip may not necessarily be larger than 2500.
+        playsize = MPMAX(playsize, 2500);   // buffer extra data if needed (to skip)
+        playsize = MPMIN(playsize, skip + 1); // buffer at most skip length
     } else if (skip < 0) {
         playsize = MPMAX(1, playsize + skip); // silence will be prepended
     }

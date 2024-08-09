@@ -137,7 +137,7 @@ static void mp_msg_av_log_callback(void *ptr, int level, const char *fmt,
             pos = snprintf(buffer, sizeof(buffer), "%s: ", prefix);
         log_print_prefix = fmt[strlen(fmt) - 1] == '\n';
 
-        pos = MPMIN(MPMAX(pos, 0), sizeof(buffer));
+        pos = MPCLAMP(pos, 0, sizeof(buffer));
         vsnprintf(buffer + pos, sizeof(buffer) - pos, fmt, vl);
 
         mp_msg(log, mp_level, "%s", buffer);

@@ -466,9 +466,10 @@ static int frames_needed(struct mp_scaletempo2 *p, double playback_rate)
 {
     int search_block_index =
         get_search_block_index(p, get_updated_time(p, playback_rate));
-    return MPMAX(0, MPMAX(
+    int frames = MPMAX(
         p->target_block_index + p->ola_window_size - p->input_buffer_frames,
-        search_block_index + p->search_block_size - p->input_buffer_frames));
+        search_block_index + p->search_block_size - p->input_buffer_frames);
+    return MPMAX(frames, 0);
 }
 
 static bool can_perform_wsola(struct mp_scaletempo2 *p, double playback_rate)

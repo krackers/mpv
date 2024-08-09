@@ -33,9 +33,41 @@
 #define MP_CONCAT_(a, b) a ## b
 #define MP_CONCAT(a, b) MP_CONCAT_(a, b)
 
-#define MPMAX(a, b) ((a) > (b) ? (a) : (b))
-#define MPMIN(a, b) ((a) > (b) ? (b) : (a))
-#define MPCLAMP(a, min, max) (((a) < (min)) ? (min) : (((a) > (max)) ? (max) : (a)))
+// Used to avoid warnings related to shadowing when nesting
+// statement expressions.
+#define MP_UNIQUE(prefix) MP_CONCAT(MP_CONCAT(_unq_, prefix), __COUNTER__)
+
+// See https://hackmd.io/@austinyhc/S11_I_gLs
+// and https://lwn.net/SubscriberLink/983965/3266dc25bf5c68d7/
+// and https://lwn.net/Articles/749064/
+// This is also similar to the macros that CoreFoundation defines. 
+#define _MPMAX(a, b, aa, bb) \
+    ({ __typeof__(a) aa = (a); \
+       __typeof__(b) bb = (b); \
+       aa > bb ? aa : bb; })
+
+#define MPMAX(a, b) \
+        _MPMAX(a, b, MP_UNIQUE(tmpa), MP_UNIQUE(tmpb))
+
+#define _MPMIN(a, b, aa, bb) \
+    ({ __typeof__(a) aa = (a); \
+       __typeof__(b) bb = (b); \
+       aa > bb ? bb : aa; })
+
+#define MPMIN(a, b) \
+        _MPMIN(a, b, MP_UNIQUE(tmpa), MP_UNIQUE(tmpb))
+
+// min must be <= max
+// Note that this is not strictly equivalent to
+// MPMIN(max, MPMAX(a, min)) since they differ in the case
+// where min > max and a < min. This one will return the
+// min, whereas the other will clamp to max.
+#define MPCLAMP(a, min, max) \
+    ({ __typeof__ (a) _a = (a); \
+       __typeof__ (min) _min = (min); \
+       __typeof__ (max) _max = (max); \
+      _a < _min ? _min : (_a > _max ? _max : _a); })
+
 #define MPSWAP(type, a, b) \
     do { type SWAP_tmp = b; b = a; a = SWAP_tmp; } while (0)
 #define MP_ARRAY_SIZE(s) (sizeof(s) / sizeof((s)[0]))

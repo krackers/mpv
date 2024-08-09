@@ -4073,7 +4073,7 @@ float gl_video_scale_ambient_lux(float lmin, float lmax,
     // clamp the result
     float max = MPMAX(rmax, rmin);
     float min = MPMIN(rmax, rmin);
-    return MPMAX(MPMIN(result, max), min);
+    return MPCLAMP(result, min, max);
 }
 
 void gl_video_set_ambient_lux(struct gl_video *p, int lux)

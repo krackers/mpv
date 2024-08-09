@@ -169,7 +169,9 @@ static bstr0 create_status_line(void *talloc_ctx, struct mp_log_root *root, bstr
         tmp++;
     }
 
-    size_t clear_lines = MPMIN(MPMAX(new_lines, old_lines), root->blank_lines);
+    // note that root->blank_lines is at least old_lines
+    size_t clear_lines = MPCLAMP(new_lines, old_lines, root->blank_lines);
+    
     bstr term_msg = {0};
     // clear the status line itself
     bstr_xappend0(talloc_ctx, &term_msg, "\r\033[K");
