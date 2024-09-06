@@ -115,7 +115,7 @@ char *ta_talloc_asprintf_append_buffer(char *s, const char *fmt, ...) TA_PRF(2, 
 // (i.e. p[cnt-1] is accessible)
 #define MP_TARRAY_RESERVE(ctx, p, cnt)       \
         do {                                 \
-            MP_TARRAY_GROW(ctx, p, cnt - 1); \
+            MP_TARRAY_GROW(ctx, p, (cnt) - 1); \
         } while (0)
 
 // Insert the last argument at p[at] (array p with count idxvar), basically:
