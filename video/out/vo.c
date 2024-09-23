@@ -967,11 +967,27 @@ bool vo_render_frame_external(struct vo *vo)
         if (vo->driver->get_vsync)
             vo->driver->get_vsync(vo, &vsync);
 
-        // Make up some crap if presentation feedback is missing.
-        if (vsync.last_queue_display_time < 0)
-            vsync.last_queue_display_time = mp_time_us();
-
         pthread_mutex_lock(&in->lock);
+        // Make up some crap if presentation feedback is missing.
+        if (vsync.last_queue_display_time < 0) {
+            // The display timestamp must always be monotonically increasing,
+            // and roughly spaced apart by the vsync interval
+            // When we don't have presentation feedback and just use the time after swap
+            // as the presentation time, if swap depth is greater than 1 then we
+            // could have back-to-back presents within a single vsync interval.
+            // Note that because we cannot assume about the underlying swapchain implementation
+            // we don't know whether the after vsync time is actually after the vsync or not
+            // so things might be off by 1 frame.
+            int64_t display_time = mp_time_us();
+            if (in->prev_vsync && in->vsync_interval > 1 &&
+                display_time <= (int64_t)(in->prev_vsync + 0.25 * in->vsync_interval))
+            {
+                MP_WARN(vo, "Correcting non-monotonic presentation time.");
+                display_time = (int64_t)(in->prev_vsync + in->vsync_interval);
+            }
+            vsync.last_queue_display_time = display_time;
+        }
+        
         in->dropped_frame = prev_drop_count < vo->in->drop_count;
         in->rendering = false;
 
