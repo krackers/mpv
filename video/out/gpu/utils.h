@@ -71,8 +71,6 @@ struct ra_buf_pool {
     struct ra_buf **buffers;
     int num_buffers;
     int index;
-
-    int initial_size;
 };
 
 void ra_buf_pool_uninit(struct ra *ra, struct ra_buf_pool *pool);

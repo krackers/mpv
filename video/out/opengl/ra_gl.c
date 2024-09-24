@@ -258,8 +258,6 @@ static struct ra_tex *gl_tex_create_blank(struct ra *ra,
     tex->params.initial_data = NULL;
     struct ra_tex_gl *tex_gl = tex->priv = talloc_zero(NULL, struct ra_tex_gl);
 
-    tex_gl->pbo.initial_size = ra->num_pbo_buffers;
-
     const struct gl_format *fmt = params->format->priv;
     tex_gl->internal_format = fmt->internal_format;
     tex_gl->format = fmt->format;
@@ -562,6 +560,18 @@ static void gl_buf_destroy(struct ra *ra, struct ra_buf *buf)
     talloc_free(buf);
 }
 
+
+static inline GLenum non_host_buf_hint(enum ra_buf_type type) {
+    GLenum hint = 0;
+    switch (type) {
+    case RA_BUF_TYPE_TEX_UPLOAD:     hint = GL_STREAM_DRAW; break;
+    case RA_BUF_TYPE_SHADER_STORAGE: hint = GL_STREAM_COPY; break;
+    case RA_BUF_TYPE_UNIFORM:        hint = GL_STATIC_DRAW; break;
+    default: abort();
+    }
+    return hint;
+}
+
 static struct ra_buf *gl_buf_create(struct ra *ra,
                                     const struct ra_buf_params *params)
 {
@@ -603,15 +613,7 @@ static struct ra_buf *gl_buf_create(struct ra *ra,
             buf = NULL;
         }
     } else {
-        GLenum hint;
-        switch (params->type) {
-        case RA_BUF_TYPE_TEX_UPLOAD:     hint = GL_STREAM_DRAW; break;
-        case RA_BUF_TYPE_SHADER_STORAGE: hint = GL_STREAM_COPY; break;
-        case RA_BUF_TYPE_UNIFORM:        hint = GL_STATIC_DRAW; break;
-        default: abort();
-        }
-
-        gl->BufferData(buf_gl->target, params->size, params->initial_data, hint);
+        gl->BufferData(buf_gl->target, params->size, params->initial_data, non_host_buf_hint(params->type));
     }
 
     gl->BindBuffer(buf_gl->target, 0);
@@ -626,7 +628,13 @@ static void gl_buf_update(struct ra *ra, struct ra_buf *buf, ptrdiff_t offset,
     assert(buf->params.host_mutable);
 
     gl->BindBuffer(buf_gl->target, buf_gl->buffer);
-    gl->BufferSubData(buf_gl->target, offset, size, data);
+    if (!buf->params.host_mapped && offset == 0 &&
+        size == buf->params.size && ra->num_pbo_buffers == 0)
+    {
+        gl->BufferData(buf_gl->target, size, data, non_host_buf_hint(buf->params.type));
+    } else {
+        gl->BufferSubData(buf_gl->target, offset, size, data);
+    }
     gl->BindBuffer(buf_gl->target, 0);
 }
 
