@@ -96,7 +96,10 @@ static OSStatus render_cb_lpcm(void *ctx, AudioUnitRenderActionFlags *aflags,
     // Note that in the case where returned samples != expected,
     // the calculated end latency is going to be wrong. This is probably
     // not worth fixing, since underflow is a transient condition
-    // and will correct itself once the underflow resolves.
+    // and will correct itself once the underflow resolves. Expected
+    // a/v diff would be 10ms (that's the # of full frames requested
+    // each callback, which depends on kAudioDevicePropertyBufferFrameSize
+    // I think).
     if (samples > 0) {
         for (int n = 0; n < buffer_list->mNumberBuffers; n++)
             buffer_list->mBuffers[n].mDataByteSize = samples * ao->sstride;
@@ -181,9 +184,6 @@ static int init(struct ao *ao)
     if (!reinit_device(ao))
         goto coreaudio_error;
 
-    if (!register_hotplug_cb(ao))
-        goto coreaudio_error;
-
     if (p->change_physical_format)
         init_physical_format(ao);
 
@@ -197,6 +197,11 @@ static int init(struct ao *ao)
         goto coreaudio_error;
 
     reinit_latency(ao);
+
+    // Register hotplug cb only after all other state initialized
+    // to avoid possible race condition on access.
+    if (!register_hotplug_cb(ao))
+        goto coreaudio_error;
 
     return CONTROL_OK;
 
@@ -381,6 +386,8 @@ static void start(struct ao *ao)
 static void uninit(struct ao *ao)
 {
     struct priv *p = ao->priv;
+    // Must do this first, to avoid callback referencing invalid ao.
+    unregister_hotplug_cb(ao);
     AudioOutputUnitStop(p->audio_unit);
     AudioUnitUninitialize(p->audio_unit);
     AudioComponentInstanceDispose(p->audio_unit);
@@ -391,27 +398,33 @@ static void uninit(struct ao *ao)
                               &p->original_asbd);
         CHECK_CA_WARN("could not restore physical stream format");
     }
-    unregister_hotplug_cb(ao);
 }
 
 static OSStatus hotplug_cb(AudioObjectID id, UInt32 naddr,
                            const AudioObjectPropertyAddress addr[],
                            void *ctx)
 {
+    // We're guaranteed that ao will still be valid,
+    // since hotplug uninit has a barrier to wait for outstanding callbacks.
+    //
+    // Note that this is not called from AO thread, and so any AO state
+    // modification is not permitted without proper synchronization.
+    // Callbacks might also be fired in parallel.
+    // Here we are careful to read only AO state that is unchanging.
     struct ao *ao = ctx;
     struct priv *p = ao->priv;
     if (p->audio_unit) {
-        MP_VERBOSE(ao, "Handling potential hotplug event for main AO...\n");
-        // Use audio unit being present as sign that it's the playback AO
-        reinit_device(ao);
-        if (p->change_physical_format)
-            init_physical_format(ao);
-        if (!ca_init_chmap(ao, p->device))
-            MP_WARN(ao, "Failed to set chmap on hotplug");
-        reinit_latency(ao);
+        AudioDeviceID reselectedDevice;
+        OSStatus err = ca_select_device(ao, ao->device, &reselectedDevice);
+        // Primary device may have changed, and we need to uninit things.
+        if (err != noErr || reselectedDevice != p->device) {
+            MP_VERBOSE(ao, "hotplug event for AO, detected device change...\n");
+            ao_request_reload(ao);
+        }
     } else {
         MP_VERBOSE(ao, "Handling potential hotplug event for hotplug dummy AO...\n");
         // Otherwise assume it's the dummy-AO created specifically to monitor hotplug
+        // This is thread-safe.
         ao_hotplug_event(ao);
     }
         
@@ -426,17 +439,42 @@ static uint32_t hotplug_properties[] = {
 
 static bool register_hotplug_cb(struct ao *ao)
 {
-    struct priv *p = ao->priv;
-
-    OSStatus err = noErr;
+    // The threading situation is a bit complicated...
+    // Prior to 10.6, callbacks were run on their own HAL managed thread.
+    // From 10.7 to Mojave-ish (stupid naming scheme), callbacks are run on the main
+    // thread by default unless another runloop was set using kAudioHardwarePropertyRunLoop.
+    // Unfortunately on 10.7 kAudioHardwarePropertyRunLoop is broken, but it seems to work on 10.8
+    // From probably Mojave+ kAudioHardwarePropertyRunLoop is just completely ignored and things
+    // are always run on their own HAL managed loop.
+    //
+    // Now usually this would not matter, but this has implications with regard to synchronization
+    // since after we de-register callbacks we want to be sure no callbacks are still running
+    // or queued to be run.
+    // On 10.9, AudioObjectRemovePropertyListener does _not_ synchronize with the main thread so one
+    // would have to manually dispatch_sync for the barrier. However,
+    // if the run-loop is changed to be HAL managed, then Remove does properly synchronize and block
+    // until anything ongoing is complete. To make matters worse apparently callbacks from the HAL managed
+    // thread can sometimes be in parallel. Nonetheless I verified that the synchronization
+    // does properly wait for all tasks.
+    //
+    // On Mojave+ since the separate thread is always used, there doesn't seem to be any issues.
+    // So for correctness we need to force the HAL runloop, which can be done by setting NULL.
+    CFRunLoopRef runLoop = NULL;
+    AudioObjectPropertyAddress addr = {
+        kAudioHardwarePropertyRunLoop,
+        kAudioObjectPropertyScopeGlobal,
+        kAudioObjectPropertyElementMaster
+    };
+    OSStatus err = AudioObjectSetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, sizeof(CFRunLoopRef), &runLoop);
+    CHECK_CA_WARN("Failed to set HAL notification run loop.");
     for (int i = 0; i < MP_ARRAY_SIZE(hotplug_properties); i++) {
-        AudioObjectPropertyAddress addr = {
+        // Note that same listener can be registered multiple times so long as user-data is different
+        // See https://lists.apple.com/archives/coreaudio-api/2010/Mar/msg00038.html
+        addr = (AudioObjectPropertyAddress) {
             hotplug_properties[i],
             kAudioObjectPropertyScopeGlobal,
             kAudioObjectPropertyElementMaster
         };
-        // Note that same listener can be registered multiple times so long as user-data is different
-        // See https://lists.apple.com/archives/coreaudio-api/2010/Mar/msg00038.html
         err = AudioObjectAddPropertyListener(
             kAudioObjectSystemObject, &addr, hotplug_cb, (void *)ao);
         if (err != noErr) {
@@ -464,6 +502,9 @@ static void unregister_hotplug_cb(struct ao *ao)
             kAudioObjectPropertyScopeGlobal,
             kAudioObjectPropertyElementMaster
         };
+        // Per previous comment, since we use a HAL managed run loop
+        // this properly synchronizes and blocks until all outstanding
+        // callbacks complete.
         err = AudioObjectRemovePropertyListener(
             kAudioObjectSystemObject, &addr, hotplug_cb, (void *)ao);
         if (err != noErr) {
