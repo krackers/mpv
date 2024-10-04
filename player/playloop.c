@@ -806,10 +806,11 @@ static void handle_vo_events(struct MPContext *mpctx)
     if (events & VO_EVENT_FULLSCREEN_STATE) {
         // The only purpose of this is to update the fullscreen flag on the
         // playloop side if it changes "from outside" on the VO.
-        int fs = mpctx->opts->vo->fullscreen;
+        int fs;
         vo_control(vo, VOCTRL_GET_FULLSCREEN, &fs);
-        m_config_set_option_raw_direct(mpctx->mconfig,
-            m_config_get_co(mpctx->mconfig, bstrof0("fullscreen")), &fs, 0);
+        mpctx->opts->vo->fullscreen = fs;
+        m_config_notify_change_opt_ptr(mpctx->mconfig,
+                                               &mpctx->opts->vo->fullscreen);
     }
 }
 

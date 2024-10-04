@@ -279,6 +279,7 @@ struct ao *ao_init_best(struct mpv_global *global,
 
     bool forced_dev = false;
     char *pref_ao, *pref_dev;
+    // TODO: Possibly allow order for preferred devices?
     split_ao_device(tmp, opts->audio_device, &pref_ao, &pref_dev);
     if (!ao_num && pref_ao) {
         // Reuse the autoselection code

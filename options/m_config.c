@@ -1329,6 +1329,7 @@ static void cache_destroy(void *p)
     m_config_cache_set_dispatch_change_cb(cache, NULL, NULL, NULL);
 }
 
+// TODO: Performance improvements from upstream mpv should be backported.
 struct m_config_cache *m_config_cache_alloc(void *ta_parent,
                                             struct mpv_global *global,
                                             const struct m_sub_options *group)
@@ -1534,6 +1535,7 @@ void *mp_get_config_group(void *ta_parent, struct mpv_global *global,
     return cache->opts;
 }
 
+// TODO: This should be removed since it's slow
 void mp_read_option_raw(struct mpv_global *global, const char *name,
                         const struct m_option_type *type, void *dst)
 {
@@ -1542,7 +1544,8 @@ void mp_read_option_raw(struct mpv_global *global, const char *name,
     assert(co);
     assert(co->shadow_offset >= 0);
     assert(co->opt->type == type);
-
+    // TODO: Despite the claim that this is thread-safe, it's clearly not
+    // since there is no mutex around the shadow data access.
     memset(dst, 0, co->opt->type->size);
     m_option_copy(co->opt, dst, shadow->data + co->shadow_offset);
 }

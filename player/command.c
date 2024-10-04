@@ -374,6 +374,8 @@ static char *format_delay(double time)
 // would be per-option change handlers instead.)
 // Note that the property-option bridge sidesteps this, as we'd get infinite
 // recursion.
+// TODO: Probably this should be removed like upstream, after we add in a mechanism
+// for option callbacks to hold the state of the previous option.
 int mp_on_set_option(void *ctx, struct m_config_option *co, void *data, int flags)
 {
     struct MPContext *mpctx = ctx;
