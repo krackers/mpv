@@ -480,6 +480,7 @@ class Window: NSWindow, NSWindowDelegate {
         cocoaCB.layer?.contentsScale = backingScaleFactor
     }
 
+    // This is also called for fs transition
     func windowWillStartLiveResize(_ notification: Notification) {
         cocoaCB.layer?.inLiveResize = true
     }

@@ -107,24 +107,27 @@
         [self setFrame:frame display:YES];
     }
 
-    if ([self.adapter wantsNativeFullscreen])
+    if ([self.adapter wantsNativeFullscreen]) {
         [super toggleFullScreen:sender];
-
-    if (![self.adapter isInFullScreenMode]) {
-        [self setToFullScreen];
     } else {
-        [self setToWindow];
+        if (![self.adapter isInFullScreenMode]) {
+            [self setToFullScreen];
+        } else {
+            [self setToWindow];
+        }
     }
+        
+
 }
 
 - (void)setToFullScreen
 {
-    [self setStyleMask:([self styleMask] | NSWindowStyleMaskFullScreen)];
     NSRect frame = [[self targetScreen] frame];
 
     if ([self.adapter wantsNativeFullscreen]) {
         [self setFrame:frame display:YES];
     } else {
+        [self setStyleMask:([self styleMask] | NSWindowStyleMaskFullScreen)];
         [NSApp setPresentationOptions:NSApplicationPresentationAutoHideMenuBar|
                                       NSApplicationPresentationAutoHideDock];
         [self setFrame:frame display:YES];
@@ -135,7 +138,6 @@
 
 - (void)setToWindow
 {
-    [self setStyleMask:([self styleMask] & ~NSWindowStyleMaskFullScreen)];
     NSRect frame = [self calculateWindowPositionForScreen:[self targetScreen]
                     withoutBounds:[[self targetScreen] isEqual:[self screen]]];
 
@@ -144,6 +146,7 @@
         [self setContentAspectRatio:_unfs_content_frame.size];
         [self setCenteredContentSize:_unfs_content_frame.size];
     } else {
+        [self setStyleMask:([self styleMask] & ~NSWindowStyleMaskFullScreen)];
         [NSApp setPresentationOptions:NSApplicationPresentationDefault];
         [self setFrame:frame display:YES];
         [self setContentAspectRatio:_unfs_content_frame.size];
@@ -170,10 +173,55 @@
         [super setFrame:frameRect display:flag];
 }
 
-// we still need to keep those around or it will use the standard animation
-- (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {}
+// TODO: Get this from variable
+#define TARGET_FS_DURATION 0
 
-- (void)window:(NSWindow *)window startCustomAnimationToExitFullScreenWithDuration:(NSTimeInterval)duration {}
+// we still need to keep those around or it will use the standard animation
+- (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {
+    if ([self targetScreen] == nil) {
+        return;
+    }
+    [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
+        context.duration = TARGET_FS_DURATION;
+        [[window animator] setFrame:[[self targetScreen] frame] display:YES];
+    } completionHandler:^{
+    }];
+}
+
+static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
+    CGFloat s = rTarget.size.width / r.size.width;
+    if (r.size.height * s > rTarget.size.height) {
+        s = rTarget.size.height / r.size.height;
+    }
+    
+    CGFloat w = r.size.width * s;
+    CGFloat h = r.size.height * s;
+    
+    return NSMakeRect(NSMidX(rTarget) - w/2, NSMidY(rTarget) - h/2, w, h);
+}
+
+- (void)window:(NSWindow *)window startCustomAnimationToExitFullScreenWithDuration:(NSTimeInterval)duration {
+    NSScreen *tScreen = [self targetScreen];
+    NSScreen *currentScreen = [self screen];
+
+    if (tScreen == nil || currentScreen == nil)
+        return;
+
+    [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
+    NSRect newFrame = [self calculateWindowPositionForScreen:tScreen withoutBounds:[tScreen isEqual: currentScreen]];
+    NSRect intermediateFrame = aspectFitRect(newFrame, currentScreen.frame);
+
+    [self setFrame:intermediateFrame display:YES];
+
+    [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+        context.duration = TARGET_FS_DURATION;
+        [[window animator] setFrame:newFrame display:YES];
+    } completionHandler:^{
+        [self setContentAspectRatio:_unfs_content_frame.size];
+        [self setCenteredContentSize:_unfs_content_frame.size];
+    }];
+}
 
 - (void)windowDidEnterFullScreen:(NSNotification *)notification
 {
