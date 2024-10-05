@@ -151,6 +151,7 @@ static bool init_audiounit(struct ao *ao, AudioStreamBasicDescription asbd);
 static void init_physical_format(struct ao *ao);
 static bool register_hotplug_cb(struct ao *ao);
 static void unregister_hotplug_cb(struct ao *ao);
+static void uninit(struct ao *ao);
 
 static bool reinit_device(struct ao *ao) {
     struct priv *p = ao->priv;
@@ -206,6 +207,7 @@ static int init(struct ao *ao)
     return CONTROL_OK;
 
 coreaudio_error:
+    uninit(ao);
     return CONTROL_ERROR;
 }
 
@@ -353,6 +355,7 @@ coreaudio_error_audiounit:
 coreaudio_error_component:
     AudioComponentInstanceDispose(p->audio_unit);
 coreaudio_error:
+    p->audio_unit = NULL;
     return false;
 }
 
@@ -388,9 +391,12 @@ static void uninit(struct ao *ao)
     struct priv *p = ao->priv;
     // Must do this first, to avoid callback referencing invalid ao.
     unregister_hotplug_cb(ao);
-    AudioOutputUnitStop(p->audio_unit);
-    AudioUnitUninitialize(p->audio_unit);
-    AudioComponentInstanceDispose(p->audio_unit);
+    if (p->audio_unit) {
+        AudioOutputUnitStop(p->audio_unit);
+        AudioUnitUninitialize(p->audio_unit);
+        AudioComponentInstanceDispose(p->audio_unit);
+        p->audio_unit = NULL;
+    }
 
     if (p->original_asbd.mFormatID) {
         OSStatus err = CA_SET(p->original_asbd_stream,
@@ -439,38 +445,13 @@ static uint32_t hotplug_properties[] = {
 
 static bool register_hotplug_cb(struct ao *ao)
 {
-    // The threading situation is a bit complicated...
-    // Prior to 10.6, callbacks were run on their own HAL managed thread.
-    // From 10.7 to Mojave-ish (stupid naming scheme), callbacks are run on the main
-    // thread by default unless another runloop was set using kAudioHardwarePropertyRunLoop.
-    // Unfortunately on 10.7 kAudioHardwarePropertyRunLoop is broken, but it seems to work on 10.8
-    // From probably Mojave+ kAudioHardwarePropertyRunLoop is just completely ignored and things
-    // are always run on their own HAL managed loop.
-    //
-    // Now usually this would not matter, but this has implications with regard to synchronization
-    // since after we de-register callbacks we want to be sure no callbacks are still running
-    // or queued to be run.
-    // On 10.9, AudioObjectRemovePropertyListener does _not_ synchronize with the main thread so one
-    // would have to manually dispatch_sync for the barrier. However,
-    // if the run-loop is changed to be HAL managed, then Remove does properly synchronize and block
-    // until anything ongoing is complete. To make matters worse apparently callbacks from the HAL managed
-    // thread can sometimes be in parallel. Nonetheless I verified that the synchronization
-    // does properly wait for all tasks.
-    //
-    // On Mojave+ since the separate thread is always used, there doesn't seem to be any issues.
-    // So for correctness we need to force the HAL runloop, which can be done by setting NULL.
-    CFRunLoopRef runLoop = NULL;
-    AudioObjectPropertyAddress addr = {
-        kAudioHardwarePropertyRunLoop,
-        kAudioObjectPropertyScopeGlobal,
-        kAudioObjectPropertyElementMaster
-    };
-    OSStatus err = AudioObjectSetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, sizeof(CFRunLoopRef), &runLoop);
-    CHECK_CA_WARN("Failed to set HAL notification run loop.");
+    OSStatus err = hal_runloop_init();
+    CHECK_CA_ERROR("Unable to initialize coreaudio hal callback loop.");
+
     for (int i = 0; i < MP_ARRAY_SIZE(hotplug_properties); i++) {
         // Note that same listener can be registered multiple times so long as user-data is different
         // See https://lists.apple.com/archives/coreaudio-api/2010/Mar/msg00038.html
-        addr = (AudioObjectPropertyAddress) {
+        AudioObjectPropertyAddress addr = {
             hotplug_properties[i],
             kAudioObjectPropertyScopeGlobal,
             kAudioObjectPropertyElementMaster
@@ -510,7 +491,7 @@ static void unregister_hotplug_cb(struct ao *ao)
         if (err != noErr) {
             char *c1 = mp_tag_str(hotplug_properties[i]);
             char *c2 = mp_tag_str(err);
-            MP_ERR(ao, "failed to set device listener %s (%s)", c1, c2);
+            MP_VERBOSE(ao, "failed to remove device listener %s (%s)", c1, c2);
         }
     }
 }
@@ -520,8 +501,10 @@ static void unregister_hotplug_cb(struct ao *ao)
 // is actually different from the one used for playing
 static int hotplug_init(struct ao *ao)
 {
-    if (!register_hotplug_cb(ao))
+    if (!register_hotplug_cb(ao)) {
+        unregister_hotplug_cb(ao);
         return -1;
+    }
 
     return 0;
 }

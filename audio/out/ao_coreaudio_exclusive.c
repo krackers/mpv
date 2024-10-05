@@ -133,6 +133,7 @@ static OSStatus enable_property_listener(struct ao *ao, bool enabled)
             status2 = AudioObjectRemovePropertyListener(
                 device, &addr, property_listener_cb, ao);
         }
+        // Return the last error encountered
         if (status == noErr)
             status = status2;
     }
@@ -278,6 +279,8 @@ coreaudio_error:
     return -1;
 }
 
+static void uninit(struct ao *ao);
+
 static int init(struct ao *ao)
 {
     struct priv *p = ao->priv;
@@ -331,7 +334,8 @@ static int init(struct ao *ao)
 
     // Even if changing the physical format fails, we can try using the current
     // virtual format.
-    ca_change_physical_format_sync(ao, p->stream, hwfmt);
+    if (!ca_change_physical_format_sync(ao, p->stream, hwfmt))
+        p->original_asbd = (AudioStreamBasicDescription){0};
 
     if (!ca_init_chmap(ao, p->device))
         goto coreaudio_error;
@@ -387,6 +391,9 @@ static int init(struct ao *ao)
     p->hw_latency_us = ca_get_device_latency_us(ao, p->device);
     MP_VERBOSE(ao, "base latency: %d microseconds\n", (int)p->hw_latency_us);
 
+    err = hal_runloop_init();
+    CHECK_CA_ERROR("Unable to initialize coreaudio hal callback loop.");
+
     err = enable_property_listener(ao, true);
     CHECK_CA_ERROR("cannot install format change listener during init");
 
@@ -399,10 +406,7 @@ static int init(struct ao *ao)
     return CONTROL_TRUE;
 
 coreaudio_error:
-    err = enable_property_listener(ao, false);
-    CHECK_CA_WARN("can't remove format change listener");
-    err = ca_unlock_device(p->device, &p->hog_pid);
-    CHECK_CA_WARN("can't release hog mode");
+    uninit(ao);
 coreaudio_error_nounlock:
     return CONTROL_ERROR;
 }
@@ -415,14 +419,21 @@ static void uninit(struct ao *ao)
     err = enable_property_listener(ao, false);
     CHECK_CA_WARN("can't remove device listener, this may cause a crash");
 
-    err = AudioDeviceStop(p->device, p->render_cb);
-    CHECK_CA_WARN("failed to stop audio device");
+    if (p->render_cb) {
+        err = AudioDeviceStop(p->device, p->render_cb);
+        CHECK_CA_WARN("failed to stop audio device");
 
-    err = AudioDeviceDestroyIOProcID(p->device, p->render_cb);
-    CHECK_CA_WARN("failed to remove device render callback");
+        err = AudioDeviceDestroyIOProcID(p->device, p->render_cb);
+        CHECK_CA_WARN("failed to remove device render callback");
+        p->render_cb = NULL;
+    }
 
-    if (!ca_change_physical_format_sync(ao, p->stream, p->original_asbd))
-        MP_WARN(ao, "can't revert to original device format\n");
+    if (p->original_asbd.mFormatID) {
+        err = CA_SET(p->stream,
+                     kAudioStreamPropertyPhysicalFormat,
+                     &p->original_asbd);
+        CHECK_CA_WARN("could not restore physical stream format");
+    }
 
     err = ca_enable_mixing(ao, p->device, p->changed_mixing);
     CHECK_CA_WARN("can't re-enable mixing");

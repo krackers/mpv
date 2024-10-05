@@ -78,6 +78,7 @@ OSStatus ca_enable_mixing(struct ao *ao, AudioDeviceID device, bool changed);
 int64_t ca_get_device_latency_us(struct ao *ao, AudioDeviceID device);
 bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
                                     AudioStreamBasicDescription change_format);
+OSStatus hal_runloop_init(void);
 #endif
 
 #endif /* MPV_COREAUDIO_UTILS_H */

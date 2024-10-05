@@ -481,13 +481,15 @@ bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
 
     ca_print_asbd(ao, "format in use before switching:", &prev_format);
 
+    err = hal_runloop_init();
+    CHECK_CA_ERROR("Unable to initialize coreaudio hal callback loop.");
+
     /* Install the callback. */
     AudioObjectPropertyAddress p_addr = {
         .mSelector = kAudioStreamPropertyPhysicalFormat,
         .mScope    = kAudioObjectPropertyScopeGlobal,
         .mElement  = kAudioObjectPropertyElementMaster,
     };
-
     err = AudioObjectAddPropertyListener(stream, &p_addr,
                                          ca_change_format_listener,
                                          &wakeup);
@@ -535,4 +537,40 @@ coreaudio_error:
     sem_destroy(&wakeup);
     return format_set;
 }
+
+OSStatus hal_runloop_init(void) {
+    // The threading situation is a bit complicated...
+    // Prior to 10.6, callbacks were run on their own HAL managed thread.
+    // From 10.7 to Mojave-ish (stupid naming scheme), callbacks are run on the main
+    // thread by default unless another runloop was set using kAudioHardwarePropertyRunLoop.
+    // Unfortunately on 10.7 kAudioHardwarePropertyRunLoop is broken, but it seems to work on 10.8
+    // From probably Mojave+ kAudioHardwarePropertyRunLoop is just completely ignored and things
+    // are always run on their own HAL managed loop.
+    //
+    // Now usually this would not matter, but this has implications with regard to synchronization
+    // since after we de-register callbacks we want to be sure no callbacks are still running
+    // or queued to be run.
+    // On 10.9, AudioObjectRemovePropertyListener does _not_ synchronize with the main thread so one
+    // would have to manually dispatch_sync for the barrier. However,
+    // if the run-loop is changed to be HAL managed, then Remove does properly synchronize and block
+    // until anything ongoing is complete. To make matters worse apparently callbacks from the HAL managed
+    // thread can sometimes be in parallel. Nonetheless I verified that the synchronization
+    // does properly wait for all tasks.
+    //
+    // On Mojave+ since the separate thread is always used, there doesn't seem to be any issues.
+    // So for correctness we need to force the HAL runloop, which can be done by setting NULL.
+    static dispatch_once_t onceToken = 0;
+    static OSStatus err = noErr; 
+    dispatch_once(&onceToken, ^{
+        CFRunLoopRef runLoop = NULL;
+        AudioObjectPropertyAddress addr = {
+            kAudioHardwarePropertyRunLoop,
+            kAudioObjectPropertyScopeGlobal,
+            kAudioObjectPropertyElementMaster
+        };
+        err = AudioObjectSetPropertyData(kAudioObjectSystemObject, &addr, 0, NULL, sizeof(CFRunLoopRef), &runLoop);
+    });
+    return err;
+}
+
 #endif
