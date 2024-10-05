@@ -25,6 +25,20 @@
 
 #include "osdep/io.h"
 
+// OSX lacks posix unnamed semaphores. We reimplement them in a manner
+// that provides async-signal safeness. Note that GCD semaphores are faster
+// but not AS-safe. We could use mach semaphores, though it's not clear
+// how the performance of that compares to the self-pipe here (both require
+// a syscall.)
+// 
+// Guarantees around memory-visibilty are a bit subtle. Normal semaphores have acq/
+// rel semantics as you expect. But do happens-before relations on the IO domain (read/write)
+// imply anything about visibility of memory writes? There is no such formal model
+// bridging the two. POSIX does state that a read that happens-after a write (in any provable
+// manner) is guaranteed to read that write. This obviously implies that memory-signaling
+// is sufficient to establish a happens-before relation in the IO domain, bridging the two
+// in some fashion. And in practice kernels probably have some sort of barrier
+// here since you can read/write to the same socket or fd concurrently.
 int mp_sem_init(mp_sem_t *sem, int pshared, unsigned int value)
 {
     if (pshared) {

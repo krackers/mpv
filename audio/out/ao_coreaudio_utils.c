@@ -499,11 +499,14 @@ bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
     err = CA_SET(stream, kAudioStreamPropertyPhysicalFormat, &change_format);
     CHECK_CA_WARN("error changing physical format");
 
-    /* The AudioStreamSetProperty is not only asynchronous,
-     * it is also not Atomic, in its behaviour. */
-    struct timespec timeout = mp_rel_time_to_timespec(2.0);
+    /* The AudioStreamSetProperty is not only asynchronous (requiring semaphore),
+     * it is also not Atomic, in its behaviour (so we check multiple times
+     * before giving up).
+     */
+    int num_poll = 4;
     AudioStreamBasicDescription actual_format = {0};
-    while (1) {
+    for (int i = 1; i <= num_poll; i++) {
+        struct timespec timeout = mp_rel_time_to_timespec(0.5);
         err = CA_GET(stream, kAudioStreamPropertyPhysicalFormat, &actual_format);
         if (!CHECK_CA_WARN("could not retrieve physical format"))
             break;
@@ -512,9 +515,13 @@ bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
         if (format_set)
             break;
 
-        if (sem_timedwait(&wakeup, &timeout)) {
-            MP_VERBOSE(ao, "reached timeout\n");
-            break;
+        // Note that we use a semaphore here instead of cond-var
+        // for simplicity to avoid locks on the callback side.
+        // While using a dedicated short-scoped mutex just for
+        // the signaling should be safe, it's just strictly better
+        // to avoid any locking if possible to avoid deadlock.
+        if (sem_timedwait(&wakeup, &timeout) && i == num_poll ) {
+            MP_VERBOSE(ao, "physical format poll timeout\n");
         }
     }
 
