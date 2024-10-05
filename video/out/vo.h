@@ -83,12 +83,23 @@ enum mp_voctrl {
     VOCTRL_UNINIT,
     VOCTRL_RECONFIG,
 
+    // Because full-screen state can change from
+    // outside the VO, need both get/set variants
+    // to maintain synchronization between opt and
+    // external state. If option cache could be written
+    // to, we could avoid these voctrl.
+    VOCTRL_GET_FULLSCREEN,
     VOCTRL_FULLSCREEN,
+
+    // These could technically be property-listeners
+    // but that would require all VOs to allocate an mp_client
     VOCTRL_ONTOP,
     VOCTRL_BORDER,
     VOCTRL_ALL_WORKSPACES,
 
-    VOCTRL_GET_FULLSCREEN,
+    // If option cache could be written to, we could avoid
+    // these voctrl
+    VOCTRL_GET_WIN_STATE,               // int* (VO_WIN_STATE_* flags)
 
     VOCTRL_UPDATE_WINDOW_TITLE,         // char*
     VOCTRL_UPDATE_PLAYBACK_STATE,       // struct voctrl_playback_state*
@@ -104,8 +115,6 @@ enum mp_voctrl {
     // these must access the not-fullscreened window size only).
     VOCTRL_GET_UNFS_WINDOW_SIZE,        // int[2] (w/h)
     VOCTRL_SET_UNFS_WINDOW_SIZE,        // int[2] (w/h)
-
-    VOCTRL_GET_WIN_STATE,               // int* (VO_WIN_STATE_* flags)
 
     // char *** (NULL terminated array compatible with CONF_TYPE_STRING_LIST)
     // names for displays the window is on
