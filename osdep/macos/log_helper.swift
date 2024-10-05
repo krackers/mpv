@@ -42,7 +42,9 @@ class LogHelper: NSObject {
     }
 
     func send(message msg: String, type t: Int) {
-        let args: [CVarArg] = [ (msg as NSString).utf8String ?? "NO MESSAGE"]
-        mp_msg_va(log, Int32(t), "%s\n", getVaList(args))
+        if (log != nil) {
+            let args: [CVarArg] = [ (msg as NSString).utf8String ?? "NO MESSAGE"]
+            mp_msg_va(log, Int32(t), "%s\n", getVaList(args))   
+        }
     }
 }
