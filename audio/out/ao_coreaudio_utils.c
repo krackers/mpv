@@ -500,13 +500,15 @@ bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
     CHECK_CA_WARN("error changing physical format");
 
     /* The AudioStreamSetProperty is not only asynchronous (requiring semaphore),
-     * it is also not Atomic, in its behaviour (so we check multiple times
-     * before giving up).
+     * it is also not atomic in its behaviour (it can take a long time, and callback
+     * being fired doesn't necessarily mean it's reflected in new property query or
+     * vice-versa). So we check multiple times before giving up.
      */
-    int num_poll = 4;
+    int timeout_retries = 4;
+    double wait_time = 0.5;
     AudioStreamBasicDescription actual_format = {0};
-    for (int i = 1; i <= num_poll; i++) {
-        struct timespec timeout = mp_rel_time_to_timespec(0.5);
+    for (int i = 0; i <= timeout_retries; i++) {
+        // Fast-path by querying format if it's already switched, to avoid wait.
         err = CA_GET(stream, kAudioStreamPropertyPhysicalFormat, &actual_format);
         if (!CHECK_CA_WARN("could not retrieve physical format"))
             break;
@@ -514,14 +516,28 @@ bool ca_change_physical_format_sync(struct ao *ao, AudioStreamID stream,
         format_set = ca_asbd_equals(&change_format, &actual_format);
         if (format_set)
             break;
+        // Don't wait again if we reached the limit. Note that
+        // we check here (instead of checking after timed-wait)
+        // with # of loop iterations one more than timeout_retries
+        // so that we always exit after a format has been queried.
+        // (otherwise waiting then exiting is wasted time.)
+        if (i == timeout_retries) {
+            MP_VERBOSE(ao, "physical format poll timeout\n");
+            break;
+        }
 
+        struct timespec timeout = mp_rel_time_to_timespec(wait_time);
         // Note that we use a semaphore here instead of cond-var
         // for simplicity to avoid locks on the callback side.
         // While using a dedicated short-scoped mutex just for
         // the signaling should be safe, it's just strictly better
         // to avoid any locking if possible to avoid deadlock.
-        if (sem_timedwait(&wakeup, &timeout) && i == num_poll ) {
-            MP_VERBOSE(ao, "physical format poll timeout\n");
+        if (sem_timedwait(&wakeup, &timeout)) {
+            // On iterations after the first, either we timed out (and so
+            // retry by waiting the full duration until signal) or
+            // the callback already fired (and won't be called again)
+            // and so we expect the property change to be imminent.
+            wait_time = 0.01;
         }
     }
 
