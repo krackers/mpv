@@ -646,6 +646,9 @@ static void create_ui(struct vo *vo, struct mp_rect *win, int geo_flags)
 
     [s->view addSubview:s->video];
     [s->nsgl_ctx setView:s->video];
+    (s->video).layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
+    (s->video).layerContentsRedrawPolicy = NSViewLayerContentsRedrawNever;
+
     [s->video release];
 
     s->video.adapter = adapter;

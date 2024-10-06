@@ -58,8 +58,10 @@
                                   backing:buffering_type
                                     defer:flag
                                    screen:screen]) {
+        // Also makes the titlebar white
         [self setBackgroundColor:[NSColor whiteColor]];
-        [self setMinSize:NSMakeSize(50,50)];
+
+        [self setMinSize:NSMakeSize(100,100)];
         [self setCollectionBehavior: NSWindowCollectionBehaviorFullScreenPrimary];
 
         self.targetScreen = screen;
@@ -182,8 +184,9 @@
         return;
     }
     [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
+    [self setBackgroundColor:[NSColor blackColor]];
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
-        context.duration = TARGET_FS_DURATION;
+        context.duration = TARGET_FS_DURATION / 1000.0;
         [[window animator] setFrame:[[self targetScreen] frame] display:YES];
     } completionHandler:^{
     }];
@@ -209,17 +212,23 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
         return;
 
     [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
-    NSRect newFrame = [self calculateWindowPositionForScreen:tScreen withoutBounds:[tScreen isEqual: currentScreen]];
-    NSRect intermediateFrame = aspectFitRect(newFrame, currentScreen.frame);
+    
 
+    NSRect newFrame = [self calculateWindowPositionForScreen:tScreen withoutBounds:[tScreen isEqual: currentScreen]];
+    
+    // TODO: Something about this is a bit off, the resulting frame mismatches
+    // with what it should be causing temporary black bar. Maybe it's because
+    // of difference in drawing (push vs pull).
+    NSRect intermediateFrame = aspectFitRect(newFrame, currentScreen.frame);
     [self setFrame:intermediateFrame display:YES];
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
-        context.duration = TARGET_FS_DURATION;
+        context.duration = TARGET_FS_DURATION / 1000.0;
         [[window animator] setFrame:newFrame display:YES];
     } completionHandler:^{
         [self setContentAspectRatio:_unfs_content_frame.size];
         [self setCenteredContentSize:_unfs_content_frame.size];
+        [self setBackgroundColor:[NSColor whiteColor]];
     }];
 }
 
