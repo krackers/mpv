@@ -176,7 +176,7 @@
 }
 
 // TODO: Get this from variable
-#define TARGET_FS_DURATION 0
+#define TARGET_FS_DURATION 500
 
 // we still need to keep those around or it will use the standard animation
 - (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {
@@ -214,12 +214,16 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
     [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
     
 
-    NSRect newFrame = [self calculateWindowPositionForScreen:tScreen withoutBounds:[tScreen isEqual: currentScreen]];
+    NSRect newFrame = [self calculateWindowPositionForScreen:tScreen
+                            withoutBounds:[tScreen isEqual: currentScreen]];
     
     // TODO: Something about this is a bit off, the resulting frame mismatches
     // with what it should be causing temporary black bar. Maybe it's because
     // of difference in drawing (push vs pull).
-    NSRect intermediateFrame = aspectFitRect(newFrame, currentScreen.frame);
+    NSRect intermediateFrame = [self frameRectForContentRect:
+                                        aspectFitRect(
+                                            [self contentRectForFrameRect: newFrame],
+                                            [self contentRectForFrameRect: currentScreen.frame])];
     [self setFrame:intermediateFrame display:YES];
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
