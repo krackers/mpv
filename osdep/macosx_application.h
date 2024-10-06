@@ -21,14 +21,20 @@
 #include "osdep/macosx_menubar.h"
 #include "options/m_option.h"
 
+extern const struct m_sub_options macos_conf;
 
+// All options here should be generic enough
+// for both cocoa-cb and cocoa-gl (in theory at least).
+// Create a separate file for options highly specific to cocoa-cb only.
 struct macos_opts {
     int macos_title_bar_style;
     int macos_title_bar_appearance;
     int macos_title_bar_material;
     struct m_color macos_title_bar_color;
+
     int macos_fs_animation_duration;
     int macos_force_dedicated_gpu;
+
     int cocoa_cb_sw_renderer;
     int cocoa_cb_10bit_context;
 };

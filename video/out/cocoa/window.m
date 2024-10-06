@@ -21,7 +21,7 @@
 
 #include "osdep/macosx_events.h"
 #include "osdep/macosx_compat.h"
-#include "video/out/cocoa_common.h"
+#include "osdep/macosx_application.h"
 
 #include "window.h"
 
@@ -175,8 +175,14 @@
         [super setFrame:frameRect display:flag];
 }
 
-// TODO: Get this from variable
-#define TARGET_FS_DURATION 500
+- (NSTimeInterval) adjustFullscreenDuration: (NSTimeInterval) def {
+    struct macos_opts *opts  = self.adapter.opts;
+    if (opts->macos_fs_animation_duration < 0) {
+        return def;
+    } else {
+        return opts->macos_fs_animation_duration/1000.0;
+    }
+}
 
 // we still need to keep those around or it will use the standard animation
 - (void)window:(NSWindow *)window startCustomAnimationToEnterFullScreenWithDuration:(NSTimeInterval)duration {
@@ -186,7 +192,7 @@
     [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
     [self setBackgroundColor:[NSColor blackColor]];
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
-        context.duration = TARGET_FS_DURATION / 1000.0;
+        context.duration = [self adjustFullscreenDuration: duration];
         [[window animator] setFrame:[[self targetScreen] frame] display:YES];
     } completionHandler:^{
     }];
@@ -227,7 +233,7 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
     [self setFrame:intermediateFrame display:YES];
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
-        context.duration = TARGET_FS_DURATION / 1000.0;
+        context.duration = [self adjustFullscreenDuration: duration];
         [[window animator] setFrame:newFrame display:YES];
     } completionHandler:^{
         [self setContentAspectRatio:_unfs_content_frame.size];

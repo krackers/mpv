@@ -37,7 +37,7 @@ class MPVHelper {
         guard let app = NSApp as? Application,
               let macOptPtr = mp_get_config_group(vo,
                                             vo.pointee.global,
-                                            app.getMacOSConf()) else
+                                            macos_conf_ptr) else
         {
             log.sendError("macOS config group couldn't be retrieved'")
             exit(1)

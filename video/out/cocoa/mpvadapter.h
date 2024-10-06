@@ -36,5 +36,5 @@
 - (BOOL)mouseEnabled;
 
 - (NSScreen *)getTargetScreen;
-@property(nonatomic, assign) struct vo *vout;
+- (struct macos_opts *)opts;
 @end

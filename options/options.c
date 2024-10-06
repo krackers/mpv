@@ -734,12 +734,12 @@ const m_option_t mp_opts[] = {
     OPT_SUBSTRUCT("", angle_opts, angle_conf, 0),
 #endif
 
-#if HAVE_GL_COCOA
-    OPT_SUBSTRUCT("", cocoa_opts, cocoa_conf, 0),
+#if HAVE_MACOS_COCOA_CB || HAVE_GL_COCOA
+    OPT_SUBSTRUCT("", macos_opts, macos_conf, 0),
 #endif
 
-#if HAVE_MACOS_COCOA_CB
-    OPT_SUBSTRUCT("", macos_opts, macos_conf, 0),
+#if HAVE_GL_COCOA
+    OPT_SUBSTRUCT("", cocoa_gl_opts, cocoa_conf, 0),
 #endif
 
 #if HAVE_ANDROID

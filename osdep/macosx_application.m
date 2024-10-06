@@ -184,11 +184,6 @@ static const char macosx_icon[] =
 #endif
 }
 
-- (const struct m_sub_options *)getMacOSConf
-{
-    return &macos_conf;
-}
-
 - (void)queueCommand:(char *)cmd
 {
     [_eventsResponder queueCommand:cmd];

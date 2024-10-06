@@ -42,6 +42,7 @@
 #include "osdep/macosx_application_objc.h"
 
 #include "options/options.h"
+#include "options/m_config.h"
 #include "win_state.h"
 
 #include "input/input.h"
@@ -56,6 +57,19 @@ static int vo_cocoa_fullscreen(struct vo *vo);
 static void cocoa_add_screen_reconfiguration_observer(struct vo *vo);
 static void cocoa_rm_screen_reconfiguration_observer(struct vo *vo);
 
+// Options specific to the cocoa-gl backend
+#define OPT_BASE_STRUCT struct cocoa_gl_opts
+const struct m_sub_options cocoa_conf = {
+    .opts = (const struct m_option[]) {
+        {0}
+    },
+    .size = sizeof(struct cocoa_gl_opts),
+};
+
+@interface MpvCocoaAdapter ()
+@property(nonatomic, assign) struct vo *vout;
+@end
+
 struct vo_cocoa_state {
     // --- The following members can be accessed only by the main thread (i.e.
     //     where Cocoa runs), or if the main thread is fully blocked.
@@ -64,6 +78,9 @@ struct vo_cocoa_state {
     NSView *view;
     MpvVideoView *video;
     MpvCocoaAdapter *adapter;
+
+    struct cocoa_gl_opts *opts;
+    struct macos_opts *macopts;
 
     CGLContextObj cgl_ctx;
     NSOpenGLContext *nsgl_ctx;
@@ -130,6 +147,7 @@ struct vo_cocoa_state {
 
     int swap_interval;
 };
+
 
 static void run_on_main_thread(struct vo *vo, void(^block)(void))
 {
@@ -381,6 +399,10 @@ static void cocoa_rm_event_monitor(struct vo *vo)
     [NSEvent removeMonitor:vo->cocoa->event_monitor_mouseup];
 }
 
+struct macos_opts *vo_cocoa_get_opts(struct vo *vo) {
+    return vo->cocoa->macopts;
+}
+
 void vo_cocoa_init(struct vo *vo)
 {
     struct vo_cocoa_state *s = talloc_zero(NULL, struct vo_cocoa_state);
@@ -393,6 +415,9 @@ void vo_cocoa_init(struct vo *vo)
         .force_displaylink_sync = false,
         .fullscreen = 0,
     };
+    s->opts = mp_get_config_group(vo, vo->global, &cocoa_conf);
+    s->macopts = mp_get_config_group(vo, vo->global, &macos_conf);
+
     pthread_mutex_init(&s->lock, NULL);
     pthread_mutex_init(&s->sync_lock, NULL);
     pthread_cond_init(&s->sync_wakeup, NULL);
@@ -1072,6 +1097,10 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 
 @implementation MpvCocoaAdapter
 @synthesize vout = _video_output;
+
+- (struct macos_opts *)opts {
+    return self.vout->cocoa->macopts;
+}
 
 - (BOOL)keyboardEnabled
 {

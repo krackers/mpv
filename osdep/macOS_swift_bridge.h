@@ -62,3 +62,4 @@ static void SWIFT_TARRAY_STRING_APPEND(void *t, char ***a, int *i, char *s)
 // Swift is a terrible language...
 // https://forums.swift.org/t/passing-an-extern-const-c-struct-by-pointer-possible/19234/11
 static const struct m_sub_options *gl_video_conf_ptr = &gl_video_conf;
+static const struct m_sub_options *macos_conf_ptr = &macos_conf;
