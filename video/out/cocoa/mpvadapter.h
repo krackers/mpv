@@ -35,6 +35,7 @@
 - (BOOL)keyboardEnabled;
 - (BOOL)mouseEnabled;
 
-- (NSScreen *)getTargetScreen;
+- (NSScreen *)targetScreen;
+- (NSView *)videoView;
 - (struct macos_opts *)opts;
 @end

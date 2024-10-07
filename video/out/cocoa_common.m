@@ -1162,13 +1162,17 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     return self.vout->opts->native_fs;
 }
 
-- (NSScreen *)getTargetScreen
+- (NSScreen *)targetScreen
 {
     struct vo_cocoa_state *s = self.vout->cocoa;
     struct mp_vo_opts *opts  = self.vout->opts;
 
     int screen_id = s->fullscreen ? opts->screen_id : opts->fsscreen_id;
     return get_screen_by_id(self.vout, screen_id);
+}
+
+- (NSView *)videoView {
+    return self.vout->cocoa->video;
 }
 
 - (void)handleFilesArray:(NSArray *)files
@@ -1187,12 +1191,25 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     flag_events(self.vout, VO_EVENT_DISPLAY_STATE);
 }
 
+- (void)windowWillEnterFullScreen:(NSNotification *)notification
+{
+    struct vo_cocoa_state *s = self.vout->cocoa;
+    vo_cocoa_anim_lock(self.vout);
+}
+
 - (void)windowDidEnterFullScreen
 {
     struct vo_cocoa_state *s = self.vout->cocoa;
     s->fullscreen = 1;
     flag_events(self.vout, VO_EVENT_FULLSCREEN_STATE);
     vo_cocoa_anim_unlock(self.vout);
+}
+
+- (void)windowWillExitFullScreen:(NSNotification *)notification
+{
+    // Avoid incorrect aspect ratio when exiting.
+    struct vo_cocoa_state *s = self.vout->cocoa;
+    vo_cocoa_anim_lock(self.vout);
 }
 
 - (void)windowDidExitFullScreen
@@ -1203,16 +1220,6 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
     vo_cocoa_anim_unlock(self.vout);
 }
 
-- (void)windowWillEnterFullScreen:(NSNotification *)notification
-{
-    vo_cocoa_anim_lock(self.vout);
-}
-
-- (void)windowWillExitFullScreen:(NSNotification *)notification
-{
-    vo_cocoa_anim_lock(self.vout);
-}
-
 - (void)windowDidFailToEnterFullScreen:(NSWindow *)window
 {
     vo_cocoa_anim_unlock(self.vout);
@@ -1220,6 +1227,7 @@ int vo_cocoa_control(struct vo *vo, int *events, int request, void *arg)
 
 - (void)windowDidFailToExitFullScreen:(NSWindow *)window
 {
+    struct vo_cocoa_state *s = self.vout->cocoa;
     vo_cocoa_anim_unlock(self.vout);
 }
 

@@ -196,10 +196,11 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
+        guard let tScreen = targetScreen else { return }
         isInFullscreen = true
         cocoaCB.flagEvents(VO_EVENT_FULLSCREEN_STATE)
         cocoaCB.updateCusorVisibility()
-        endAnimation(frame)
+        endAnimation(tScreen.frame)
     }
 
     func windowDidExitFullScreen(_ notification: Notification) {
@@ -225,6 +226,7 @@ class Window: NSWindow, NSWindowDelegate {
     }
 
     func endAnimation(_ newFrame: NSRect = NSZeroRect) {
+        // Cancel the previous animation
         if !NSEqualRects(newFrame, NSZeroRect) && isAnimating {
             NSAnimationContext.runAnimationGroup({ (context) -> Void in
                 context.duration = 0.01

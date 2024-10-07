@@ -87,7 +87,7 @@
 
     _is_animating = 1;
 
-    self.targetScreen = [self.adapter getTargetScreen];
+    self.targetScreen = [self.adapter targetScreen];
     if(![self targetScreen] && ![self previousScreen]) {
         self.targetScreen = [self screen];
     } else if (![self targetScreen]) {
@@ -190,9 +190,10 @@
         return;
     }
     [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
-    [self setBackgroundColor:[NSColor blackColor]];
+    [self setBackgroundColor: [NSColor blackColor]];
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
-        context.duration = [self adjustFullscreenDuration: duration];
+        context.duration = [self adjustFullscreenDuration: duration - 0.05];
         [[window animator] setFrame:[[self targetScreen] frame] display:YES];
     } completionHandler:^{
     }];
@@ -217,50 +218,75 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
     if (tScreen == nil || currentScreen == nil)
         return;
 
+
+    [self setBackgroundColor: [NSColor whiteColor]];
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFill;
     [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
     
 
     NSRect newFrame = [self calculateWindowPositionForScreen:tScreen
                             withoutBounds:[tScreen isEqual: currentScreen]];
     
-    // TODO: Something about this is a bit off, the resulting frame mismatches
-    // with what it should be causing temporary black bar. Maybe it's because
-    // of difference in drawing (push vs pull).
     NSRect intermediateFrame = [self frameRectForContentRect:
                                         aspectFitRect(
                                             [self contentRectForFrameRect: newFrame],
                                             [self contentRectForFrameRect: currentScreen.frame])];
+
     [self setFrame:intermediateFrame display:YES];
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
-        context.duration = [self adjustFullscreenDuration: duration];
+        context.duration = [self adjustFullscreenDuration: duration - 0.05];
         [[window animator] setFrame:newFrame display:YES];
     } completionHandler:^{
-        [self setContentAspectRatio:_unfs_content_frame.size];
-        [self setCenteredContentSize:_unfs_content_frame.size];
-        [self setBackgroundColor:[NSColor whiteColor]];
     }];
 }
 
 - (void)windowDidEnterFullScreen:(NSNotification *)notification
 {
+    if ([self.adapter wantsNativeFullscreen] && self.targetScreen != nil) {
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+            context.duration = 0.01;
+            [[self animator] setFrame:[self targetScreen].frame display:YES];
+        } completionHandler:^{
+        }];
+    }
     _is_animating = 0;
     [self.adapter windowDidEnterFullScreen];
 }
 
 - (void)windowDidExitFullScreen:(NSNotification *)notification
 {
+    if ([self.adapter wantsNativeFullscreen]) {
+        NSScreen *tScreen = [self targetScreen];
+        NSScreen *currentScreen = [self screen];
+
+        if (tScreen != nil && currentScreen != nil) {
+            [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+                context.duration = 0.01;
+                [[self animator] setFrame:[self calculateWindowPositionForScreen:tScreen
+                                                withoutBounds:[tScreen isEqual: currentScreen]]
+                                display:YES];
+            } completionHandler:^{
+                [self setBackgroundColor: [NSColor whiteColor]];
+                [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
+            }];
+        }
+    }
     _is_animating = 0;
     [self.adapter windowDidExitFullScreen];
 }
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification
 {
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
+    [self setBackgroundColor: [NSColor blackColor]];
     [self.adapter windowWillEnterFullScreen:notification];
 }
 
 - (void)windowWillExitFullScreen:(NSNotification *)notification
 {
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFill;
+    [self setBackgroundColor: [NSColor whiteColor]];
     [self.adapter windowWillExitFullScreen:notification];
 }
 
@@ -268,6 +294,7 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
 {
     _is_animating = 0;
     [self setToWindow];
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [self.adapter windowDidFailToEnterFullScreen:window];
 }
 
