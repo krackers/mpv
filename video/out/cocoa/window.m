@@ -127,15 +127,21 @@
     NSRect frame = [[self targetScreen] frame];
 
     if ([self.adapter wantsNativeFullscreen]) {
-        [self setFrame:frame display:YES];
+        // Cancel any animation still ongoing and snap to the final fs frame state
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+            context.duration = 0.01;
+            [[self animator] setFrame:frame display:YES];
+        } completionHandler:^{
+        }];
     } else {
         [self setStyleMask:([self styleMask] | NSWindowStyleMaskFullScreen)];
         [NSApp setPresentationOptions:NSApplicationPresentationAutoHideMenuBar|
                                       NSApplicationPresentationAutoHideDock];
         [self setFrame:frame display:YES];
-        _is_animating = 0;
-        [self.adapter windowDidEnterFullScreen];
     }
+
+    _is_animating = 0;
+    [self.adapter windowDidEnterFullScreen];
 }
 
 - (void)setToWindow
@@ -144,18 +150,25 @@
                     withoutBounds:[[self targetScreen] isEqual:[self screen]]];
 
     if ([self.adapter wantsNativeFullscreen]) {
-        [self setFrame:frame display:YES];
-        [self setContentAspectRatio:_unfs_content_frame.size];
-        [self setCenteredContentSize:_unfs_content_frame.size];
+        [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
+            context.duration = 0.01;
+            [[self animator] setFrame: frame display:YES];
+        } completionHandler:^{
+            [self setContentAspectRatio:_unfs_content_frame.size];
+            [self setCenteredContentSize:_unfs_content_frame.size];
+            [self setBackgroundColor: [NSColor whiteColor]];
+            [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
+        }];
     } else {
         [self setStyleMask:([self styleMask] & ~NSWindowStyleMaskFullScreen)];
         [NSApp setPresentationOptions:NSApplicationPresentationDefault];
         [self setFrame:frame display:YES];
         [self setContentAspectRatio:_unfs_content_frame.size];
         [self setCenteredContentSize:_unfs_content_frame.size];
-        _is_animating = 0;
-        [self.adapter windowDidExitFullScreen];
     }
+
+    _is_animating = 0;
+    [self.adapter windowDidExitFullScreen];
 }
 
 - (NSArray *)customWindowsToEnterFullScreenForWindow:(NSWindow *)window
@@ -235,39 +248,16 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
     }];
 }
 
+// Only called for native fs. This happens after the custom animation
 - (void)windowDidEnterFullScreen:(NSNotification *)notification
 {
-    if ([self.adapter wantsNativeFullscreen] && self.targetScreen != nil) {
-        [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
-            context.duration = 0.01;
-            [[self animator] setFrame:[self targetScreen].frame display:YES];
-        } completionHandler:^{
-        }];
-    }
-    _is_animating = 0;
-    [self.adapter windowDidEnterFullScreen];
+    [self setToFullScreen];
 }
 
+// Only called for native fs
 - (void)windowDidExitFullScreen:(NSNotification *)notification
 {
-    if ([self.adapter wantsNativeFullscreen]) {
-        NSScreen *tScreen = [self targetScreen];
-        NSScreen *currentScreen = [self screen];
-
-        if (tScreen != nil && currentScreen != nil) {
-            [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
-                context.duration = 0.01;
-                [[self animator] setFrame:[self calculateWindowPositionForScreen:tScreen
-                                                withoutBounds:[tScreen isEqual: currentScreen]]
-                                display:YES];
-            } completionHandler:^{
-                [self setBackgroundColor: [NSColor whiteColor]];
-                [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
-            }];
-        }
-    }
-    _is_animating = 0;
-    [self.adapter windowDidExitFullScreen];
+    [self setToWindow];
 }
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification
