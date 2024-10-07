@@ -190,8 +190,6 @@
         return;
     }
     [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
-    [self setBackgroundColor: [NSColor blackColor]];
-    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
         context.duration = [self adjustFullscreenDuration: duration - 0.05];
         [[window animator] setFrame:[[self targetScreen] frame] display:YES];
@@ -218,12 +216,8 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
     if (tScreen == nil || currentScreen == nil)
         return;
 
-
-    [self setBackgroundColor: [NSColor whiteColor]];
-    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFill;
     [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
     
-
     NSRect newFrame = [self calculateWindowPositionForScreen:tScreen
                             withoutBounds:[tScreen isEqual: currentScreen]];
     
@@ -278,15 +272,14 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
 
 - (void)windowWillEnterFullScreen:(NSNotification *)notification
 {
-    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [self setBackgroundColor: [NSColor blackColor]];
     [self.adapter windowWillEnterFullScreen:notification];
 }
 
 - (void)windowWillExitFullScreen:(NSNotification *)notification
 {
-    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFill;
     [self setBackgroundColor: [NSColor whiteColor]];
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFill;
     [self.adapter windowWillExitFullScreen:notification];
 }
 
@@ -294,13 +287,13 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
 {
     _is_animating = 0;
     [self setToWindow];
-    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [self.adapter windowDidFailToEnterFullScreen:window];
 }
 
 - (void)windowDidFailToExitFullScreen:(NSWindow *)window
 {
     _is_animating = 0;
+    [self.adapter videoView].layerContentsPlacement = NSViewLayerContentsPlacementScaleProportionallyToFit;
     [self setToFullScreen];
     [self.adapter windowDidFailToExitFullScreen:window];
 }
