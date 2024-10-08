@@ -174,9 +174,13 @@ class Window: NSWindow, NSWindowDelegate {
         guard let tScreen = targetScreen else { return }
         cocoaCB.view?.layerContentsPlacement = .scaleProportionallyToFit
         cocoaCB.titleBar?.hide()
+        
         NSAnimationContext.runAnimationGroup({ (context) -> Void in
             context.duration = getFsAnimationDuration(duration - 0.05)
             window.animator().setFrame(tScreen.frame, display: true)
+            DispatchQueue.main.async {
+                self.styleMask.insert(.fullScreen)
+            }
         }, completionHandler: { })
     }
 

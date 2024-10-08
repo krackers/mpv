@@ -365,7 +365,8 @@ class VideoLayer: CAOpenGLLayer {
             // because any relevant state changes (e.g. window size/pos) happen on main thread
             // so are serialized with the async display codepath.
             self.wantsUpdate = (updateFlags & UInt64(MPV_RENDER_UPDATE_FRAME.rawValue) > 0) || force
-            // We rely on the atomicity & memory-ordering properties provided by CAOpenGLLayer here
+            // We rely on the atomicity & acq-rel memory-ordering properties provided by
+            // CAOpenGLLayer here which internally surrounds the access with a spinlock
             if (self.wantsUpdate && !self.isAsynchronous) {
                 self.display()
             }

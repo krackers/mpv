@@ -202,10 +202,13 @@
     if ([self targetScreen] == nil) {
         return;
     }
-    [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
+
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext* context) {
         context.duration = [self adjustFullscreenDuration: duration - 0.05];
         [[window animator] setFrame:[[self targetScreen] frame] display:YES];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self setStyleMask: self.styleMask | NSWindowStyleMaskFullScreen];
+        });
     } completionHandler:^{
     }];
 }
@@ -228,9 +231,10 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
 
     if (tScreen == nil || currentScreen == nil)
         return;
-
-    [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
     
+
+    NSDisableScreenUpdates();
+    [self setStyleMask: self.styleMask & ~NSWindowStyleMaskFullScreen];
     NSRect newFrame = [self calculateWindowPositionForScreen:tScreen
                             withoutBounds:[tScreen isEqual: currentScreen]];
     
@@ -240,6 +244,7 @@ static NSRect aspectFitRect(NSRect r, NSRect rTarget) {
                                             [self contentRectForFrameRect: currentScreen.frame])];
 
     [self setFrame:intermediateFrame display:YES];
+    NSEnableScreenUpdates();
 
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext * _Nonnull context) {
         context.duration = [self adjustFullscreenDuration: duration - 0.05];
